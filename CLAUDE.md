@@ -19,6 +19,7 @@ fixtures/          frozen snapshot, manifest, profiles, model cache (offline mod
 tests/             unit, golden, determinism, integrity, fault injection
 docs/              EVAL_PROTOCOL.md, adr/, RESULTS.md (generated)
 .claude/           settings, hooks/, skills/, agents/
+.github/           CI workflow, PR template
 ```
 
 ## Principles, in priority order
@@ -75,7 +76,8 @@ In this order. Stop at the first step that fails, fix, and restart from there.
    - **Last PR of a phase:** also `@agent-docgap-coherence-auditor` over the whole repo.
 4. Fix or answer every blocker and major finding. Apply every record update the
    agents list; bring me each one marked **decide**.
-5. Skill `docgap-pr` for the title and body; skill `docgap-voice` for the wording.
+5. Skill `docgap-pr` for the title and body, built from `.github/pull_request_template.md`;
+   skill `docgap-voice` for the wording.
 6. "Current status" is moved forward in this PR.
 7. Push, open the PR, and **stop. Merging is my call.**
 
@@ -129,6 +131,7 @@ code is lost to the next session, and the review agents treat it as a finding.
 | Why a non-obvious choice was made, and what else was considered | `docs/adr/NNNN-*.md` |
 | Evaluation rules, frozen at the `preregistered` tag | `docs/EVAL_PROTOCOL.md` |
 | How code, tests and prose are written | `.claude/skills/docgap-*` |
+| The sections of every PR body | `.github/pull_request_template.md` (rules per section in `docgap-pr`) |
 | What a user sees: quickstart, results (generated), limits | `README.md` |
 
 - **A step lands:** tick its checkbox in the brief; move "Current status".
@@ -163,9 +166,10 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Phase:** 0 (foundations and pre-registration), in progress.
 - **Repo:** `jessicafalcon/docgap` on GitHub, private until the project is
   complete, then public. No branch protection (not available on a private repo).
-- **Open PRs:** PR 1 `build/tooling-and-ci`.
+- **Merged:** #1 `build/tooling-and-ci` (as a merge commit, not a squash).
+- **Open PRs:** `docs/pr-template` (one PR template for every PR; inserted before PR 2).
 - **Phase 0 PR order** (approved; reviewer findings folded in):
-  1. `build/tooling-and-ci`: uv, ruff, pyright (`src`, `tests`), pytest with a
+  1. ~~`build/tooling-and-ci`~~ merged (#1): uv, ruff, pyright (`src`, `tests`), pytest with a
      smoke test and blocked sockets, pre-commit, CI with no secrets and a
      full-history `gitleaks git` step.
   2. `fix/determinism-guard-receivers`: flag listings and `.sample()` on any
@@ -189,4 +193,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (b) report delivered drafts per arm next to the headline (recommended).
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PR 2 `fix/determinism-guard-receivers`, after PR 1 merges.
+- **Next step:** PR 2 `fix/determinism-guard-receivers`, after `docs/pr-template` merges.
