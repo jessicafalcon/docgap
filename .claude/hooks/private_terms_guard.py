@@ -29,7 +29,11 @@ def load_terms(root: Path) -> list[re.Pattern[str]]:
     if not terms_file.is_file():
         return []
     lines = terms_file.read_text(encoding="utf-8").splitlines()
-    return [re.compile(line.strip(), re.IGNORECASE) for line in lines if line.strip() and not line.startswith("#")]
+    return [
+        re.compile(line.strip(), re.IGNORECASE)
+        for line in lines
+        if line.strip() and not line.startswith("#")
+    ]
 
 
 def texts_to_check(tool: str, tool_input: dict, root: Path) -> list[str]:

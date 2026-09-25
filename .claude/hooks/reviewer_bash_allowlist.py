@@ -30,7 +30,11 @@ WRITING_FLAGS = re.compile(r"(^|\s)(--fix|--update-golden|--write|-w)(\s|$)")
 
 def main() -> int:
     command = ((json.load(sys.stdin).get("tool_input") or {}).get("command") or "").strip()
-    if ALLOWED.match(command) and not SHELL_META.search(command) and not WRITING_FLAGS.search(command):
+    if (
+        ALLOWED.match(command)
+        and not SHELL_META.search(command)
+        and not WRITING_FLAGS.search(command)
+    ):
         return 0
     print(
         "Review agents are read-only. Allowed: uv run pytest/pyright/ruff check, the determinism guard, "

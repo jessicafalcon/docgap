@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only token and no secrets: an accidental live call to Snowflake or a model
+# fails for lack of credentials, and pytest blocks sockets on top of that.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history for the gitleaks scan
+          persist-credentials: false
+
+      # Installs the uv version pinned by `required-version` in pyproject.toml.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Install gitleaks
+        env:
+          # Keep in sync with the gitleaks rev in .pre-commit-config.yaml.
+          VERSION: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl -sSfL --retry 3 --connect-timeout 10 --max-time 120 -o "$RUNNER_TEMP/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          echo "${SHA256}  $RUNNER_TEMP/gitleaks.tgz" | sha256sum --check -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', '.python-version') }}
+
+      # Fails on a stale uv.lock, so the uv-lock hook is skipped below. The hooks then
+      # run with `--frozen` against this environment.
+      - run: uv sync --locked
+
+      # Staged-only gitleaks has nothing to scan here; the history step below covers it.
+      - run: uv run --frozen pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: uv-lock,gitleaks-system
+      - run: uv run --frozen pytest
+
+      - name: Scan full history for secrets
+        run: gitleaks git --redact --verbose .

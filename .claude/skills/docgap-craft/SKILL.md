@@ -113,7 +113,7 @@ class ColumnRef(BaseModel):
 
 ## Tooling
 
-- **uv** for env and lockfile (`uv sync --frozen` in CI, `uv run pytest`).
+- **uv** for env and lockfile (`uv sync --locked` in CI, so a stale lock fails; `uv run --frozen` after it).
 - **ruff** format + lint, fixed on every edit by the hook.
 - **pyright** strict on `src/`.
 - **pre-commit** runs uv-lock, ruff, pyright, gitleaks, and the determinism guard

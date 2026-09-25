@@ -1,0 +1,50 @@
+[project]
+name = "docgap"
+version = "0.0.0"
+description = "Rank undocumented warehouse columns by usage and failure, then draft their descriptions."
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.2",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-socket>=0.8.1",
+    "ruff>=0.16.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv]
+# The one uv pin: CI's setup-uv reads it. Keep in sync with the uv-lock hook rev in
+# .pre-commit-config.yaml.
+required-version = "==0.12.5"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src"]
+# Tests are offline: any socket other than a Unix one fails the test that opens it
+# (docgap-tests). A test that needs a local fake server opts in with a marker.
+addopts = ["--doctest-modules", "--disable-socket", "--allow-unix-socket"]
+strict = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "PT", "PTH", "DTZ", "S"]
+
+[tool.ruff.lint.pycodestyle]
+# The formatter targets 100 but can't split string literals or comments; lint
+# flags only lines past this ceiling.
+max-line-length = 120
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pyright]
+include = ["src", "tests"]
+strict = ["src"]

@@ -64,7 +64,9 @@ def _aliases(tree: ast.Module) -> dict[str, str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                names[alias.asname or alias.name.split(".")[0]] = alias.name if alias.asname else alias.name.split(".")[0]
+                names[alias.asname or alias.name.split(".")[0]] = (
+                    alias.name if alias.asname else alias.name.split(".")[0]
+                )
         elif isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
                 names[alias.asname or alias.name] = f"{node.module}.{alias.name}"
@@ -88,28 +90,50 @@ def check_source(source: str, rel_path: str) -> list[str]:
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            modules = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
+            modules = (
+                [a.name for a in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or ""]
+            )
             for module in modules:
                 if module.split(".")[0] in MODEL_PACKAGES:
-                    findings.append(f"line {node.lineno}: model client import ({module}); model calls live in llm/ only")
-        elif isinstance(node, (ast.Attribute, ast.Name)) and resolve(_dotted(node) or "") == "os.environ":
-            findings.append(f"line {node.lineno}: environment read; pass configuration in explicitly")
+                    findings.append(
+                        f"line {node.lineno}: model client import ({module}); model calls live in llm/ only"
+                    )
+        elif (
+            isinstance(node, (ast.Attribute, ast.Name))
+            and resolve(_dotted(node) or "") == "os.environ"
+        ):
+            findings.append(
+                f"line {node.lineno}: environment read; pass configuration in explicitly"
+            )
         elif isinstance(node, ast.Call):
             dotted = _dotted(node.func)
             if dotted is None:
                 continue
             full = resolve(dotted)
-            if full in FORBIDDEN_CALLS and not (full in {"os.listdir", "os.scandir", "glob.glob"} and _in_sorted(node, parents)):
+            if full in FORBIDDEN_CALLS and not (
+                full in {"os.listdir", "os.scandir", "glob.glob"} and _in_sorted(node, parents)
+            ):
                 findings.append(f"line {node.lineno}: {full}(): {FORBIDDEN_CALLS[full]}")
             elif full.startswith(("random.", "numpy.random.")) and not _is_seeded_rng(full, node):
-                findings.append(f"line {node.lineno}: {full}(): unseeded randomness; use random.Random(seed) from config")
+                findings.append(
+                    f"line {node.lineno}: {full}(): unseeded randomness; use random.Random(seed) from config"
+                )
             elif isinstance(node.func, ast.Attribute):
                 method = node.func.attr
                 if method in UNSORTED_METHODS and not _in_sorted(node, parents):
-                    findings.append(f"line {node.lineno}: .{method}(): filesystem order is not stable; wrap in sorted()")
-                elif method in SEEDED_METHODS and not any(k.arg == "seed" for k in node.keywords):
-                    if _dotted(node.func.value) not in seeded:
-                        findings.append(f"line {node.lineno}: .{method}() without seed=; pass the seed from config")
+                    findings.append(
+                        f"line {node.lineno}: .{method}(): filesystem order is not stable; wrap in sorted()"
+                    )
+                elif (
+                    method in SEEDED_METHODS
+                    and not any(k.arg == "seed" for k in node.keywords)
+                    and _dotted(node.func.value) not in seeded
+                ):
+                    findings.append(
+                        f"line {node.lineno}: .{method}() without seed=; pass the seed from config"
+                    )
     return sorted(set(findings), key=lambda f: int(f.split()[1].rstrip(":")))
 
 
@@ -174,7 +198,9 @@ def main() -> int:
 
     if not report:
         return 0
-    print("determinism-guard: the core must be reproducible (docgap-correctness §1).", file=sys.stderr)
+    print(
+        "determinism-guard: the core must be reproducible (docgap-correctness §1).", file=sys.stderr
+    )
     print("\n".join(f"  - {line}" for line in report), file=sys.stderr)
     print("Inject the value as a parameter, or move the code to llm/ or cli.py.", file=sys.stderr)
     return 2 if hook_mode else 1

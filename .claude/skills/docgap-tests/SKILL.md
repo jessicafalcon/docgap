@@ -94,5 +94,5 @@ cassettes for provider formats. Never the real API in tests.
 - `tests/` mirrors `src/docgap/`; `tests/golden/` holds expected outputs;
   `fixtures/` holds the frozen snapshot, manifest, profiles and model cache.
 - `pyproject.toml` enables `--doctest-modules`; README `>>>` blocks run too.
-- CI runs `uv sync --frozen && uv run pytest` with no credentials in the
+- CI runs `uv sync --locked && uv run --frozen pytest` with no credentials in the
   environment, so an accidental live call fails.
