@@ -18,9 +18,6 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      # Every `uv run` fails on a stale uv.lock, so the uv-lock hook is skipped below.
-      UV_LOCKED: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,7 +33,7 @@ jobs:
           VERSION: 8.30.1
           SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
-          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tgz" \
+          curl -sSfL --retry 3 --connect-timeout 10 --max-time 120 -o "$RUNNER_TEMP/gitleaks.tgz" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
           echo "${SHA256}  $RUNNER_TEMP/gitleaks.tgz" | sha256sum --check -
           tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP" gitleaks
@@ -45,13 +42,17 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', '.python-version') }}
+
+      # Fails on a stale uv.lock, so the uv-lock hook is skipped below. The hooks then
+      # run with `--frozen` against this environment.
+      - run: uv sync --locked
 
       # Staged-only gitleaks has nothing to scan here; the history step below covers it.
-      - run: uv run pre-commit run --all-files --show-diff-on-failure
+      - run: uv run --frozen pre-commit run --all-files --show-diff-on-failure
         env:
           SKIP: uv-lock,gitleaks-system
-      - run: uv run pytest
+      - run: uv run --frozen pytest
 
       - name: Scan full history for secrets
         run: gitleaks git --redact --verbose .

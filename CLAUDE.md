@@ -42,6 +42,7 @@ the file is the current standard, and memory of it may be stale.
 
 | Moment | Invoke | Then |
 |---|---|---|
+| **Fresh clone** | `uv sync`, `uv run pre-commit install`; a `gitleaks` binary on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |

@@ -6,7 +6,8 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
-        args: ["--maxkb=5000"]
+        # --enforce-all so CI checks every tracked file, not only newly staged ones.
+        args: ["--maxkb=5000", "--enforce-all"]
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
