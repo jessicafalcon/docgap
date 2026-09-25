@@ -44,7 +44,8 @@ repos:
         types_or: [python, pyi]
       - id: pyright
         name: pyright
-        entry: uv run --frozen pyright
+        # --project: a pyrightconfig.json in a parent directory would otherwise win.
+        entry: uv run --frozen pyright --project pyproject.toml
         language: system
         types_or: [python, pyi]
         pass_filenames: false
