@@ -13,14 +13,15 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
 
-  # Keep in sync with the uv version in .github/workflows/ci.yml.
+  # Keep in sync with `required-version` in pyproject.toml.
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.12.5
     hooks:
       - id: uv-lock
 
   # The system binary, so CI checks it against a pinned checksum instead of building it.
-  # Scans staged changes only; CI scans the full history in a separate step.
+  # Scans staged changes only, so CI skips it and scans the full history instead.
+  # Keep the rev in sync with the gitleaks version in .github/workflows/ci.yml.
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
     hooks:
@@ -49,6 +50,6 @@ repos:
       # Same rules as the Claude Code PostToolUse hook (docgap-correctness §1).
       - id: determinism-guard
         name: determinism guard
-        entry: python3 .claude/hooks/determinism_guard.py
+        entry: uv run --frozen python .claude/hooks/determinism_guard.py
         language: system
         files: ^src/docgap/.*\.py$
