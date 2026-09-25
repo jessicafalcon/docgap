@@ -1,0 +1,40 @@
+{
+  "model": "claude-opus-5-5",
+  "effortLevel": "high",
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-opus-5-5",
+    "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-opus-5-5"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/private_terms_guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/ruff-on-edit.sh\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/determinism_guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

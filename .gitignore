@@ -1,0 +1,25 @@
+# Local-only Claude Code files
+.claude/settings.local.json
+.claude/private-terms.local
+
+# OS
+.DS_Store
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets and local state
+.env
+*.pem
+*.p8
+terraform.tfstate*
+.terraform/
+
+# Pipeline outputs (fixtures/ is committed; runs/ is regenerated)
+runs/
+
+# Downloaded source files (about 1 GB per month; tracked by loader/sources.lock)
+data/
