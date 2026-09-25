@@ -161,8 +161,8 @@ updated, open risks, next step.
 Update after every PR and merge, in the same change. A new session resumes from here.
 
 - **Phase:** 0 (foundations and pre-registration), in progress.
-- **Repo:** `jessicafalcon/docgap` on GitHub, private for now (the brief's end
-  state is public; the switch is the maintainer's call). No branch protection.
+- **Repo:** `jessicafalcon/docgap` on GitHub, private until the project is
+  complete, then public. No branch protection (not available on a private repo).
 - **Open PRs:** PR 1 `build/tooling-and-ci`.
 - **Phase 0 PR order** (approved; reviewer findings folded in):
   1. `build/tooling-and-ci`: uv, ruff, pyright (`src`, `tests`), pytest with a
@@ -172,7 +172,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
      receiver, plus `os.getcwd()` and `Path.cwd()`; tests for every rule.
   3. `fix/private-terms-coverage`: staged files, commit messages, `-F` and
      `--body-file` files, `git -C`.
-  4. `docs/decision-log`: ADR template with Status and Superseded-by; first records.
+  4. `docs/decision-log`: ADR template with Status and Superseded-by; first records,
+     including repo visibility (private until complete, then public).
   5. `feat/contracts`: `models.py`, one committed schema per contract;
      `RunManifest` splits a canonical part from an operational part.
   6. `feat/config`: `docgap.toml`, no defaults in code, canonical hash per section.
