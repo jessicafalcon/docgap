@@ -160,8 +160,9 @@ updated, open risks, next step.
 Update after every PR and merge, in the same change. A new session resumes from here.
 
 - **Phase:** 0 (foundations and pre-registration), in progress.
-- **Repo:** local git repository, root commit on `main`; no remote yet.
-- **Open PRs:** none.
+- **Repo:** `jessicafalcon/docgap` on GitHub, private for now (the brief's end
+  state is public; the switch is the maintainer's call). No branch protection.
+- **Open PRs:** PR 1 `build/tooling-and-ci`.
 - **Phase 0 PR order** (approved; reviewer findings folded in):
   1. `build/tooling-and-ci`: uv, ruff, pyright (`src`, `tests`), pytest with a
      smoke test and blocked sockets, pre-commit, CI with no secrets and a
@@ -184,4 +185,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
   (arm membership unchanged, recommended) or absorb the flagged band;
   (b) report delivered drafts per arm next to the headline (recommended).
-- **Next step:** ask to create the public GitHub repo and push `main`, then PR 1.
+- **Next step:** PR 2 `fix/determinism-guard-receivers`, after PR 1 merges.

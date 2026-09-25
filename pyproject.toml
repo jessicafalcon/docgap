@@ -1,0 +1,47 @@
+[project]
+name = "docgap"
+version = "0.0.0"
+description = "Rank undocumented warehouse columns by usage and failure, then draft their descriptions."
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src"]
+# Tests are offline: any socket other than a Unix one fails the test that opens it
+# (docgap-tests). A test that needs a local fake server opts in with a marker.
+addopts = ["--strict-markers", "--doctest-modules", "--disable-socket", "--allow-unix-socket"]
+xfail_strict = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E501 is left to the formatter; it can't split long string literals.
+ignore = ["E501"]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "PT", "PTH", "DTZ", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pyright]
+include = ["src", "tests"]
+strict = ["src"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.2",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-socket>=0.8.1",
+    "ruff>=0.16.9",
+]

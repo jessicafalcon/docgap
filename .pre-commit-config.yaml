@@ -1,0 +1,54 @@
+# Runs locally before each commit and in CI over every file. Ruff and pyright run from
+# the project venv (`uv run --frozen`) so their versions come from uv.lock and pyright
+# resolves the project's own dependencies.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=5000"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # Keep in sync with the uv version in .github/workflows/ci.yml.
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.5
+    hooks:
+      - id: uv-lock
+
+  # The system binary, so CI checks it against a pinned checksum instead of building it.
+  # Scans staged changes only; CI scans the full history in a separate step.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks-system
+        # Upstream omits this for the system variant only; the scan reads git, not files.
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: pyright
+        name: pyright
+        entry: uv run --frozen pyright
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+      # Same rules as the Claude Code PostToolUse hook (docgap-correctness §1).
+      - id: determinism-guard
+        name: determinism guard
+        entry: python3 .claude/hooks/determinism_guard.py
+        language: system
+        files: ^src/docgap/.*\.py$
