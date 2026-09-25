@@ -42,7 +42,7 @@ the file is the current standard, and memory of it may be stale.
 
 | Moment | Invoke | Then |
 |---|---|---|
-| **Fresh clone** | `uv sync`, `uv run pre-commit install`; a `gitleaks` binary on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
+| **Fresh clone** | `uv sync`, `uv run pre-commit install`; gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -186,4 +186,6 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
   (arm membership unchanged, recommended) or absorb the flagged band;
   (b) report delivered drafts per arm next to the headline (recommended).
+- **Owed by the first local fake server** (fault-injection tests): a test that a Unix
+  socket and a marker-opted localhost server still work under `--disable-socket`.
 - **Next step:** PR 2 `fix/determinism-guard-receivers`, after PR 1 merges.
