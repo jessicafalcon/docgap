@@ -50,45 +50,31 @@ chore: release 0.3.0
 
 ## Pull requests
 
-Title: same form as a commit subject. The body depends on size.
+Title: same form as a commit subject. The body follows
+`.github/pull_request_template.md`; docgap-pr says what goes in each section.
+This section governs the wording inside it.
 
-**Small change: prose, no headings.** One or two short paragraphs, the problem,
-then what changed. Add bullets for multiple mechanical changes. End with how it was
-verified.
+A good Summary reads like this:
 
 ```text
 On a snapshot window that ends less than 45 minutes ago, QUERY_HISTORY is still
 filling, so the export silently missed the last runs of a baseline. `snapshot`
 now refuses a window whose end is newer than `as_of - 45 min` and says so.
-
-Verified: `uv run pytest tests/test_snapshot.py`; a live export with a 10-minute
-window now fails with the latency message instead of returning 0 rows.
 ```
 
-**Larger or subtle change: headings.** For a bug:
-`## Problem` → `## Root cause` → `## Change` → `## Validation`.
-For a feature or refactor: `## What` → `## Why` → `## Changes` → `## Test plan`.
-Add `## Release note` only when the user-facing effect differs from the diff's shape.
+Wording inside those sections:
 
-What makes these bodies good:
-
-- **Root cause is mechanistic.** Name the exact function, value or ordering that
+- **For a fix, the Summary's root cause is mechanistic.** Name the exact function, value or ordering that
   fails and why. Bold the one consequence that matters: "**every run leaked a
   warehouse session**".
-- **Say what was tried and discarded**, and why, in a sentence. The reviewer
-  should not have to ask.
-- **Say what is deliberately not done**, with the reason: "Deliberately not
-  persisted: a flag on disk would suppress the prompt forever, even after the
-  cause is fixed."
 - **Numbers with arrows:** `k 5 → 10`, `sqlglot 26.1 → 27.8`, `parse rate 91% → 98%`.
-- **Changes listed per file or unit**, one line each: `` `rank.py` — ties broken by FQN ``.
-- **Validation is honest.** State the commands run and what they showed. State
-  what was *not* run: "The live Airflow run was not repeated for this change."
-  Unchecked items in a `## Test plan` are `- [ ]` checkboxes, not implied passes.
-- **Link context:** follow-ups ("Follow-up to #12"), decision records
-  (`docs/adr/0004-…md`), issues.
+- **Validation is honest.** Name the command and what it showed. Say what was
+  *not* run: "The live Airflow run was not repeated for this change."
+- **Reasons in one sentence.** For an option discarded or a thing deliberately
+  not done: "Deliberately not persisted: a flag on disk would suppress the
+  prompt forever, even after the cause is fixed."
 
-PR bodies written by Claude end with:
+Development PR bodies written by Claude end with:
 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
 
 ## Code comments

@@ -19,6 +19,7 @@ fixtures/          frozen snapshot, manifest, profiles, model cache (offline mod
 tests/             unit, golden, determinism, integrity, fault injection
 docs/              EVAL_PROTOCOL.md, adr/, RESULTS.md (generated)
 .claude/           settings, hooks/, skills/, agents/
+.github/           CI workflow, PR template
 ```
 
 ## Principles, in priority order
@@ -75,7 +76,8 @@ In this order. Stop at the first step that fails, fix, and restart from there.
    - **Last PR of a phase:** also `@agent-docgap-coherence-auditor` over the whole repo.
 4. Fix or answer every blocker and major finding. Apply every record update the
    agents list; bring me each one marked **decide**.
-5. Skill `docgap-pr` for the title and body; skill `docgap-voice` for the wording.
+5. Skill `docgap-pr` for the title and body, built from `.github/pull_request_template.md`;
+   skill `docgap-voice` for the wording.
 6. "Current status" is moved forward in this PR.
 7. Push, open the PR, and **stop. Merging is my call.**
 
@@ -111,7 +113,7 @@ disagree with the code or a record and can't tell which is right, they mark it
 
 | Hook | Fires on | When it reports |
 |---|---|---|
-| `private-terms-guard` | Before any write in the repo, and before commits, tags, PR/issue/release text | Blocked. Rewrite without the term: describe the fact itself, not its source. The list lives in the gitignored `.claude/private-terms.local`. |
+| `private-terms-guard` | Before any write in the repo, and before commits, tags, PR/issue/release text (never files outside the repo; until PR 3, not `-F`/`--body-file` contents either) | Blocked. Rewrite without the term: describe the fact itself, not its source. The list lives in the gitignored `.claude/private-terms.local`. |
 | `ruff-on-edit` | After editing a `*.py` file | Fix any unresolved lint it prints before the next edit. |
 | `determinism-guard` | After editing core `src/docgap/*.py` (not `llm/`, `cli.py`, tests) | Inject the value as a parameter (`as_of`, seed, config), wrap listings in `sorted()`, use `hashlib`, or move the code to `llm/` or `cli.py`. Pre-commit runs the same check. |
 | `reviewer_bash_allowlist` | Shell commands inside the two review agents | Keeps them read-only. Not used in the main session. |
@@ -127,7 +129,7 @@ code is lost to the next session, and the review agents treat it as a finding.
 | The plan: objective, phases and steps (checkboxes), "Done when", stack, timeline, risks, open decisions | `PROJECT-BRIEF.md` |
 | How we work, and when to invoke each skill, agent, hook and command; current status | `CLAUDE.md` |
 | Why a non-obvious choice was made, and what else was considered | `docs/adr/NNNN-*.md` |
-| Evaluation rules, frozen at the `preregistered` tag | `docs/EVAL_PROTOCOL.md` |
+| Evaluation rules, pre-registered at the `preregistered` tag (changes per "After `preregistered`" below) | `docs/EVAL_PROTOCOL.md` |
 | How code, tests and prose are written | `.claude/skills/docgap-*` |
 | What a user sees: quickstart, results (generated), limits | `README.md` |
 
@@ -137,8 +139,10 @@ code is lost to the next session, and the review agents treat it as a finding.
   "Open decisions".
 - **A threshold, key or command changes:** update every record that states it.
 - **A new skill, agent, hook or command:** add it here, with when to invoke it.
-- **After `preregistered`:** `EVAL_PROTOCOL.md` changes only through an ADR with
-  a justification, and the results report the deviation.
+- **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms
+  and the agent model never change. Any other `EVAL_PROTOCOL.md` change needs an
+  ADR with a justification, and the results report the deviation. Other files
+  point here rather than restating the list.
 - **Code and a record disagree** and it's unclear which is right: ask me. Never
   make one match the other silently.
 
@@ -163,15 +167,16 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Phase:** 0 (foundations and pre-registration), in progress.
 - **Repo:** `jessicafalcon/docgap` on GitHub, private until the project is
   complete, then public. No branch protection (not available on a private repo).
-- **Open PRs:** PR 1 `build/tooling-and-ci`.
+- **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
+  now allows squash merges only, with the PR title as the commit title.
+- **Open PRs:** `docs/pr-template` (one PR template for every development PR; inserted before PR 2).
 - **Phase 0 PR order** (approved; reviewer findings folded in):
-  1. `build/tooling-and-ci`: uv, ruff, pyright (`src`, `tests`), pytest with a
-     smoke test and blocked sockets, pre-commit, CI with no secrets and a
-     full-history `gitleaks git` step.
+  1. ~~`build/tooling-and-ci`~~ (#1).
   2. `fix/determinism-guard-receivers`: flag listings and `.sample()` on any
      receiver, plus `os.getcwd()` and `Path.cwd()`; tests for every rule.
   3. `fix/private-terms-coverage`: staged files, commit messages, `-F` and
-     `--body-file` files, `git -C`.
+     `--body-file` files, `git -C`. Then drop the `--body-file` caveats in the
+     hooks table and `docgap-pr` (Body).
   4. `docs/decision-log`: ADR template with Status and Superseded-by; first records,
      including repo visibility (private until complete, then public).
   5. `feat/contracts`: `models.py`, one committed schema per contract;
@@ -189,4 +194,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (b) report delivered drafts per arm next to the headline (recommended).
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PR 2 `fix/determinism-guard-receivers`, after PR 1 merges.
+- **Next step:** PR 2 `fix/determinism-guard-receivers`, after `docs/pr-template` merges.

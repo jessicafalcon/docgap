@@ -2,9 +2,9 @@
 name: docgap-pr
 description: >
   How pull requests are shaped in docgap: one behaviour change per PR, the title
-  as the squash-merge commit, and body sections by change type. Read this BEFORE
-  writing a PR title or body (step 5 of the pre-PR gate in CLAUDE.md, which owns
-  the gate itself). docgap-voice governs the wording.
+  as the squash-merge commit, and what goes in each section of the PR template.
+  Read this BEFORE writing a PR title or body (step 5 of the pre-PR gate in
+  CLAUDE.md, which owns the gate itself). docgap-voice governs the wording.
 ---
 
 # docgap-pr
@@ -37,31 +37,31 @@ because `chore` never triggers a release and never shows in the changelog.
 
 ## Body
 
-Shape by size and type (docgap-voice has the wording rules and examples):
+Every development PR fills all six sections of `.github/pull_request_template.md`,
+in order, whatever its size; a small PR keeps each to a line or two. The PRs
+docgap itself opens (`docgap/<run_id>`) have their own body, set in the brief's
+Phase 6. Build the body from the template and delete its HTML comments: GitHub
+hides them, but they stay in the raw body that `gh pr view` shows. Pass it
+inline, `gh pr create --body "$(cat <<'EOF' … EOF)"`, so the private-terms guard
+scans the text; it doesn't read `--body-file` contents.
 
-- **Small:** one or two paragraphs (problem, then change), bullets if several
-  mechanical edits, then how it was verified. No headings.
-- **Bug, larger or subtle:** `## Problem` → `## Root cause` → `## Change` → `## Validation`.
-- **Feature or refactor:** `## What` → `## Why` → `## Changes` → `## Test plan`.
-- **`## Release note`**, only when the user-facing effect differs from the diff's
-  shape, or when consumers must do something (a new required config key, a
-  changed artifact schema).
-
-Every body also covers, in its own words and only when it applies:
-
-- **Changes per file or unit**, one line each: `` `rank.py`: ties broken by FQN ``.
-- **Governance impact:** a new grant, a new field in a model's input, a new
-  snapshot column. Write "none" only after checking.
-- **Evaluation impact:** anything touching questions, split, N, arms, grading or
-  ranking inputs after the `preregistered` tag needs an explicit justification,
-  or it doesn't land.
-- **Records updated:** each record file touched (brief checkbox, ADR,
-  `EVAL_PROTOCOL.md`, `CLAUDE.md` current status), per the records map in
-  `CLAUDE.md`. Write "none implied" only after checking the map.
-- **What was not done or not run**, and why. Pending checks are `- [ ]` boxes.
-- **Links:** issue, follow-up, decision record (`docs/adr/0004-…md`).
-
-End with: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
+- **Summary.** The problem, then what this PR changes. Then the brief step it
+  serves, the ADR it implements, and any follow-up or issue link, each "none"
+  when there isn't one.
+- **Changes.** One line per file or unit: `` `rank.py`: ties broken by FQN ``.
+  Generated files are marked as generated.
+- **Impact.** All four lines, each "none" only after checking. An Evaluation
+  change after the `preregistered` tag follows `CLAUDE.md` → "After
+  `preregistered`", or it doesn't land. Compatibility includes anything a
+  consumer must do.
+- **Validation.** One box per pre-PR gate step that applied (two for step 3 on a
+  phase's last PR, one per agent), naming the command or agent and what it showed. An unticked box means not done. Add a line of
+  prose for a check a box can't carry (a fresh-clone run, a positive control).
+- **Records updated.** Each record touched, per the records map in `CLAUDE.md`,
+  or "none implied" after checking the map.
+- **Not done.** Deliberate omissions, options tried and discarded (one sentence
+  each, with why), deferred checks and open risks, each with where it's tracked.
+  "Nothing" when that's true.
 
 ## Before you push
 
