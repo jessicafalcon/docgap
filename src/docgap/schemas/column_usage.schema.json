@@ -1,0 +1,52 @@
+{
+  "additionalProperties": false,
+  "description": "One row of `column_usage.parquet`: per-column counts, split by actor.\n\n`runs` counts distinct agent runs (question and repetition) touching the column:\nthe denominator of the attributed failure rate.",
+  "properties": {
+    "executions_agent": {
+      "minimum": 0,
+      "title": "Executions Agent",
+      "type": "integer"
+    },
+    "executions_human": {
+      "minimum": 0,
+      "title": "Executions Human",
+      "type": "integer"
+    },
+    "fingerprints_agent": {
+      "minimum": 0,
+      "title": "Fingerprints Agent",
+      "type": "integer"
+    },
+    "fingerprints_human": {
+      "minimum": 0,
+      "title": "Fingerprints Human",
+      "type": "integer"
+    },
+    "fqn": {
+      "pattern": "^[A-Z_][A-Z0-9_$]*(\\.[A-Z_][A-Z0-9_$]*){3}$",
+      "title": "Fqn",
+      "type": "string"
+    },
+    "questions": {
+      "minimum": 0,
+      "title": "Questions",
+      "type": "integer"
+    },
+    "runs": {
+      "minimum": 0,
+      "title": "Runs",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "fqn",
+    "executions_agent",
+    "executions_human",
+    "fingerprints_agent",
+    "fingerprints_human",
+    "questions",
+    "runs"
+  ],
+  "title": "ColumnUsage",
+  "type": "object"
+}

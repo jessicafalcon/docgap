@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "Cause": {
+      "description": "The attribution question's labels: why the agent's SQL was wrong.",
+      "enum": [
+        "column_meaning",
+        "wrong_table",
+        "wrong_join",
+        "wrong_filter",
+        "wrong_grain",
+        "other"
+      ],
+      "title": "Cause",
+      "type": "string"
+    },
+    "FailureReason": {
+      "description": "Why a model call produced no answer; the item goes to the human band.",
+      "enum": [
+        "timeout",
+        "malformed_answer",
+        "refused",
+        "retries_exhausted",
+        "budget_exhausted"
+      ],
+      "title": "FailureReason",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The attribution judgment for one failed discovery run, with full probability maps.",
+  "properties": {
+    "cause": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/Cause"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Cause"
+    },
+    "column": {
+      "anyOf": [
+        {
+          "patternProperties": {
+            "^[A-Z_][A-Z0-9_$]*(\\.[A-Z_][A-Z0-9_$]*){3}$": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Column"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FailureReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "qid": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "title": "Qid",
+      "type": "string"
+    },
+    "repetition": {
+      "exclusiveMinimum": 0,
+      "title": "Repetition",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "qid",
+    "repetition",
+    "cause",
+    "column",
+    "failure"
+  ],
+  "title": "Attribution",
+  "type": "object"
+}

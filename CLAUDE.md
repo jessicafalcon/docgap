@@ -185,8 +185,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
   this private repo).
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
-  #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3).
-- **Open PRs:** `docs/decision-log` (PR 4).
+  #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
+  #5 `docs/decision-log` (PR 4).
+- **Open PRs:** `feat/contracts` (PR 5).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -196,12 +197,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
     for every rule; the private-terms guard covers staged files, commit messages,
     `-F` and `--body-file` files, `git -C`; the review agents' allowlist runs from
     settings, requires `uv run --frozen` and blocks file-writing flags.
-  - **PR 4:** `docs/decision-log`. ADR template with Status and Superseded-by;
+  - **PR 4:** ~~`docs/decision-log`~~ (#5). ADR template with Status and Superseded-by;
     first records, including repo visibility (private until the `preregistered`
     tag, then public) and hooks that must always run living in `.claude/settings.json` (an untrusted
     folder skips agent frontmatter hooks without a message).
   - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
-    `RunManifest` splits a canonical part from an operational part.
+    `RunManifest` splits a canonical part from an operational part; the run's
+    setup (environment, config sections, call sites) has its own hash, used for
+    arm parity and resume (ADR 0006).
   - **PR 6:** `feat/config`. `docgap.toml`, no defaults in code, canonical hash
     per section.
   - **PR 7:** `docs/eval-protocol`. Every brief item, plus pinned split, random-N
@@ -217,9 +220,12 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (b) report delivered drafts per arm next to the headline (recommended);
   (c) how the repo's going public at the `preregistered` tag is recorded for
   later readers (ADR 0004).
-- **Open for PR 5:** whether `RunManifest` records the `uv.lock` hash, so a
-  dependency bump that changes outputs (sqlglot, ADR 0002) shows as a changed
-  input rather than only as a failed golden test.
+- **Open for PR 6:** `RunSetup.config` hashes config per section, but the
+  brief (lines 165, 314, 385) and the resilience `run_id` rule say "config
+  hash". Either add a whole-config hash or restate those lines per section.
+- **Owed by Phase 5:** a model call that fails (timeout, refusal) must replay
+  offline, so the cache stores failure outcomes, not only responses; the
+  evidence stage checks that `Profile.k` equals the configured *k*.
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PR 5 `feat/contracts`, after `docs/decision-log` merges.
+- **Next step:** PR 6 `feat/config`, after `feat/contracts` merges.

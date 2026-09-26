@@ -33,7 +33,9 @@ per-item isolation boundary, and it must record the item and the exception type.
 - **Deterministic run IDs** from inputs (`run_id = f"{interval_end:%Y%m%d}-{config_hash[:8]}"`),
   never random.
 - **Skip when done:** a stage whose output exists with the expected input hashes
-  in its manifest entry returns immediately. Re-running a finished DAG changes nothing.
+  and the current setup hash in its manifest entry returns immediately. Re-running
+  a finished DAG changes nothing; a changed environment, config or call site
+  re-runs the stage.
 - **Atomic writes:** write to `path.tmp-<pid>` in the same directory, `fsync`,
   then `os.replace`. A reader never sees half a file.
 - **Commit marker last:** a stage writes its artifacts, then its manifest entry
@@ -63,7 +65,9 @@ per-item isolation boundary, and it must record the item and the exception type.
 
 One column's failed draft, one unparseable query or one timed-out judgment must
 not fail the run. Each item is processed inside its own boundary; failures become
-records (`reason`, `exception_type`, `attempts`) in the stage output. The stage
+records in the stage output with a `FailureReason`, and the structured log holds
+the `exception_type` and `attempts`, which can differ between two runs of the
+same inputs and so stay out of canonical artifacts. The stage
 fails only when:
 
 - a **quality gate** is crossed (config, recorded in the manifest), e.g. parse

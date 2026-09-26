@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "GradeReason": {
+      "description": "Why the grader failed an agent run.",
+      "enum": [
+        "error",
+        "timeout",
+        "shape_mismatch",
+        "row_count_mismatch",
+        "value_mismatch"
+      ],
+      "title": "GradeReason",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One graded agent run: pass, or fail with a reason code.",
+  "properties": {
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "qid": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "title": "Qid",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GradeReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "repetition": {
+      "exclusiveMinimum": 0,
+      "title": "Repetition",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "qid",
+    "repetition",
+    "passed",
+    "reason"
+  ],
+  "title": "Grade",
+  "type": "object"
+}

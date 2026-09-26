@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "Actor": {
+      "description": "Who issued a query, from the role-to-actor mapping in config.",
+      "enum": [
+        "agent",
+        "human"
+      ],
+      "title": "Actor",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One row of the query snapshot, redacted: raw query text never gets here.",
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/Actor"
+    },
+    "fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Fingerprint",
+      "type": "string"
+    },
+    "normalized_sql": {
+      "minLength": 1,
+      "title": "Normalized Sql",
+      "type": "string"
+    },
+    "qid": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Qid"
+    },
+    "query_id": {
+      "minLength": 1,
+      "title": "Query Id",
+      "type": "string"
+    },
+    "repetition": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Repetition"
+    },
+    "role": {
+      "pattern": "^[A-Z_][A-Z0-9_$]*$",
+      "title": "Role",
+      "type": "string"
+    },
+    "start_time": {
+      "format": "date-time",
+      "title": "Start Time",
+      "type": "string"
+    },
+    "succeeded": {
+      "title": "Succeeded",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "query_id",
+    "start_time",
+    "role",
+    "actor",
+    "qid",
+    "repetition",
+    "succeeded",
+    "normalized_sql",
+    "fingerprint"
+  ],
+  "title": "QueryRecord",
+  "type": "object"
+}
