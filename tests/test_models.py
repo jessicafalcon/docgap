@@ -74,14 +74,21 @@ def _profile(**overrides: Any) -> Profile:
     return Profile(**(fields | overrides))
 
 
-def _manifest(**operational: Any) -> RunManifest:
+def _environment(**overrides: Any) -> Environment:
+    fields: dict[str, Any] = {
+        "python": "3.12.11",
+        "packages": ("pydantic==2.13.5", "sqlglot==27.8.0"),
+        "code_sha256": HASH,
+    }
+    return Environment(**(fields | overrides))
+
+
+def _manifest(environment: Environment | None = None, **operational: Any) -> RunManifest:
     canonical = RunCanonical(
         schema_version=1,
         as_of=T0,
         config={"rank": HASH},
-        environment=Environment(
-            python="3.12.11", packages=("pydantic==2.13.5", "sqlglot==27.8.0"), code_sha256=HASH
-        ),
+        environment=environment or _environment(),
         call_sites={
             "drafter": CallSite(
                 model="claude-opus-5-5", prompt_version="v1", prompt_sha256=HASH, sampling={}
@@ -115,77 +122,78 @@ def _manifest(**operational: Any) -> RunManifest:
     return RunManifest(canonical=canonical, operational=RunOperational(**(fields | operational)))
 
 
-def _query_record() -> QueryRecord:
-    return QueryRecord(
-        query_id="01b2",
-        start_time=T0,
-        role="AGENT_READER",
-        actor=Actor.AGENT,
-        qid="q01",
-        succeeded=False,
-        normalized_sql=SQL,
-        fingerprint=hashlib.sha256(SQL.encode()).hexdigest(),
-    )
+def _query_record(**overrides: Any) -> QueryRecord:
+    fields: dict[str, Any] = {
+        "query_id": "01b2",
+        "start_time": T0,
+        "role": "AGENT_READER",
+        "actor": Actor.AGENT,
+        "qid": "q01",
+        "succeeded": False,
+        "normalized_sql": SQL,
+        "fingerprint": hashlib.sha256(SQL.encode()).hexdigest(),
+    }
+    return QueryRecord(**(fields | overrides))
 
 
-def _packet() -> EvidencePacket:
-    return EvidencePacket(
+def _packet(**overrides: Any) -> EvidencePacket:
+    fields: dict[str, Any] = {
+        "fqn": FQN,
+        "data_type": "NUMBER(12,2)",
+        "sensitivity": Sensitivity.PUBLIC,
+        "table_description": "One row per reimbursement line.",
+        "lineage_sql": "select prs_pai_mnt from stg_damir__prestations",
+        "upstream_expression": "PRS_PAI_MNT",
+        "profile": _profile(),
+    }
+    return EvidencePacket(**(fields | overrides))
+
+
+EXAMPLES: list[BaseModel] = [
+    ColumnRef(query_id="01b2", fqn=FQN, clause=Clause.WHERE, managed=True),
+    _query_record(),
+    ColumnUsage(
         fqn=FQN,
-        data_type="NUMBER(12,2)",
-        sensitivity=Sensitivity.PUBLIC,
-        table_description="One row per reimbursement line.",
-        lineage_sql="select prs_pai_mnt from stg_damir__prestations",
-        upstream_expression="PRS_PAI_MNT",
-        profile=_profile(),
-    )
-
-
-def _examples() -> list[BaseModel]:
-    return [
-        ColumnRef(query_id="01b2", fqn=FQN, clause=Clause.WHERE, managed=True),
-        _query_record(),
-        ColumnUsage(
-            fqn=FQN,
-            executions_agent=12,
-            executions_human=0,
-            fingerprints_agent=4,
-            fingerprints_human=0,
-            questions=3,
-        ),
-        Grade(qid="q01", repetition=2, passed=False, reason=GradeReason.VALUE_MISMATCH),
-        Attribution(
-            qid="q01",
-            repetition=2,
-            cause={cause: 1.0 if cause is Cause.COLUMN_MEANING else 0.0 for cause in Cause},
-            column={FQN: 0.75, "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.BEN_CMU_TOP": 0.25},
-            failure=None,
-        ),
-        _packet(),
-        Draft(
-            fqn=FQN,
-            evidence_sha256=HASH,
-            description="Amount paid, in euros.",
-            unknowns=("currency",),
-            failure=None,
-        ),
-        GateResult(fqn=FQN, draft_sha256=HASH, p_supported=0.9, band=Band.READY, failure=None),
-        RankedGap(rank=1, fqn=FQN, score=2.3, executions=9, failure_rate=0.2),
-        _manifest(),
-    ]
+        executions_agent=12,
+        executions_human=0,
+        fingerprints_agent=4,
+        fingerprints_human=0,
+        questions=3,
+    ),
+    Grade(qid="q01", repetition=2, passed=False, reason=GradeReason.VALUE_MISMATCH),
+    Attribution(
+        qid="q01",
+        repetition=2,
+        cause={cause: 1.0 if cause is Cause.COLUMN_MEANING else 0.0 for cause in Cause},
+        column={FQN: 0.75, "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.BEN_CMU_TOP": 0.25},
+        failure=None,
+    ),
+    _packet(),
+    Draft(
+        fqn=FQN,
+        evidence_sha256=HASH,
+        description="Amount paid, in euros.",
+        unknowns=("currency",),
+        failure=None,
+    ),
+    GateResult(fqn=FQN, draft_sha256=HASH, p_supported=0.9, band=Band.READY, failure=None),
+    RankedGap(rank=1, fqn=FQN, score=2.3, executions=9, failure_rate=0.2),
+    _manifest(),
+]
 
 
 def test_every_contract_has_an_example() -> None:
-    assert {type(example) for example in _examples()} == set(CONTRACTS.values())
+    assert {type(example) for example in EXAMPLES} == set(CONTRACTS.values())
 
 
-@pytest.mark.parametrize("example", _examples(), ids=lambda example: type(example).__name__)
+@pytest.mark.parametrize("example", EXAMPLES, ids=lambda example: type(example).__name__)
 def test_contract_round_trips_through_json(example: BaseModel) -> None:
     # Artifacts are read back with `model_validate_json`, so strict mode must take
     # enums, tuples and datetimes from JSON text.
     assert type(example).model_validate_json(example.model_dump_json()) == example
 
 
-@pytest.mark.parametrize("example", _examples(), ids=lambda example: type(example).__name__)
+@pytest.mark.parametrize("example", EXAMPLES, ids=lambda example: type(example).__name__)
 def test_contract_rejects_unknown_fields(example: BaseModel) -> None:
     with pytest.raises(ValidationError, match="extra"):
         type(example).model_validate(example.model_dump() | {"unexpected": 1})
@@ -224,9 +232,8 @@ def test_fqn_rejects_anything_but_four_uppercase_parts(fqn: str) -> None:
 
 
 def test_query_record_rejects_a_fingerprint_of_other_sql() -> None:
-    record = _query_record()
     with pytest.raises(ValidationError, match="fingerprint must be the SHA-256"):
-        QueryRecord.model_validate(record.model_dump() | {"normalized_sql": "SELECT 1"})
+        _query_record(normalized_sql="SELECT 1")
 
 
 def test_timestamps_must_be_utc() -> None:
@@ -313,18 +320,13 @@ def test_profile_enforces_k_and_order(overrides: dict[str, Any], message: str) -
     "overrides", [{}, {"min": None, "max": None}, {"top_values": ()}], ids=["all", "top", "minmax"]
 )
 def test_restricted_column_carries_no_values(overrides: dict[str, Any]) -> None:
-    packet = _packet()
     with pytest.raises(ValidationError, match="restricted column's profile carries no values"):
-        EvidencePacket.model_validate(
-            packet.model_dump()
-            | {"sensitivity": Sensitivity.RESTRICTED, "profile": _profile(**overrides)}
-        )
+        _packet(sensitivity=Sensitivity.RESTRICTED, profile=_profile(**overrides))
 
 
 def test_restricted_column_with_aggregates_only_is_valid() -> None:
     profile = _profile(min=None, max=None, top_values=())
-    packet = _packet().model_copy(update={"sensitivity": Sensitivity.RESTRICTED})
-    assert EvidencePacket.model_validate(packet.model_dump() | {"profile": profile})
+    assert _packet(sensitivity=Sensitivity.RESTRICTED, profile=profile).profile == profile
 
 
 @pytest.mark.parametrize(
@@ -390,14 +392,8 @@ def test_canonical_hash_ignores_the_operational_part() -> None:
 
 
 def test_canonical_hash_changes_with_the_environment() -> None:
-    manifest = _manifest()
-    bumped = manifest.canonical.environment.model_copy(
-        update={"packages": ("pydantic==2.13.5", "sqlglot==27.9.0")}
-    )
-    moved = manifest.model_copy(
-        update={"canonical": manifest.canonical.model_copy(update={"environment": bumped})}
-    )
-    assert moved.canonical_sha256() != manifest.canonical_sha256()
+    bumped = _environment(packages=("pydantic==2.13.5", "sqlglot==27.9.0"))
+    assert _manifest(bumped).canonical_sha256() != _manifest().canonical_sha256()
 
 
 def test_canonical_hash_is_pinned() -> None:

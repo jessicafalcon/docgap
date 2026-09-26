@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -29,7 +30,6 @@ from pydantic import (
 )
 
 __all__ = [
-    "SCHEMA_VERSION",
     "Actor",
     "Attribution",
     "Band",
@@ -60,9 +60,6 @@ __all__ = [
     "canonical_json",
 ]
 
-# Bump on any change to a contract's shape, and regenerate the committed schemas.
-SCHEMA_VERSION: Literal[1] = 1
-
 # A probability map written by the model is rescaled to sum to 1 by the adapter;
 # this only absorbs float rounding.
 _SUM_TOLERANCE = 1e-6
@@ -81,8 +78,7 @@ Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 GitSha = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{40}$")]
 # Question and run IDs appear in query tags (`agent:<run_id>:<qid>:<rep>`), paths
 # and branch names, so they hold no colon, slash or leading dot.
-Qid = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
-RunId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
+Qid = RunId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
 # Stage, artifact, count, gate, call-site and config-section names.
 Key = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$")]
 Probability = Annotated[float, Field(ge=0, le=1)]
@@ -110,7 +106,7 @@ def canonical_json(model: BaseModel) -> bytes:
 
 
 def _sums_to_one(probabilities: Iterable[float], name: str) -> None:
-    if abs(sum(probabilities) - 1) > _SUM_TOLERANCE:
+    if not math.isclose(math.fsum(probabilities), 1, abs_tol=_SUM_TOLERANCE):
         raise ValueError(f"{name} probabilities must sum to 1")
 
 
@@ -267,12 +263,12 @@ class Attribution(_Contract):
 
     @model_validator(mode="after")
     def _maps_or_failure(self) -> Self:
-        if self.cause is None or self.column is None:
-            if self.cause is not None or self.column is not None or self.failure is None:
-                raise ValueError("either both probability maps or a failure reason")
-            return self
-        if self.failure is not None:
+        if (self.cause is None) != (self.column is None) or (self.cause is None) == (
+            self.failure is None
+        ):
             raise ValueError("either both probability maps or a failure reason")
+        if self.cause is None or self.column is None:
+            return self
         if set(self.cause) != set(Cause):
             raise ValueError("cause must carry a probability for every label")
         if not self.column:
@@ -431,6 +427,7 @@ class RunCanonical(_Contract):
     without changing any output. `environment.code_sha256` pins the code instead.
     """
 
+    # Bump on any change to a contract's shape, and regenerate the committed schemas.
     schema_version: Literal[1]
     as_of: UtcDatetime
     config: dict[Key, Sha256]
