@@ -148,6 +148,9 @@ code is lost to the next session, and the review agents treat it as a finding.
 | What a user sees: quickstart, results (generated), limits | `README.md` |
 
 - **A step lands:** tick its checkbox in the brief; move "Current status".
+- **Work owed by a later step** (found while building another): a line in the
+  brief step that owes it, in the same PR. "Current status" holds only the
+  decisions open for the next PRs.
 - **A decision is taken:** write an ADR, write the outcome into every part of the
   brief it affects (as the current design, not as a change), and remove it from
   "Open decisions".
@@ -186,8 +189,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
-  #5 `docs/decision-log` (PR 4).
-- **Open PRs:** `feat/contracts` (PR 5).
+  #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5).
+- **Open PRs:** `feat/config` (PR 6).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -201,12 +204,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
     first records, including repo visibility (private until the `preregistered`
     tag, then public) and hooks that must always run living in `.claude/settings.json` (an untrusted
     folder skips agent frontmatter hooks without a message).
-  - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
+  - **PR 5:** ~~`feat/contracts`~~ (#6). `models.py`, one committed schema per contract;
     `RunManifest` splits a canonical part from an operational part; the run's
     setup (environment, config sections, call sites) has its own hash, used for
     arm parity and resume (ADR 0006).
-  - **PR 6:** `feat/config`. `docgap.toml`, no defaults in code, canonical hash
-    per section.
+  - **PR 6:** `feat/config`. `docgap.toml` loaded by `config.py`: no defaults,
+    no key outside a section, one hash per section into `RunSetup.config`. Runs
+    compare by the setup hash, and the run ID is the as-of timestamp plus its
+    first 8 hex digits (ADR 0007).
   - **PR 7:** `docs/eval-protocol`. Every brief item, plus pinned split, random-N
     pool, N rounding, bootstrap settings, pilot fallthrough; devils-advocate first.
   - **PRs 8–9:** `docs/data-study`. First commit: CI fails if `src/` references
@@ -219,13 +224,10 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (arm membership unchanged, recommended) or absorb the flagged band;
   (b) report delivered drafts per arm next to the headline (recommended);
   (c) how the repo's going public at the `preregistered` tag is recorded for
-  later readers (ADR 0004).
-- **Open for PR 6:** `RunSetup.config` hashes config per section, but the
-  brief (lines 165, 314, 385) and the resilience `run_id` rule say "config
-  hash". Either add a whole-config hash or restate those lines per section.
-- **Owed by Phase 5:** a model call that fails (timeout, refusal) must replay
-  offline, so the cache stores failure outcomes, not only responses; the
-  evidence stage checks that `Profile.k` equals the configured *k*.
-- **Owed by the first local fake server** (fault-injection tests): a test that a Unix
-  socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PR 6 `feat/config`, after `feat/contracts` merges.
+  later readers (ADR 0004); (d) whether the rank weight *w* is fixed at the
+  tag, since it picks the top-N columns (the rank step adds it to `docgap.toml`).
+  (e) baseline parity: the baseline runs in Phase 3, before later steps add
+  config and code, so its setup hash can't equal the Phase 6 arms' (brief line
+  171 vs 387). Re-run the baseline in the Phase 6 session (recommended) or
+  compare it on the agent's settings only.
+- **Next step:** PR 6 `feat/config` in review; then PR 7 `docs/eval-protocol`.

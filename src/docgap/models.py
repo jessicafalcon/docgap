@@ -30,6 +30,7 @@ from pydantic import (
 )
 
 __all__ = [
+    "CONTRACT_CONFIG",
     "Actor",
     "Attribution",
     "Band",
@@ -46,6 +47,7 @@ __all__ = [
     "GateResult",
     "Grade",
     "GradeReason",
+    "ModelSettings",
     "Profile",
     "QueryRecord",
     "RankedGap",
@@ -59,6 +61,7 @@ __all__ = [
     "StageStatus",
     "TopValue",
     "canonical_json",
+    "canonical_sha256",
 ]
 
 # A probability map written by the model is rescaled to sum to 1 by the adapter;
@@ -77,6 +80,9 @@ def _require_utc(value: datetime) -> datetime:
 Fqn = Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*(\.[A-Z_][A-Z0-9_$]*){3}$")]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 GitSha = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{40}$")]
+# An unquoted Snowflake role name, uppercased as Snowflake stores it. The actor map
+# in config is matched against `QueryRecord.role`, so both use this one type.
+RoleName = Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*$")]
 # Question and run IDs appear in query tags (`agent:<run_id>:<qid>:<rep>`), paths
 # and branch names, so they hold no colon, slash or leading dot.
 Qid = RunId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
@@ -87,8 +93,12 @@ NonEmptyStr = Annotated[str, StringConstraints(min_length=1)]
 UtcDatetime = Annotated[AwareDatetime, AfterValidator(_require_utc)]
 
 
+# Shared with the config sections, so one strictness rule covers every model.
+CONTRACT_CONFIG = ConfigDict(frozen=True, extra="forbid", strict=True, allow_inf_nan=False)
+
+
 class _Contract(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True, allow_inf_nan=False)
+    model_config = CONTRACT_CONFIG
 
 
 def canonical_json(model: BaseModel) -> bytes:
@@ -104,6 +114,11 @@ def canonical_json(model: BaseModel) -> bytes:
         ensure_ascii=False,
         allow_nan=False,
     ).encode()
+
+
+def canonical_sha256(model: BaseModel) -> str:
+    """Hash a contract's canonical JSON: the one hash every manifest field uses."""
+    return hashlib.sha256(canonical_json(model)).hexdigest()
 
 
 def _sums_to_one(probabilities: Iterable[float], name: str) -> None:
@@ -197,7 +212,7 @@ class QueryRecord(_Contract):
 
     query_id: NonEmptyStr
     start_time: UtcDatetime
-    role: Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*$")]
+    role: RoleName
     actor: Actor
     # From the tag `agent:<run_id>:<qid>:<rep>`; both are None for untagged traffic.
     qid: Qid | None
@@ -422,13 +437,18 @@ class Environment(_Contract):
         return self
 
 
-class CallSite(_Contract):
-    """One model call site: the pinned model, the prompt, and the sampling settings sent."""
+class ModelSettings(_Contract):
+    """The pinned model and the sampling settings sent at one call site, as `docgap.toml` sets them."""
 
     model: NonEmptyStr
+    sampling: dict[Key, str | int | float | bool]
+
+
+class CallSite(ModelSettings):
+    """One model call site as it ran: its settings from config, plus the prompt it sent."""
+
     prompt_version: NonEmptyStr
     prompt_sha256: Sha256
-    sampling: dict[Key, str | int | float | bool]
 
 
 class GateCheck(_Contract):
@@ -450,7 +470,7 @@ class RunSetup(_Contract):
 
     def sha256(self) -> str:
         """Hash the setup; arm parity and "skip when done" compare this value."""
-        return hashlib.sha256(canonical_json(self)).hexdigest()
+        return canonical_sha256(self)
 
 
 class StageRecord(_Contract):
@@ -542,4 +562,4 @@ class RunManifest(_Contract):
 
     def canonical_sha256(self) -> str:
         """Hash the canonical part only: two runs of the same inputs must agree on it."""
-        return hashlib.sha256(canonical_json(self.canonical)).hexdigest()
+        return canonical_sha256(self.canonical)

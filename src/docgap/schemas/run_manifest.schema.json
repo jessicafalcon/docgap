@@ -2,7 +2,7 @@
   "$defs": {
     "CallSite": {
       "additionalProperties": false,
-      "description": "One model call site: the pinned model, the prompt, and the sampling settings sent.",
+      "description": "One model call site as it ran: its settings from config, plus the prompt it sent.",
       "properties": {
         "model": {
           "minLength": 1,
@@ -44,9 +44,9 @@
       },
       "required": [
         "model",
+        "sampling",
         "prompt_version",
-        "prompt_sha256",
-        "sampling"
+        "prompt_sha256"
       ],
       "title": "CallSite",
       "type": "object"

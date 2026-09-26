@@ -54,8 +54,9 @@ outputs and run manifest. In `src/docgap/` outside `llm/` and `cli.py`:
   protocol may change, is set in `CLAUDE.md` → "After `preregistered`".
 - **Ranking inputs come from discovery questions only.** Usage and attribution
   filter on discovery `qid`s; a test proves a holdout-tagged query changes nothing.
-- All arms use the same model ID, prompt version and config hash, verified by
-  comparing run manifests before the comparison is computed.
+- All arms share one setup hash (model IDs, prompt versions, sampling, config
+  sections, environment), verified by comparing run manifests before the
+  comparison is computed.
 - Results are generated from run files, never typed. Every README number traces
   to a file and a hash.
 
@@ -74,8 +75,9 @@ that drops a row without a counter is a bug.
 - **Downloads:** size, gzip magic bytes, SHA-256 before anything reads the file.
 - **Model output:** parsed into the typed answer; a malformed answer is a
   recorded failure routed to the human band, not a retry-until-it-parses loop.
-- **Config:** loaded into a pydantic model with ranges (`0 < k`, bands ordered);
-  its hash goes into every manifest.
+- **Config:** loaded into a pydantic model with ranges (`0 < k`, bands ordered),
+  no defaults and no key outside a section; one hash per section goes into the
+  run's setup (ADR 0007).
 
 Fail loud on programmer error. Fail *recorded* on data error.
 

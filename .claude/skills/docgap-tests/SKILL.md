@@ -56,7 +56,7 @@ no Snowflake, no model, no clock.
 - **Dictionary isolation:** `src/` never imports or opens `eval/reference/`
   (static import check plus a test that fails if the path appears in `src/`).
 - **Arm parity:** the comparison refuses to run if two arms' manifests differ in
-  model ID, prompt version or config hash.
+  setup hash.
 - **Pre-registration:** everything `CLAUDE.md` → "After `preregistered`" freezes
   hashes to the values committed at the tag.
 

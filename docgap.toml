@@ -1,0 +1,51 @@
+# docgap configuration: every value the pipeline reads. The code has no defaults,
+# so a missing key fails loading instead of falling back. Every key sits in a
+# section, and each section is hashed on its own into the run's setup (ADR 0007).
+# A later step adds the keys it reads, under a section named for what reads them.
+
+[snapshot]
+# Query history exported per run: the week that ends at the run's as-of date.
+history_window_days = 7
+
+[actors]
+# Role → actor class. Only these roles' queries count as usage, so loads, dbt
+# builds and docgap's own reads never do. A human role joins when the brief's open
+# decision on where "people" traffic comes from is settled.
+AGENT_READER = "agent"
+
+[evidence]
+# k: a value carried by fewer fact rows is suppressed from profiles (ADR 0003).
+min_value_count = 11
+
+[gate]
+# Draft-gate bands on the "fully supported" probability: at least `ready_min` is
+# ready, at least `confirm_min` needs the owner to confirm, below it is flagged.
+ready_min = 0.8
+confirm_min = 0.5
+
+[seeds]
+# Arbitrary values, set before any question existed.
+split = 1
+random_arm = 2
+# Used if the open "baseline docs rule" decision keeps seeded random sampling.
+baseline_docs = 3
+
+[agent]
+# The test agent's `run_sql` tool, per call.
+statement_timeout_seconds = 60
+row_cap = 200
+
+# Model call sites. Every call runs at the model's default sampling, so `sampling`
+# lists the settings sent, and none are. The agent's call site is added when the
+# Phase 3 pilot picks its model.
+[call_sites.attribution]
+model = "claude-opus-5-5"
+sampling = {}
+
+[call_sites.drafter]
+model = "claude-opus-5-5"
+sampling = {}
+
+[call_sites.gate]
+model = "claude-opus-5-5"
+sampling = {}
