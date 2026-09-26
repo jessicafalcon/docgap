@@ -34,7 +34,9 @@ skip it.
 changed documents against the code and the other records. Every sentence that
 states a mechanism, a number, a phase, a path, a threshold or a command must
 match reality, and every non-obvious claim must have its decision record. Skip
-checks 2 and 4 unless a changed sentence touches them.
+checks 2 and 4 unless a changed sentence touches them. Read the changed documents
+in full; for everything else, grep for the facts they state and read only those
+sections. The full list below is for the whole-repo phase-exit audit.
 
 ## What to read first (the standard you check against)
 

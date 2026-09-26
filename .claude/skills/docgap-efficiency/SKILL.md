@@ -3,7 +3,7 @@ name: docgap-efficiency
 description: >
   Token and compute efficiency for docgap. Build time: working with Opus 5.5 as the
   only model (main session and subagents), when fan-out pays, keeping the cached
-  prompt prefix stable, memory, and compaction. Runtime: the model-response cache,
+  prompt prefix stable, memory, and fresh sessions. Runtime: the model-response cache,
   frozen snapshots and profiles, Snowflake cost control, and dbt selection. Read
   this when a task spans many files or turns, before delegating to subagents, and
   when wiring any external call.
@@ -26,6 +26,11 @@ delegation is about **context**, not price.
   stage's failure handling, a sweep of Snowflake docs). A known file or symbol is
   a direct read. A subagent re-reads context from scratch and costs a full Opus
   pass; it pays only when it keeps many tokens out of the main thread.
+- **A fresh agent costs ~50k tokens before it reads a changed line** (measured on
+  #1 and #2: brief, `CLAUDE.md` and skills). The count of agents drives cost, not
+  the diff size. Hence the gate sized by PR type (`CLAUDE.md`), one agent for all
+  cleanup angles, no automatic re-review, and prompts that name the brief lines to
+  read instead of the whole brief.
 - **Batch independent agents in one turn**; never run the same search yourself
   while an agent does it.
 - **Scope the first turn:** task, intent, constraints, files. A precise first
@@ -39,20 +44,21 @@ the context (system prompt, CLAUDE.md, tool list) across turns.
 - `CLAUDE.md` is loaded in full into every session. Keep it short: the repo map,
   principles, the skill table, the git rules. Everything else lives in a skill,
   loaded only when invoked.
-- Edits to `CLAUDE.md` apply from the next session (or after `/clear` or
-  `/compact`), so batch them rather than editing it mid-task.
+- Edits to `CLAUDE.md` apply from the next session, so batch them rather than
+  editing it mid-task.
 - Connecting or disconnecting MCP servers mid-session can change the tool list and
   invalidate the cache. Settle them before starting.
 
-**Memory and compaction.**
+**Memory and fresh sessions.**
 
 - Durable, non-obvious facts go to project memory: a decision's reason, a vendor
   limit found the hard way, a user preference. Not what the repo or git history
   already records.
 - Don't re-read a file you just edited to "verify"; the harness tracks it.
   Don't re-derive a convention; invoke the skill that states it.
-- Compact at breakpoints (a phase done, exploration finished before
-  implementation), not mid-task (`strategic-compact`).
+- At a breakpoint (a PR merged, exploration finished before implementation),
+  hand the maintainer a kickoff prompt for a fresh session instead of compacting.
+  "Current status" in `CLAUDE.md` must be enough to resume from.
 
 ## Runtime
 

@@ -56,7 +56,7 @@ the file is the current standard, and memory of it may be stale.
 | **Before each commit** | `uv run pytest` and `uv run pre-commit run --all-files` | Commit only when both are green |
 | **Reading across many files or pages** where only the conclusion matters | Skill `docgap-efficiency`, then a subagent | Keep the conclusion, not the dumps |
 | **A result comes back shallow** (a missed finding, a weak root cause, a hand-wavy estimate) | Raise effort from `high` to `xhigh` for that task only | Back to `high` after; `high` is the default for everything, agents included |
-| **A breakpoint** in a long session (a PR opened, exploration done) | `/compact` (skill `strategic-compact` suggests when) | Never mid-task |
+| **A breakpoint** in a long session (a PR merged, exploration done) | Give me a kickoff prompt for a fresh session | I start the new session; no `/compact`. Never mid-task |
 | **Before opening a PR** | The pre-PR gate below | |
 | **After each PR and each merge** | Update "Current status" | In the same change |
 | **A durable, non-obvious fact** learned (a vendor limit, a user preference) | Project memory | Not what the repo or git history already records |
@@ -68,18 +68,27 @@ In this order. Stop at the first step that fails, fix, and restart from there.
 1. `uv run pytest` and `uv run pre-commit run --all-files` are green. If `infra/`
    changed: `terraform fmt -check && terraform validate`. If `warehouse/` changed:
    `dbt parse` and `docgap lint`.
-2. `/simplify` on the branch; fix or answer its findings.
+2. Cleanup review with the four `/simplify` angles (reuse, simplification,
+   efficiency, altitude), sized to the PR; fix or answer the findings:
+   - **Docs or process only:** skip it; the auditor in step 3 covers duplication.
+   - **Config or tooling:** run the four angles yourself, no subagents.
+   - **Code in `src/` or `eval/`:** one subagent covering all four angles.
 3. The review agent for this PR:
    - **Code changed:** `@agent-docgap-reviewer` on the branch.
    - **Docs only** (every changed path is `*.md`): `@agent-docgap-coherence-auditor`,
      scoped to the changed docs.
    - **Last PR of a phase:** also `@agent-docgap-coherence-auditor` over the whole repo.
-4. Fix or answer every blocker and major finding. Apply every record update the
-   agents list; bring me each one marked **decide**.
+
+   Give the agent the diff range, the brief step's line range and the rules at
+   stake; it reads further only when a finding needs it.
+4. Fix or answer every blocker and major finding, and verify each fix yourself.
+   Re-run the agent only if a blocker needed a design change. Apply every record
+   update the agents list; bring me each one marked **decide**.
 5. Skill `docgap-pr` for the title and body, built from `.github/pull_request_template.md`;
    skill `docgap-voice` for the wording.
 6. "Current status" is moved forward in this PR.
-7. Push, open the PR, and **stop. Merging is my call.**
+7. Push, open the PR, and **stop.** I review it; on my "merge", squash-merge it,
+   pull `main` and continue with the next step.
 
 A phase is done when its "Done when" holds **and** the whole-repo audit has no
 blockers, with its record updates applied.
@@ -113,7 +122,7 @@ disagree with the code or a record and can't tell which is right, they mark it
 
 | Hook | Fires on | When it reports |
 |---|---|---|
-| `private-terms-guard` | Before any write in the repo, and before commits, tags, PR/issue/release text (never files outside the repo; until PR 3, not `-F`/`--body-file` contents either) | Blocked. Rewrite without the term: describe the fact itself, not its source. The list lives in the gitignored `.claude/private-terms.local`. |
+| `private-terms-guard` | Before any write in the repo, and before commits, tags, PR/issue/release text (never files outside the repo; until `fix/hooks`, not `-F`/`--body-file` contents either) | Blocked. Rewrite without the term: describe the fact itself, not its source. The list lives in the gitignored `.claude/private-terms.local`. |
 | `ruff-on-edit` | After editing a `*.py` file | Fix any unresolved lint it prints before the next edit. |
 | `determinism-guard` | After editing core `src/docgap/*.py` (not `llm/`, `cli.py`, tests) | Inject the value as a parameter (`as_of`, seed, config), wrap listings in `sorted()`, use `hashlib`, or move the code to `llm/` or `cli.py`. Pre-commit runs the same check. |
 | `reviewer_bash_allowlist` | Shell commands inside the two review agents | Keeps them read-only. Not used in the main session. |
@@ -169,12 +178,15 @@ Update after every PR and merge, in the same change. A new session resumes from 
   complete, then public. No branch protection (not available on a private repo).
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
-- **Open PRs:** `docs/pr-template` (one PR template for every development PR; inserted before PR 2).
-- **Phase 0 PR order** (approved; reviewer findings folded in):
-  1. ~~`build/tooling-and-ci`~~ (#1).
-  2. `fix/determinism-guard-receivers`: flag listings and `.sample()` on any
-     receiver, plus `os.getcwd()` and `Path.cwd()`; tests for every rule.
-  3. `fix/private-terms-coverage`: staged files, commit messages, `-F` and
+  #2 `docs/pr-template`.
+- **Open PRs:** `docs/lean-gate` (the gate sized by PR type; fewer, larger PRs).
+- **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
+  gate runs):
+  1. ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2) and
+     `docs/lean-gate`.
+  2–3. `fix/hooks`: the determinism guard flags listings and `.sample()` on any
+     receiver, plus `os.getcwd()` and `Path.cwd()`, with tests for every rule;
+     the private-terms guard covers staged files, commit messages, `-F` and
      `--body-file` files, `git -C`. Then drop the `--body-file` caveats in the
      hooks table and `docgap-pr` (Body).
   4. `docs/decision-log`: ADR template with Status and Superseded-by; first records,
@@ -184,9 +196,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
   6. `feat/config`: `docgap.toml`, no defaults in code, canonical hash per section.
   7. `docs/eval-protocol`: every brief item, plus pinned split, random-N pool,
      N rounding, bootstrap settings, pilot fallthrough; devils-advocate first.
-  8. `test/dictionary-isolation`: CI fails if `src/` references `eval/reference/`.
-  9. `docs/months-of-data`: measured file facts with their commands,
-     `loader/sources.lock`, months ADR.
+  8–9. `chore/data`: first commit, CI fails if `src/` references
+     `eval/reference/`; then measured file facts with their commands,
+     `loader/sources.lock`, the dictionary in `eval/reference/`, months ADR.
   10. `feat/offline-sample`: sampling by hashed dimension key, tests, ADR with
       the output hash.
 - **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
@@ -194,4 +206,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (b) report delivered drafts per arm next to the headline (recommended).
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PR 2 `fix/determinism-guard-receivers`, after `docs/pr-template` merges.
+- **Next step:** PRs 2–3 `fix/hooks`, after `docs/lean-gate` merges.

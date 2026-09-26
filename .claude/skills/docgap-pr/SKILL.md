@@ -65,7 +65,7 @@ scans the text; it doesn't read `--body-file` contents.
 
 ## Before you push
 
-The pre-PR gate (checks, `/simplify`, which review agent, record updates, current
+The pre-PR gate (checks, cleanup review, which review agent, record updates, current
 status, then stop) is defined in `CLAUDE.md` → "The pre-PR gate", and only there,
 so the two can't drift. This skill covers the PR's shape. In the diff itself: no
 debug output, commented-out code or stray files, and a non-obvious line is
