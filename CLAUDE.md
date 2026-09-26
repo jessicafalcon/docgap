@@ -156,10 +156,14 @@ code is lost to the next session, and the review agents treat it as a finding.
   "Open decisions".
 - **A threshold, key or command changes:** update every record that states it.
 - **A new skill, agent, hook or command:** add it here, with when to invoke it.
-- **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms
-  and the agent model never change. Any other `EVAL_PROTOCOL.md` change needs an
-  ADR with a justification, and the results report the deviation. Other files
-  point here rather than restating the list.
+- **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
+  the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
+  values that pick the arms' content (the rank weight, gate bands, *k*, seeds,
+  `[actors]`, and the model and prompt version at the attribution, drafter and
+  gate call sites) never change. A change to the usage, rank or evidence code
+  that changes its golden outputs, and any other `EVAL_PROTOCOL.md` change,
+  needs an ADR with a justification, and the results report the deviation.
+  Other files point here rather than restating the list.
 - **Code and a record disagree** and it's unclear which is right: ask me. Never
   make one match the other silently.
 
@@ -189,8 +193,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
-  #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5).
-- **Open PRs:** `feat/config` (PR 6).
+  #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5), #7 `feat/config`
+  (PR 6).
+- **Open PRs:** `docs/eval-protocol` (PR 7).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -208,26 +213,21 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `RunManifest` splits a canonical part from an operational part; the run's
     setup (environment, config sections, call sites) has its own hash, used for
     arm parity and resume (ADR 0006).
-  - **PR 6:** `feat/config`. `docgap.toml` loaded by `config.py`: no defaults,
+  - **PR 6:** ~~`feat/config`~~ (#7). `docgap.toml` loaded by `config.py`: no defaults,
     no key outside a section, one hash per section into `RunSetup.config`. Runs
     compare by the setup hash, and the run ID is the as-of timestamp plus its
     first 8 hex digits (ADR 0007).
-  - **PR 7:** `docs/eval-protocol`. Every brief item, plus pinned split, random-N
-    pool, N rounding, bootstrap settings, pilot fallthrough; devils-advocate first.
+  - **PR 7:** `docs/eval-protocol` (open). `docs/EVAL_PROTOCOL.md`; ADR 0008
+    keeps the 25/15 split and states the detectable effect (about 28 points at
+    80%); ADR 0009 re-runs the baseline with the arms, fixes what picks arm
+    content at the tag, and keys the agent's cache on the repetition; ADR 0010
+    closes the baseline-docs and owner-edits decisions. The tag moves after the
+    gold results, inside the trial.
   - **PRs 8–9:** `docs/data-study`. First commit: CI fails if `src/` references
     `eval/reference/`. Then measured file facts with their commands,
     `loader/sources.lock`, the dictionary in `eval/reference/` (brief: "Study the
     data dictionary", "Keep the dictionary out of the tool's reach"), months ADR.
   - **PR 10:** `feat/offline-sample`. Sampling by hashed dimension key, tests, ADR
     with the output hash.
-- **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
-  (arm membership unchanged, recommended) or absorb the flagged band;
-  (b) report delivered drafts per arm next to the headline (recommended);
-  (c) how the repo's going public at the `preregistered` tag is recorded for
-  later readers (ADR 0004); (d) whether the rank weight *w* is fixed at the
-  tag, since it picks the top-N columns (the rank step adds it to `docgap.toml`).
-  (e) baseline parity: the baseline runs in Phase 3, before later steps add
-  config and code, so its setup hash can't equal the Phase 6 arms' (brief line
-  171 vs 387). Re-run the baseline in the Phase 6 session (recommended) or
-  compare it on the agent's settings only.
-- **Next step:** PR 6 `feat/config` in review; then PR 7 `docs/eval-protocol`.
+- **Next step:** PR 7 `docs/eval-protocol` in review; then PRs 8–9
+  `docs/data-study`.

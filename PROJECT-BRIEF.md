@@ -16,7 +16,7 @@ Sep 25, 2026 · @Jessica
 
 - One command produces a ranked list and a pull request from query history.
 - The same inputs always produce the same ranking.
-- On questions the tool never saw, documenting docgap's top N columns improves agent accuracy more than documenting N random undocumented columns. "More" is defined before any run: the paired bootstrap interval over holdout questions for (top-N minus random-N) excludes zero.
+- On questions the tool never saw, documenting docgap's top N columns improves agent accuracy more than documenting N random undocumented columns. "More" is defined before any run: the paired bootstrap interval over holdout questions for (top-N minus random-N) lies above zero.
 - The result is reported whatever it turns out to be, including a null result.
 
 ## How it solves it
@@ -164,22 +164,24 @@ Fix the rules before touching data, so no later result can be accused of being t
 - [x] **Write the data contracts first.** Pydantic models in `src/docgap/models.py`: `ColumnRef`, `QueryRecord`, `ColumnUsage`, `Grade`, `Attribution`, `EvidencePacket`, `Draft`, `GateResult`, `RankedGap`, `RunManifest`. Each has one JSON Schema committed in `src/docgap/schemas/`, and a test fails when it drifts from the model. Parquet artifacts declare their dtypes from the same models when the first stage writes them. *Expect:* every later stage imports these types, so stage boundaries can't drift.
 - [x] **Create one config file.** `docgap.toml`, loaded by `src/docgap/config.py`: history window, role-to-actor mapping (agent/human), *k* = 11, band thresholds, model IDs and sampling settings per call site, the agent tool's timeout and row cap, and the split, random-arm and baseline-docs seeds. Every key sits in a section and has no default in code; each later step adds the keys it reads, in a section named for what reads them (ADR 0007). *Expect:* one hash per section goes into the run's setup; no magic numbers in code.
 - [x] **Start a decision log.** `docs/adr/`, one numbered record per choice, copied from `docs/adr/template.md`: status, context, options considered, the outcome and its consequences. A later record supersedes an earlier one; accepted records are never rewritten. The first records cover the Snowflake edition and trial timing, why sqlglot, why *k* = 11, repo visibility, and where guard hooks are registered; the months of data get theirs when "Study the data dictionary" settles them. *Expect:* reviewers see the reasoning, and later changes are explicit.
-- [ ] **Write the evaluation protocol.** `docs/EVAL_PROTOCOL.md` defines:
-  - **What "correct" means**: the result-set match rules.
-  - **Repetitions**: 3 per question.
-  - **The split**: 25 discovery / 15 holdout, by seed.
-  - **The comparison arms**, each run on all 40 questions with the same model, prompt and config:
+- [x] **Write the evaluation protocol.** `docs/EVAL_PROTOCOL.md` defines:
+  - **What "correct" means**: the result-set match rules, including gold results of at most 200 rows and 5 columns.
+  - **Repetitions**: 3 per question per arm. The repetition number is part of the agent's model-cache key, so each repetition is its own draw; the arm is not.
+  - **The split**: 25 discovery / 15 holdout, by hashing question IDs with the split seed (ADR 0008).
+  - **The comparison arms**, each run on all 40 questions under one setup hash, all in the Phase 6 session, the baseline included (ADR 0009):
     - **Baseline**: the locked 50% docs.
     - **Top-N**: baseline plus docgap's drafts for its top N columns.
-    - **Random-N**: baseline plus drafts, from the same drafter and gate, for N undocumented columns chosen by the random-arm seed.
+    - **Random-N**: baseline plus drafts, from the same drafter and gate, for N columns drawn by the random-arm seed from every column undocumented in the baseline.
     - **Ceiling** (optional): every mart column documented from the dictionary.
-  - **N**: fixed by a rule before the `preregistered` tag. Default: N = min(10, half the undocumented columns that the discovery gold SQL touches). A fixed N stops "top N" from quietly becoming "every column the questions touch".
+  - **N**: N = min(10, floor(U / 2)), where U is the number of undocumented columns the discovery gold SQL touches, computed before the `preregistered` tag. A fixed N stops "top N" from quietly becoming "every column the questions touch".
   - **Ranking inputs come from discovery questions only.** Usage counts only queries tagged with a discovery `qid`, and failure attribution runs only on discovery failures. A test fails if a holdout `qid` reaches any ranking input.
-  - **Drafts go into the arms unedited.** Ready and confirm-band drafts are used as-is and flagged items get none, so the experiment measures the tool rather than your edits. Owner review happens on the pull request and is reported as an edit rate. The drafter and gate prompt versions are fixed before blind labeling starts, so dictionary-graded labels can't tune the drafts that enter the arms; a later prompt change needs a decision record and new labels.
-  - **The headline**: holdout accuracy for top-N versus random-N, with a paired bootstrap interval over questions. It counts as an improvement only if the interval excludes zero. No p-values.
+  - **Drafts go into the arms unedited.** Ready and confirm-band drafts are used as-is and flagged items get none, so the experiment measures the tool rather than your edits. Owner review happens on the pull request and is reported as an edit rate. Delivered drafts per arm are reported next to the headline.
+  - **What picks the arms' content is fixed at the tag**, the rank weight *w* = 1 among it, as listed in `CLAUDE.md` → "After `preregistered`". The Phase 3 baseline shows holdout failures before the arms run, so nothing it shows can tune them (ADR 0009).
+  - **The headline**: holdout accuracy for top-N versus random-N, with a paired percentile bootstrap interval over questions (10,000 resamples drawn by hashing with seed 4). It counts as an improvement only if the interval lies above zero. No p-values. The protocol states what the design can detect: about a 28-point difference more than 80% of the time (ADR 0008).
   - **The agent model**: chosen by the pilot rule in Phase 3 and fixed at the tag, with the choice and the pilot numbers in its own decision record.
-  - **A kill criterion**: if the offline pilot (Phase 3) shows full docs beating no docs by less than 15 points for both candidate agent models, change the setup (harder questions, more coded columns) before tagging. If nothing fixes it, report that as the finding.
+  - **A kill criterion**: if neither candidate agent model is eligible in the offline pilot (Phase 3), meaning full-docs accuracy between 50% and 90% and full docs beating no docs by at least 15 points, change the setup (harder questions, more coded columns) before tagging. If nothing fixes it, report that as the finding.
   - **What gets reported regardless of outcome**, including when random-N matches top-N.
+  - **How the tag is witnessed**: the tag comes after the gold results are materialized, and a GitHub release on it is published when the repo goes public, before the baseline runs; its `published_at` is set by GitHub, not the committer.
 
   *Expect:* committed before any agent run.
 - [ ] **Study the data dictionary.** Download the Open DAMIR variable descriptor (XLS) and the monthly file list, and choose how many months to load. *Expect:* a decision entry with file names, sizes and SHA-256 checksums.
@@ -260,30 +262,30 @@ Create real agent traffic against the warehouse, grade it without a model, and f
 
 **Offline first.** The questions, grader, agent loop and pilot all run on DuckDB before the trial. Gold SQL is written in Snowflake SQL and transpiled to DuckDB with sqlglot, and the transpile is tested. In offline mode, the agent's `describe()` reads descriptions from the dbt manifest. On Snowflake, the phase is then the gold results, one baseline evening and the snapshot.
 
-- [ ] **Write 40 questions with gold SQL.** `eval/questions.yml` holds, per question: `id`, English text, `gold_sql`, `ordered` flag, category. Categories: optical, dental, pharmacy spend; by region, age bracket, provider type; month over month (only if the loaded data spans more than one care month). The columns each question needs are derived by running `resolve` on the gold SQL, not listed by hand. Budget 2–4 evenings: gold SQL over coded French columns is slow to get right. *Expect:* questions a business user would ask, answerable only from `MARTS`.
+- [ ] **Write 40 questions with gold SQL.** `eval/questions.yml` holds, per question: `id`, English text, `gold_sql`, `ordered` flag, category. Categories: optical, dental, pharmacy spend; by region, age bracket, provider type; month over month (only if the loaded data spans more than one care month). The columns each question needs are derived by running `resolve` on the gold SQL, not listed by hand. Each gold result is deterministic, with at most 200 rows and 5 columns, so the protocol's grader can match it. Budget 2–4 evenings: gold SQL over coded French columns is slow to get right. *Expect:* questions a business user would ask, answerable only from `MARTS`.
 - [ ] **Offline pilot: can docs move the number at all?** This is a go/no-go check, run before the trial with a few dollars of API spend.
   - Write 12 pilot questions, excluded from the 40.
   - Run the agent on them on DuckDB, 3 repetitions each, in four configurations: {Haiku 4.5, Opus 5.5} × {no column docs, every column documented}.
-  - **Choose the agent model:** the one with the largest gap between no docs and full docs, provided its full-docs accuracy falls between 50% and 90%. A frontier model can read coded columns from names and values, or recall the public dataset from training, which narrows the gap docgap is meant to close. Too weak a model fails for reasons docs can't fix, which adds noise. The pilot measures both effects instead of guessing.
+  - **Choose the agent model:** the one with the largest gap between no docs and full docs, provided its full-docs accuracy falls between 50% and 90% and the gap is at least 15 points; on an equal gap, Haiku 4.5. A frontier model can read coded columns from names and values, or recall the public dataset from training, which narrows the gap docgap is meant to close. Too weak a model fails for reasons docs can't fix, which adds noise. The pilot measures both effects instead of guessing.
   - Record the four accuracies and the choice in `docs/adr/`. The model not chosen is reported under limits, not run as a full arm.
   - Adjust difficulty only now.
 
   *Expect:* for the chosen model, accuracy with no docs far from 0% and 100%, and a gap to full docs large enough to pass the kill criterion in the protocol. If the gap is small for both models, the experiment can't show anything, and it's better to know before the trial starts.
-- [ ] **Fix N, split and tag the pre-registration.** Assign the 25 discovery / 15 holdout split by hashing question IDs with the config seed, and report how many columns the two sets share. Run `resolve` on the discovery gold SQL, count the undocumented columns it touches, and fix N by the protocol's rule. Commit questions, gold SQL, split, N, arms, protocol and the pilot's agent model as `[call_sites.agent]` in `docgap.toml`, then create the git tag `preregistered`. Make the repo public right after, before any baseline run: first run gitleaks over the full history and the private-terms guard over every commit message. *Expect:* anyone can verify nothing changed after the baseline.
 - [ ] **Materialize gold results.** Run each gold query once as `DOCGAP_AUDITOR` (tagged `gold:<qid>`, excluded from traffic) and store the results as Parquet with hashes. *Expect:* grading runs offline from then on.
+- [ ] **Fix N, split and tag the pre-registration.** Assign the 25 discovery / 15 holdout split by hashing question IDs with the config seed, and report how many columns the two sets share. Run `resolve` on the discovery gold SQL, count the undocumented columns it touches, and fix N by the protocol's rule. Once the gold results are materialized and every gold query meets the protocol's rules, commit questions, gold SQL, split, N, arms, protocol and the pilot's agent model as `[call_sites.agent]` in `docgap.toml`. Run gitleaks over the full history and the private-terms guard over every commit message, create the git tag `preregistered`, make the repo public, and publish a GitHub release on the tag with the tagged commit's SHA in its body, all before any baseline run. *Expect:* anyone can verify nothing changed after the baseline.
 - [ ] **Build the test agent.** A short tool-calling loop in `eval/agent/`:
   - `list_tables()` and `describe(table)` read `information_schema` names and comments
   - `run_sql(sql)` runs as `SVC_AGENT` with `query_tag = agent:<run_id>:<qid>:<rep>`, a 60 s statement timeout and a 200-row cap
   - at most 8 tool calls, then a structured final answer `{final_sql}`
 
-  The model chosen by the pilot, pinned by ID, default sampling for both candidates (no `temperature`), versioned system prompt. Same sampling keeps the pilot comparison fair, and it's what gives the 3 repetitions meaning: at temperature 0 they would mostly repeat each other. *Expect:* each transcript saved as JSON (tool calls, SQL, truncated results).
+  The model chosen by the pilot, pinned by ID, default sampling for both candidates (no `temperature`), versioned system prompt. Same sampling keeps the pilot comparison fair, and it's what gives the 3 repetitions meaning: at temperature 0 they would mostly repeat each other. For the same reason, the agent's cache key holds the repetition number, and not the arm. The harness runs `final_sql` once with the agent's query tag, fetching at most 201 rows. An API error left after the retry policy, or an unavailable warehouse, is not cached: the run repeats, and after 3 attempts it fails with `error`, counted per arm in the run manifest. *Expect:* each transcript saved as JSON (tool calls, SQL, truncated results).
 - [ ] **Write the deterministic grader.** `grade.py` executes nothing: it compares the agent's final result to the gold result.
-  - Numbers are cast to Decimal and rounded to 2 places; strings are trimmed.
+  - Numbers are cast to Decimal (floats through `repr`) and rounded half-even to 2 places; strings are trimmed.
   - Columns are matched to gold by the best permutation (at most 5 columns).
   - Rows compare as multisets unless `ordered`.
 
   Output: pass/fail plus a reason code (`error`, `timeout`, `shape_mismatch`, `row_count_mismatch`, `value_mismatch`). *Expect:* unit tests cover every rule and reason code.
-- [ ] **Run the baseline.** 40 questions × 3 repetitions = 120 runs. Report accuracy for discovery and holdout separately, with per-question pass rates. *Expect:* `runs/baseline/grades.parquet` and a summary in the run report.
+- [ ] **Run the baseline.** 40 questions × 3 repetitions = 120 runs, only after the tag's GitHub release exists. Report accuracy for discovery and holdout separately, with per-question pass rates. Its discovery traffic is what the ranking reads; the arms are compared with a baseline re-run in the Phase 6 session, under their setup. *Expect:* `grades.parquet` under the baseline's run ID, and a summary in the run report.
 - [ ] **Snapshot query history.** Wait at least 45 minutes (the `QUERY_HISTORY` latency), then export the run window filtered by role and tag. Keep the `qid` from each query tag so ranking can use discovery queries only. Redact (Phase 4 code) and save as `fixtures/query_snapshot_baseline.parquet` with its hash.
 
   If `ACCESS_HISTORY` is used as a cross-check, wait at least 3 hours: that's its latency. Compare on successful queries only, since `ACCESS_HISTORY` excludes failed ones.
@@ -307,7 +309,7 @@ The part a data team would actually adopt: from query history and a dbt manifest
 \text{score}_c = \ln(1 + u_c) \times (1 + w \cdot r_c)
 ```
 
-Here *u* = executions, *r* = attributed failure rate (0 until Phase 5), and *w* comes from config, in a `[rank]` section this step adds. The log dampens one heavy query from dominating. Sort by score descending, then by column FQN, so ties never reorder. *Expect:* `ranked_gaps.parquet` + a Markdown table.
+Here *u* = executions, *r* = attributed failure rate (0 until Phase 5), and *w* = 1, set by the protocol, comes from config, in a `[rank]` section this step adds. The log dampens one heavy query from dominating. Sort by score descending, then by column FQN, so ties never reorder. *Expect:* `ranked_gaps.parquet` + a Markdown table.
 
 - [ ] **Golden-file tests.** Fixture in → exact expected outputs checked into `tests/golden/`. *Expect:* any behaviour change shows as a diff in review.
 - [ ] **Property tests for determinism.** Shuffling input rows, or running twice, must give identical output hashes (hypothesis). *Expect:* order-dependence bugs caught before they reach a ranking.
@@ -329,7 +331,7 @@ Add exactly two typed judgments and one drafter, all behind `llm/`, all replayab
   - cache key = SHA-256 of canonical JSON `{model, prompt_version, state, questions}`, stored under `fixtures/llm_cache/`
   - `--offline` makes a cache miss an error, so CI can never call a model
   - a per-run spend budget, from a section this step adds to `docgap.toml`
-  - a call that fails (timeout, refusal, malformed answer) is cached with its `FailureReason`, so an offline replay reproduces the failure instead of treating it as a miss. Decide here whether a live run retries a cached failure after its call site's timeout was raised, since the key doesn't hold the timeout (ADR 0007)
+  - a call that fails (timeout, refusal, malformed answer) is cached with its `FailureReason`, so an offline replay reproduces the failure instead of treating it as a miss. The test agent's infrastructure failures are the exception: the protocol repeats those runs instead. Decide here whether a live run retries a cached failure after its call site's timeout was raised, since the key doesn't hold the timeout (ADR 0007)
 
   *Expect:* a second run makes zero model calls and returns identical outputs.
 - [ ] **Handle the timeout gap.** The adapter's providers don't expose a configurable timeout yet. They build the Anthropic client with the SDK's default 10-minute timeout, so a hung call is bounded, just far too loosely. Pin your fork's commit or add a thin provider subclass with a tight per-call limit, set per call site in `docgap.toml`, and document it accurately in the README's "Known gap" section with a link to your open issue. On timeout, the item goes to the human band. *Expect:* a test with a never-replying fake server: the run completes, the item is flagged, and the manifest counts one timeout. This is the first local fake server, so the same PR first tests that a Unix socket and a marker-opted localhost server still work under pytest's `--disable-socket`.
@@ -346,7 +348,7 @@ r_c = \frac{\sum_f P_f(\text{cause} = \text{meaning}) \cdot P_f(\text{column} = 
 - [ ] **Evidence packets for the top-N and random-N columns.** Compiled lineage SQL from the manifest, the column's upstream expression via sqlglot lineage, and the frozen profile from Phase 3: null rate, distinct count, min/max for numbers clipped to the *k*-th smallest and largest value, and top values carried by at least *k* = 11 fact rows. `restricted` columns get no values at all. The stage checks that each profile's `k` equals the configured *k*, since the contract can only check values against the profile's own `k`. *Expect:* packets stored and hashed; the governance rule is unit-tested.
 - [ ] **Drafter.** Anthropic API, Opus 5.5 pinned by ID (as are both judgments), default sampling, cached. Structured output `{description (≤ 200 chars), unknowns[]}`. The prompt forbids claims the evidence doesn't support and asks for unknowns instead. *Expect:* short, cautious drafts that name what they couldn't infer.
 - [ ] **Draft gate (Noul).** State = evidence packet + draft. One Noul: *the description is fully supported by the evidence and makes no unsupported claim*. Bands from config: ≥ 0.8 → ready, 0.5–0.8 → owner must confirm, < 0.5 or timeout → no draft, flagged. A draft the drafter failed to write is flagged without a gate call. *Expect:* each gap carries a band and the probability behind it.
-- [ ] **Blind labels for calibration.** Before looking at gate scores, label each draft against the official dictionary as correct, partial or wrong, and commit `eval/draft_labels.yml` with the drafter and gate prompt versions it graded. Those prompts don't change after labeling starts. Then report accuracy per band. The labels score correctness against the dictionary, while the gate scores support by the evidence, so the table checks whether the bands are useful, not whether the gate does its stated job. *Expect:* an honest table. With about 20–30 drafts it's evidence, not calibration, and the README says so. If the scores cluster and the per-band accuracy isn't monotone, fall back to two bands ("ready" and "owner confirms") and log the decision.
+- [ ] **Blind labels for calibration.** Before looking at gate scores, label each draft against the official dictionary as correct, partial or wrong, and commit `eval/draft_labels.yml` with the drafter and gate prompt versions it graded. Those prompts were fixed at the `preregistered` tag. Then report accuracy per band. The labels score correctness against the dictionary, while the gate scores support by the evidence, so the table checks whether the bands are useful, not whether the gate does its stated job. *Expect:* an honest table. With about 20–30 drafts it's evidence, not calibration, and the README says so. If the scores cluster and the per-band accuracy isn't monotone, fall back to two bands by merging "ready" and "owner confirms", which leaves the arms' contents unchanged, and log the decision.
 
 **Typed questions (sketch, verified against typesafe-sdk 0.7.1):**
 
@@ -381,16 +383,17 @@ Turn the ranking into a reviewed change, then measure each arm with the exact sa
 - [ ] **`patch`: minimal YAML edits.** ruamel.yaml writes each approved or confirm-band draft into the right `schema.yml` under its column, preserving order and comments. Flagged items get no text. Provenance (run ID, band, probability, evidence hash) goes in the pull-request body, not the YAML, so the docs stay clean. *Expect:* a diff that touches only description lines.
 - [ ] **Open the pull request with `gh`.** Branch `docgap/<run_id>`. The body holds the ranked table, both coverage numbers (now and projected), each item's band, a checkbox per column for the reviewer, and the run-manifest hash. *Expect:* the screenshot for the README.
 - [ ] **Review as the column owner.** Accept, edit or reject each draft, and record the decisions in `eval/review_decisions.yml`. Edits are kept as edits, never overwritten. *Expect:* merged docs you'd defend, and an edit rate for the report; the decisions add to the gate's label set.
-- [ ] **Build each arm from its own branch.** `arm/top-n` and `arm/random-n` each hold the baseline YAML plus that arm's unedited drafts, and `arm/ceiling` is optional. For each arm in a fixed, recorded order:
+- [ ] **Build each arm from its own branch.** The baseline arm runs from the baseline YAML, `arm/top-n` and `arm/random-n` each hold the baseline YAML plus that arm's unedited drafts, and `arm/ceiling` is optional. For each arm, in the order baseline, random-N, top-N, ceiling:
   1. Run `dbt build`.
   2. Re-run the Phase 2 check as `SVC_AGENT`, confirming `information_schema` comments equal that arm's YAML.
   3. Run the agent: same 40 questions, 3 repetitions, same setup hash (model IDs, prompt versions, sampling, config sections, environment), checked by comparing manifests. The agent's run ID carries the arm name, so each arm's query tags stay distinct.
 
-  Run all arms in the same session so nothing else drifts between them. That's 240–360 runs on an XS warehouse, about one evening. *Expect:* `runs/<arm>/grades.parquet` per arm, and the change reached the agent through the same path real docs would.
-- [ ] **Compare honestly.** Holdout accuracy for top-N versus random-N is the headline, with the pre-registered paired bootstrap interval over questions. Report alongside it:
-  - baseline and ceiling, on both splits
-  - a per-question flips table (fail → pass, pass → fail) per arm
-  - the column overlap between discovery and holdout
+  Run all arms in the same session so nothing else drifts between them. That's 360–480 runs on an XS warehouse, one to two evenings; where the baseline replays the Phase 3 run from the model cache, it costs warehouse time only. *Expect:* `grades.parquet` under each arm's run ID, and the change reached the agent through the same path real docs would.
+- [ ] **Compare honestly.** Holdout accuracy for top-N versus random-N is the headline, with the pre-registered paired bootstrap interval over questions. The protocol's bootstrap values go into `docgap.toml` here, as `[seeds] bootstrap = 4` and `[compare] resamples = 10000`, with their `config.py` fields and tests. Report alongside it:
+  - baseline and ceiling, on both splits, and the Phase 3 baseline next to the session's
+  - delivered drafts per band and per arm
+  - a per-question flips table (fail → pass, pass → fail) per arm, against the session's baseline
+  - the column overlap between discovery and holdout, and between top-N and random-N
 
   *Expect:* a result you report whatever its size and sign, as the protocol promised.
 - [ ] **Re-run docgap on the new snapshot** (optional, second on the cut list). A fresh history snapshot after the top-N run. *Expect:* usage-weighted coverage before → after, and the next ranked list, showing the tool is a loop, not a one-off.
@@ -424,7 +427,7 @@ The repo is read, not run, so the README must deliver the result in 30 seconds a
 
 - [ ] **Above the fold.** In this order:
   - one-line pitch
-  - the generated results block: holdout accuracy for baseline, random-N, top-N (and ceiling), the top-N minus random-N interval, usage-weighted coverage before → after, and columns documented
+  - the generated results block: holdout accuracy for the Phase 6 session's baseline, random-N, top-N (and ceiling), the top-N minus random-N interval, usage-weighted coverage before → after, and columns documented
   - the pull-request screenshot
   - a three-command offline quickstart (`uv sync`, `docgap analyze --offline`, `docgap report`)
 
@@ -434,7 +437,8 @@ The repo is read, not run, so the README must deliver the result in 30 seconds a
 - [ ] **Design choices, briefly.** Read-only by construction, redaction before storage, aggregate-only evidence, pre-registration, generated numbers, the typed judgments and bands (the questions use the typesafe-sdk types, so moving from the adapter to the hosted client changes only client setup). *Expect:* one line each, linked to its record in `docs/adr/`.
 - [ ] **Known gap and limits, stated plainly.**
   - the adapter timeout: no configurable per-call limit, only the SDK's 10-minute default (fork pin, open issue link)
-  - small n, and holdout is only 15 questions
+  - small n: holdout is only 15 questions, so a top-N versus random-N difference under about 20 points is more likely missed than detected, and one of about 28 points is detected more than 80% of the time
+  - one random draw for random-N; the interval doesn't cover how another draw would have done
   - the query traffic is the evaluation's own agent traffic, not organic usage, and there is no human traffic unless it was generated (see open decisions)
   - the judgment "probabilities" are written by the model, not log-probabilities, so the bands are ordinal
   - open anonymized data, so sensitivity tags demonstrate a mechanism
@@ -460,7 +464,7 @@ About 30–44 evenings of 2–3 hours, 36 likely. The range includes time for th
 | | **Go/no-go: pilot passes the kill criterion → sign up for the trial** | | |
 | 6 | 1 · Terraform foundations and bootstrap | Yes | 2–3 |
 | 7 | 2 · Load one month, `dbt build`, `persist_docs` check | Yes | 2–3 |
-| 8 | 3 · Gold results, baseline, snapshot, profiles | Yes | 2 |
+| 8 | 3 · Gold results, `preregistered` tag, baseline, snapshot, profiles | Yes | 2 |
 | 9 | 5 · Run judgments on the frozen snapshot | No (inside trial window) | 1 |
 | 10 | 6 · Pull request, arm builds and re-runs | Yes | 3–4 |
 | 11 | 7 · Orchestration and CI (live run if time remains) | Partly | 2–4 |
@@ -488,7 +492,7 @@ About 12–16 evenings fall inside the trial. At 4 evenings a week, that's rough
 | Open DAMIR months are large (about 37M rows, 1 GB gzipped each) | Slow loads, credit burn | One month; XS warehouses; resource monitor at 90%; a full evening budgeted for the first load |
 | Download links carry a session token | The lock file rots; an HTML page fails the checksum | Lock name, size and SHA-256; resolve the token at download; reject non-gzip responses |
 | Source grain has no natural key | Tests fail | Aggregate by all dimensions in staging; surrogate key tested (no duplicates seen in a 2M-row sample) |
-| Small n | Noisy result | 3 repetitions, holdout headline, paired bootstrap interval, flips table |
+| Small n | Noisy result; a real difference under about 20 points is more likely missed than detected | Detectable effect stated in the protocol before any run (ADR 0008); 3 repetitions, holdout headline, paired bootstrap interval, flips table |
 | sqlglot misses some queries | Usage undercounted | Parse and resolve rates in every report; `ACCESS_HISTORY` cross-check on successful queries |
 | Model-written probabilities cluster | Bands don't separate drafts; *r* collapses to "columns in failed queries" | Treat as ordinal; confusion-pair cross-check; blind labels and per-band accuracy; fall back to two bands |
 | Model knows Open DAMIR from training | Drafts right for the wrong reason | Gate scores support by evidence; stated in limits |
@@ -498,12 +502,10 @@ About 12–16 evenings fall inside the trial. At 4 evenings a week, that's rough
 ### Open decisions
 
 - [ ] **Months of Open DAMIR to load:** 1 (about 37M rows; safer) or 3 (about 110M rows; richer month-over-month questions). First check whether one monthly file already spans several care months; if it does, 1 is enough.
-- [ ] **Baseline docs rule:** seeded random 50% (neutral, and the default) or "what a busy team documents first" (more realistic, but easier to call rigged).
 - [ ] **Agent model:** Haiku 4.5 or Opus 5.5, settled by the Phase 3 pilot rule before the `preregistered` tag. The drafter, attribution and gate use Opus 5.5. Every call site runs at default sampling; config records the model ID, the settings actually sent, and a per-run budget.
 
-  Rough cost for about 500 agent runs of up to 8 tool calls (pilot, baseline and arms), before prompt caching: on the order of $150 on Opus 5.5 and $40 on Haiku 4.5. The drafter and judgments add a few dollars. Either fits; the calendar is the constraint, not money.
+  Rough cost for about 620–740 agent runs of up to 8 tool calls (pilot, the Phase 3 baseline, and the Phase 6 arms with their baseline), before prompt caching and the Phase 6 baseline's cache replays: on the order of $200 on Opus 5.5 and $55 on Haiku 4.5. The drafter and judgments add a few dollars. Either fits; the calendar is the constraint, not money.
 - [ ] **Where "people" traffic comes from:** generate it (a `HUMAN_ANALYST` role and service user running templated or Metabase queries) or state that the demo traffic is agent-only. Decide before Phase 1, because the first option adds a role and a user in Terraform.
-- [ ] **Owner edits in the experiment:** the default is unedited drafts in every arm, with the edit rate reported separately. The alternative, reviewed drafts in the top-N arm, measures the tool plus you, and random-N would need the same review.
 - [ ] **Evenings per week during the trial:** 4 or more keeps a buffer; at 3, the cut list is active from the start.
 
 ### Sources
