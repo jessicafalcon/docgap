@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "Clause": {
+      "description": "Where a column appears in a query. `OTHER` keeps a rare clause counted.",
+      "enum": [
+        "select",
+        "where",
+        "join",
+        "group_by",
+        "having",
+        "order_by",
+        "other"
+      ],
+      "title": "Clause",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One column a query touches, as `resolve` qualified it against the dbt manifest.",
+  "properties": {
+    "clause": {
+      "$ref": "#/$defs/Clause"
+    },
+    "fqn": {
+      "pattern": "^[A-Z_][A-Z0-9_$]*(\\.[A-Z_][A-Z0-9_$]*){3}$",
+      "title": "Fqn",
+      "type": "string"
+    },
+    "managed": {
+      "title": "Managed",
+      "type": "boolean"
+    },
+    "query_id": {
+      "minLength": 1,
+      "title": "Query Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "query_id",
+    "fqn",
+    "clause",
+    "managed"
+  ],
+  "title": "ColumnRef",
+  "type": "object"
+}

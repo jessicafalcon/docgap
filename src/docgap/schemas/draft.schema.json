@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "FailureReason": {
+      "description": "Why a model call produced no answer; the item goes to the human band.",
+      "enum": [
+        "timeout",
+        "malformed_answer",
+        "budget_exhausted"
+      ],
+      "title": "FailureReason",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The drafter's description for one column, or why there is none.",
+  "properties": {
+    "description": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Description"
+    },
+    "evidence_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Evidence Sha256",
+      "type": "string"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FailureReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fqn": {
+      "pattern": "^[A-Z_][A-Z0-9_$]*(\\.[A-Z_][A-Z0-9_$]*){3}$",
+      "title": "Fqn",
+      "type": "string"
+    },
+    "unknowns": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Unknowns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "fqn",
+    "evidence_sha256",
+    "description",
+    "unknowns",
+    "failure"
+  ],
+  "title": "Draft",
+  "type": "object"
+}

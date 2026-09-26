@@ -1,0 +1,41 @@
+{
+  "additionalProperties": false,
+  "description": "One row of `ranked_gaps.parquet`: an undocumented column and its score.",
+  "properties": {
+    "executions": {
+      "minimum": 0,
+      "title": "Executions",
+      "type": "integer"
+    },
+    "failure_rate": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Failure Rate",
+      "type": "number"
+    },
+    "fqn": {
+      "pattern": "^[A-Z_][A-Z0-9_$]*(\\.[A-Z_][A-Z0-9_$]*){3}$",
+      "title": "Fqn",
+      "type": "string"
+    },
+    "rank": {
+      "exclusiveMinimum": 0,
+      "title": "Rank",
+      "type": "integer"
+    },
+    "score": {
+      "minimum": 0,
+      "title": "Score",
+      "type": "number"
+    }
+  },
+  "required": [
+    "rank",
+    "fqn",
+    "score",
+    "executions",
+    "failure_rate"
+  ],
+  "title": "RankedGap",
+  "type": "object"
+}

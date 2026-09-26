@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "Band": {
+      "description": "What the draft gate decided: use as is, owner confirms, or no draft.",
+      "enum": [
+        "ready",
+        "confirm",
+        "flagged"
+      ],
+      "title": "Band",
+      "type": "string"
+    },
+    "FailureReason": {
+      "description": "Why a model call produced no answer; the item goes to the human band.",
+      "enum": [
+        "timeout",
+        "malformed_answer",
+        "budget_exhausted"
+      ],
+      "title": "FailureReason",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The draft gate's support probability for one draft, and the band it sets.",
+  "properties": {
+    "band": {
+      "$ref": "#/$defs/Band"
+    },
+    "draft_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Draft Sha256",
+      "type": "string"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FailureReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fqn": {
+      "pattern": "^[A-Z_][A-Z0-9_$]*(\\.[A-Z_][A-Z0-9_$]*){3}$",
+      "title": "Fqn",
+      "type": "string"
+    },
+    "p_supported": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "P Supported"
+    }
+  },
+  "required": [
+    "fqn",
+    "draft_sha256",
+    "p_supported",
+    "band",
+    "failure"
+  ],
+  "title": "GateResult",
+  "type": "object"
+}

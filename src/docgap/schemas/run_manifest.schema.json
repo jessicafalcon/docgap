@@ -1,0 +1,350 @@
+{
+  "$defs": {
+    "CallSite": {
+      "additionalProperties": false,
+      "description": "One model call site: the pinned model, the prompt, and the sampling settings sent.",
+      "properties": {
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Prompt Sha256",
+          "type": "string"
+        },
+        "prompt_version": {
+          "minLength": 1,
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "sampling": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "title": "Sampling",
+          "type": "object"
+        }
+      },
+      "required": [
+        "model",
+        "prompt_version",
+        "prompt_sha256",
+        "sampling"
+      ],
+      "title": "CallSite",
+      "type": "object"
+    },
+    "Environment": {
+      "additionalProperties": false,
+      "description": "What ran: the interpreter, the runtime dependency set and docgap's own files.",
+      "properties": {
+        "code_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Code Sha256",
+          "type": "string"
+        },
+        "packages": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9._-]*==\\S+$",
+            "type": "string"
+          },
+          "title": "Packages",
+          "type": "array"
+        },
+        "python": {
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Python",
+          "type": "string"
+        }
+      },
+      "required": [
+        "python",
+        "packages",
+        "code_sha256"
+      ],
+      "title": "Environment",
+      "type": "object"
+    },
+    "GateCheck": {
+      "additionalProperties": false,
+      "description": "A data-quality gate: the observed value, the threshold from config, the verdict.",
+      "properties": {
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "number"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "threshold",
+        "passed"
+      ],
+      "title": "GateCheck",
+      "type": "object"
+    },
+    "RunCanonical": {
+      "additionalProperties": false,
+      "description": "The part of the manifest that equal inputs must reproduce byte for byte.\n\nConfig is hashed per section. The git SHA is operational: the arms run from\nbranches that differ only in dbt YAML, and a docs-only commit changes the SHA\nwithout changing any output. `environment.code_sha256` pins the code instead.",
+      "properties": {
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "call_sites": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "$ref": "#/$defs/CallSite"
+            }
+          },
+          "title": "Call Sites",
+          "type": "object"
+        },
+        "config": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "title": "Config",
+          "type": "object"
+        },
+        "environment": {
+          "$ref": "#/$defs/Environment"
+        },
+        "schema_version": {
+          "const": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "stages": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "$ref": "#/$defs/StageRecord"
+            }
+          },
+          "title": "Stages",
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "as_of",
+        "config",
+        "environment",
+        "call_sites",
+        "stages"
+      ],
+      "title": "RunCanonical",
+      "type": "object"
+    },
+    "RunOperational": {
+      "additionalProperties": false,
+      "description": "The part that may differ between two runs of the same inputs.",
+      "properties": {
+        "cache_hits": {
+          "minimum": 0,
+          "title": "Cache Hits",
+          "type": "integer"
+        },
+        "cache_misses": {
+          "minimum": 0,
+          "title": "Cache Misses",
+          "type": "integer"
+        },
+        "git_sha": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{40}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Git Sha"
+        },
+        "model_calls": {
+          "minimum": 0,
+          "title": "Model Calls",
+          "type": "integer"
+        },
+        "run_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "spend_usd": {
+          "minimum": 0,
+          "title": "Spend Usd",
+          "type": "number"
+        },
+        "stages": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "$ref": "#/$defs/StageRun"
+            }
+          },
+          "title": "Stages",
+          "type": "object"
+        }
+      },
+      "required": [
+        "run_id",
+        "git_sha",
+        "stages",
+        "cache_hits",
+        "cache_misses",
+        "model_calls",
+        "spend_usd"
+      ],
+      "title": "RunOperational",
+      "type": "object"
+    },
+    "StageRecord": {
+      "additionalProperties": false,
+      "description": "What one stage read and wrote, by canonical content hash, and what it counted.",
+      "properties": {
+        "counts": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "title": "Counts",
+          "type": "object"
+        },
+        "gates": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "$ref": "#/$defs/GateCheck"
+            }
+          },
+          "title": "Gates",
+          "type": "object"
+        },
+        "inputs": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "outputs": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "title": "Outputs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "inputs",
+        "outputs",
+        "counts",
+        "gates"
+      ],
+      "title": "StageRecord",
+      "type": "object"
+    },
+    "StageRun": {
+      "additionalProperties": false,
+      "description": "How one stage ran this time: status, timing, retries.",
+      "properties": {
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Finished At"
+        },
+        "retries": {
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/StageStatus"
+        }
+      },
+      "required": [
+        "status",
+        "started_at",
+        "finished_at",
+        "retries"
+      ],
+      "title": "StageRun",
+      "type": "object"
+    },
+    "StageStatus": {
+      "description": "A stage's state in the run manifest. `RUNNING` after a crash marks garbage.",
+      "enum": [
+        "running",
+        "succeeded",
+        "failed",
+        "skipped"
+      ],
+      "title": "StageStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`run_manifest.json`: the audit record of one run.",
+  "properties": {
+    "canonical": {
+      "$ref": "#/$defs/RunCanonical"
+    },
+    "operational": {
+      "$ref": "#/$defs/RunOperational"
+    }
+  },
+  "required": [
+    "canonical",
+    "operational"
+  ],
+  "title": "RunManifest",
+  "type": "object"
+}

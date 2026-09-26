@@ -1,0 +1,154 @@
+{
+  "$defs": {
+    "Profile": {
+      "additionalProperties": false,
+      "description": "Aggregate statistics for one column; no row-level data.\n\nTop values are carried by at least `k` fact rows and ordered by row count, then\nvalue. Numeric min and max are already clipped to the `k`-th value.",
+      "properties": {
+        "distinct_count": {
+          "minimum": 0,
+          "title": "Distinct Count",
+          "type": "integer"
+        },
+        "k": {
+          "exclusiveMinimum": 0,
+          "title": "K",
+          "type": "integer"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Max"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Min"
+        },
+        "null_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Null Rate",
+          "type": "number"
+        },
+        "top_values": {
+          "items": {
+            "$ref": "#/$defs/TopValue"
+          },
+          "title": "Top Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "k",
+        "null_rate",
+        "distinct_count",
+        "min",
+        "max",
+        "top_values"
+      ],
+      "title": "Profile",
+      "type": "object"
+    },
+    "Sensitivity": {
+      "description": "A mart column's `meta.sensitivity`. A missing tag is read as `RESTRICTED`.",
+      "enum": [
+        "public",
+        "internal",
+        "restricted"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "TopValue": {
+      "additionalProperties": false,
+      "description": "A value shown to the drafter and the number of fact rows carrying it.",
+      "properties": {
+        "rows": {
+          "exclusiveMinimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "rows"
+      ],
+      "title": "TopValue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Everything the drafter and the gate may see about one column.",
+  "properties": {
+    "data_type": {
+      "minLength": 1,
+      "title": "Data Type",
+      "type": "string"
+    },
+    "fqn": {
+      "pattern": "^[A-Z_][A-Z0-9_$]*(\\.[A-Z_][A-Z0-9_$]*){3}$",
+      "title": "Fqn",
+      "type": "string"
+    },
+    "lineage_sql": {
+      "minLength": 1,
+      "title": "Lineage Sql",
+      "type": "string"
+    },
+    "profile": {
+      "$ref": "#/$defs/Profile"
+    },
+    "sensitivity": {
+      "$ref": "#/$defs/Sensitivity"
+    },
+    "table_description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Table Description"
+    },
+    "upstream_expression": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Upstream Expression"
+    }
+  },
+  "required": [
+    "fqn",
+    "data_type",
+    "sensitivity",
+    "table_description",
+    "lineage_sql",
+    "upstream_expression",
+    "profile"
+  ],
+  "title": "EvidencePacket",
+  "type": "object"
+}
