@@ -208,8 +208,10 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `RunManifest` splits a canonical part from an operational part; the run's
     setup (environment, config sections, call sites) has its own hash, used for
     arm parity and resume (ADR 0006).
-  - **PR 6:** `feat/config`. `docgap.toml`, no defaults in code, canonical hash
-    per section.
+  - **PR 6:** `feat/config`. `docgap.toml` loaded by `config.py`: no defaults,
+    no key outside a section, one hash per section into `RunSetup.config`. Runs
+    compare by the setup hash, and the run ID is the as-of date plus its first 8
+    hex digits (ADR 0007).
   - **PR 7:** `docs/eval-protocol`. Every brief item, plus pinned split, random-N
     pool, N rounding, bootstrap settings, pilot fallthrough; devils-advocate first.
   - **PRs 8–9:** `docs/data-study`. First commit: CI fails if `src/` references
@@ -222,8 +224,6 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (arm membership unchanged, recommended) or absorb the flagged band;
   (b) report delivered drafts per arm next to the headline (recommended);
   (c) how the repo's going public at the `preregistered` tag is recorded for
-  later readers (ADR 0004).
-- **Open for PR 6:** `RunSetup.config` hashes config per section, but the
-  brief (lines 165, 314, 385) and the resilience `run_id` rule say "config
-  hash". Either add a whole-config hash or restate those lines per section.
-- **Next step:** PR 6 `feat/config`, in progress.
+  later readers (ADR 0004); (d) whether the rank weight *w* is fixed at the
+  tag, since it picks the top-N columns (the rank step adds it to `docgap.toml`).
+- **Next step:** PR 6 `feat/config` in review; then PR 7 `docs/eval-protocol`.

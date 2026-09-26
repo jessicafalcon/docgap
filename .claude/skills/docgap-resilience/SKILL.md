@@ -30,8 +30,9 @@ per-item isolation boundary, and it must record the item and the exception type.
 
 ## Idempotent and resumable by construction
 
-- **Deterministic run IDs** from inputs (`run_id = f"{interval_end:%Y%m%d}-{config_hash[:8]}"`),
-  never random.
+- **Deterministic run IDs** from inputs (`run_id = f"{interval_end:%Y%m%d}-{setup_sha256[:8]}"`,
+  ADR 0007), never random. Only `cli.py` can compute one, since the setup holds
+  the environment.
 - **Skip when done:** a stage whose output exists with the expected input hashes
   and the current setup hash in its manifest entry returns immediately. Re-running
   a finished DAG changes nothing; a changed environment, config or call site
