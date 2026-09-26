@@ -26,21 +26,27 @@ For the baseline:
 
 For what can still move after the holdout results are visible:
 
-3. **Fix *w*, the bands, *k* and the judgment call sites at the tag.**
+3. **Fix *w*, the bands, *k*, the agent and the judgment call sites at the tag.**
 4. **Seal the Phase 3 holdout grades** until the arms are graded.
+
+For the agent's cache key:
+
+5. **Add the repetition number, not the arm.**
+6. **Add both.** Every arm and repetition is a fresh draw.
 
 ## Decision Outcome
 
-Chosen options: **1 and 3**, because both keep one rule for every comparison
+Chosen options: **1, 3 and 5**. Options 1 and 3 keep one rule for every comparison
 (the setup hash) and one moment for every fixed value (the tag). A second,
 narrower parity check would be a second rule to keep in sync with the first,
 and sealing grades on the author's own machine can't be checked by anyone
 else, while values committed at a public tag can.
 
-The agent's cache key holds the repetition number and not the arm. Repetitions
-are then independent draws. Arms share a cached response only while their
-transcripts are identical, which a valid draw allows, and the Phase 6 baseline
-replays the Phase 3 one wherever the warehouse returns the same results.
+Without the repetition number, repetitions 2 and 3 replay repetition 1. Adding
+the arm too would buy nothing: arms share a cached response only while their
+transcripts are identical, where a fresh draw comes from the same distribution,
+and without the arm the Phase 6 baseline replays the Phase 3 one wherever the
+warehouse returns the same results.
 
 ### Consequences
 

@@ -7,7 +7,7 @@
 ## Context and Problem Statement
 
 The headline is the paired bootstrap interval over the 15 holdout questions for
-top-N minus random-N accuracy, and the claim holds only if it excludes zero. A
+top-N minus random-N accuracy, and the claim holds only if it lies above zero. A
 simulation of that design shows how often it would: a true difference of about
 19 points is detected about half the time, one of about 28 points more than 80%
 of the time. A null is a likely outcome even if the ranking works. Should the
@@ -40,7 +40,10 @@ difference of that size", not as "the ranking doesn't matter".
 - Bad, because a real difference of 10–20 points is more likely missed than
   detected. The README's limits say so.
 - Bad, because the simulation's numbers rest on its assumptions, below. The
-  real questions may be more or less deterministic than modeled.
+  real questions may be more or less deterministic than modeled. It samples the
+  arms independently, while arms share cached responses until their transcripts
+  diverge (ADR 0009), which can only remove noise, so the figures are
+  conservative on that count.
 
 ### The simulation
 
@@ -50,12 +53,12 @@ probability from Beta(0.3, 0.3), mostly near 0 or 1, and each arm samples it
 independently. A question that only top-N's docs fix passes with probability
 0.85 in top-N and 0.15 in random-N.
 
-The table is `power(15, k)` for k = 2 to 7, called in that order after
+The table is `power(15, m)` for m = 2 to 7, called in that order after
 `default_rng(0)`. The option figures come from `power(20, 4)` then
 `power(20, 6)`, and from `power(30, 6)` then `power(30, 8)`, each pair after a
 fresh `default_rng(0)`; the second call of each pair is the one quoted.
 
-| Holdout questions only top-N fixes (of 15) | True difference | Interval excludes zero |
+| Holdout questions only top-N fixes (of 15) | True difference | Interval lies above zero |
 | --- | --- | --- |
 | 2 | +9 points | 16% |
 | 3 | +14 points | 29% |
@@ -67,11 +70,11 @@ fresh `default_rng(0)`; the second call of each pair is the one quoted.
 ```python
 import numpy as np
 rng = np.random.default_rng(0)
-def power(n_q, k, sims=1500, B=4000, reps=3):
+def power(n_q, m, sims=1500, B=4000, reps=3):
     hits = 0
     for _ in range(sims):
         pt = rng.beta(0.3, 0.3, n_q); pr = pt.copy()
-        pt[:k], pr[:k] = 0.85, 0.15
+        pt[:m], pr[:m] = 0.85, 0.15
         d = rng.binomial(reps, pt) / reps - rng.binomial(reps, pr) / reps
         boot = d[rng.integers(0, n_q, (B, n_q))].mean(1)
         hits += np.percentile(boot, 2.5) > 0

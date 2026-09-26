@@ -11,7 +11,7 @@ What may change after the tag, and how, is set in `CLAUDE.md` → "After
 On questions docgap never saw, documenting docgap's top N undocumented columns
 improves the test agent's accuracy more than documenting N random undocumented
 columns. The claim holds only if the paired bootstrap interval for holdout
-accuracy, top-N minus random-N, excludes zero (see [The headline](#the-headline)).
+accuracy, top-N minus random-N, lies above zero (see [The headline](#the-headline)).
 The result is reported whatever it turns out to be.
 
 ## Questions
@@ -37,7 +37,8 @@ columns the two sets share.
 ## Runs
 
 1. **The agent.** The model the pilot chose, at the call site `agent`, pinned by
-   ID, at default sampling, with a versioned system prompt. Its tools are
+   ID, at default sampling, with a versioned system prompt fixed at the tag. Its
+   tools are
    `list_tables()`, `describe(table)` and `run_sql(sql)`, the last with the
    statement timeout and row cap in `[agent]` (60 s, 200 rows). After at most 8
    tool calls it gives a structured final answer `{final_sql}`.
@@ -47,8 +48,9 @@ columns the two sets share.
    arms share a cached response only while the agent's transcripts are
    identical, and they diverge at the first tool result that differs.
 3. **The result.** The harness runs `final_sql` once as `SVC_AGENT` with the
-   same timeout, fetching at most 201 rows, so a result longer than any gold
-   result fails as `row_count_mismatch`.
+   same timeout and the agent's query tag, `agent:<run_id>:<qid>:<rep>`,
+   fetching at most 201 rows, so a result longer than any gold result fails as
+   `row_count_mismatch`.
 4. **Infrastructure failures.** An API error left after the retry policy, or an
    unavailable warehouse, is not an agent outcome: it is not cached, and the run
    repeats. After 3 attempts the run fails with reason `error`, and the results
@@ -70,8 +72,10 @@ order, and the first that fails gives the reason code:
 
 Values are normalized before the comparison:
 
-- **Numbers** of any type become `Decimal`, rounded to 2 places with
-  `ROUND_HALF_EVEN`. A number never equals a string.
+- **Numbers** of any type become `Decimal`, a float through its shortest
+  round-trip string (`Decimal(repr(x))`), then round to 2 places with
+  `ROUND_HALF_EVEN`, so a FLOAT 2.675 and a NUMBER 2.675 both give 2.68. A
+  number never equals a string.
 - **Strings** are trimmed of leading and trailing whitespace; case is kept.
 - **Dates and timestamps** compare as ISO 8601 strings.
 - **NULL** equals NULL and nothing else.
@@ -92,9 +96,10 @@ environment). The comparison refuses to run if two arms' manifests differ in it.
 All arms, the baseline included, run in one session, in this recorded order:
 baseline, random-N, top-N, ceiling. For each arm, `dbt build` runs first, then
 the check that `information_schema` comments as `SVC_AGENT` equal that arm's
-YAML, then the agent. The Phase 3 baseline, run earlier under an earlier setup,
-supplies the query traffic the ranking reads and is reported as the "before"
-number; it is not compared with the arms. Where the warehouse returns the same
+YAML, then the agent. "The baseline" in every comparison and in the README is
+this session's. The Phase 3 baseline, run earlier under an earlier setup,
+supplies the query traffic the ranking reads and is reported next to it; it is
+not compared with the arms. Where the warehouse returns the same
 tool results, the session's baseline replays it from the model cache, so a
 difference between the two shows drift.
 
@@ -121,7 +126,9 @@ random-N comparison to run, and that is reported as the finding.
    discovery failures. A test feeds in a holdout-tagged query and fails if any
    ranking input changes.
 3. **The random-N pool** is every mart column undocumented in the baseline docs,
-   whether or not a question touches it. Each column's FQN is hashed as
+   whether or not a question touches it, because the claim compares docgap
+   with documenting undocumented columns without it. Each column's FQN is
+   hashed as
    `sha256(f"{seed}:{fqn}")` with `seed` = `[seeds] random_arm` = 2, and the N
    columns with the lowest digests are drawn. The draw ignores top-N, so the two
    can overlap; the results report the overlap.
@@ -136,21 +143,25 @@ random-N comparison to run, and that is reported as the finding.
 2. **An arm is the N columns chosen**, whether or not each got a draft. The
    results report delivered drafts per band and per arm next to the headline,
    since random columns can be flagged more often than top-N columns.
-3. **The two-band fallback.** If the blind labels show the bands don't separate
-   drafts, ready and confirm merge into one band. Both already enter the arms,
-   so the arms' contents don't change.
+3. **The two-band fallback.** If the gate's scores cluster and the per-band
+   accuracy on the blind labels isn't monotone, ready and confirm merge into one
+   band. `confirm_min`, the cut between drafted and flagged, stays, so the arms'
+   contents don't change. The fallback is part of this protocol, not a change
+   to the bands.
 
 ## Values that pick the arms' content
 
 These decide which columns enter the arms and what text they get. The Phase 3
-baseline shows holdout failures before the arms run, so they are fixed at the
-tag with the rest of this protocol (`CLAUDE.md` → "After `preregistered`"):
+baseline shows holdout failures before the arms run, so they never change after
+the tag (`CLAUDE.md` → "After `preregistered`"):
 
 - the rank weight *w* = 1 (`[rank]`)
 - the gate bands, 0.8 and 0.5 (`[gate]`)
 - *k* = 11 (`[evidence]`)
-- the model and prompt version at the `attribution`, `drafter` and `gate` call
-  sites (`[call_sites]`)
+- the role-to-actor mapping (`[actors]`)
+- the model at the `attribution`, `drafter` and `gate` call sites
+  (`[call_sites]`) and their prompt versions (in `llm/`), both recorded in the
+  run's setup
 - the seeds, including the bootstrap seed below (`[seeds]`)
 
 ## The headline
@@ -160,9 +171,11 @@ tag with the rest of this protocol (`CLAUDE.md` → "After `preregistered`"):
 2. **The difference.** For each holdout question, `d = top-N score − random-N
    score`. The headline is the mean of `d` over the 15 holdout questions.
 3. **The interval.** 10,000 bootstrap resamples of the 15 holdout questions,
-   with replacement, each giving the mean of `d`. NumPy's `default_rng` (PCG64)
-   is seeded with `[seeds] bootstrap` = 4, and the interval is the 2.5th and
-   97.5th percentiles by NumPy's default method.
+   with replacement, each giving the mean of `d`. With the holdout questions
+   sorted by ID, resample `j` (0 to 9,999) takes at position `i` (0 to 14) the
+   question at index `int(sha256(f"{seed}:{j}:{i}"), 16) % 15`, with `seed` =
+   `[seeds] bootstrap` = 4. The interval runs from the 250th to the 9,751st of
+   the 10,000 means, sorted ascending.
 4. **The verdict.** Top-N improves on random-N if the lower bound is above zero,
    and does worse if the upper bound is below zero. Otherwise no difference is
    detected. No p-values.
@@ -200,7 +213,7 @@ promise a detectable headline.
 - Delivered drafts per band and per arm.
 - Accuracy per arm on both splits, the ceiling included when it ran.
 - A per-question flips table (fail → pass, pass → fail) per arm against the
-  baseline.
+  session's baseline.
 - The needed columns shared by discovery and holdout, and the overlap of top-N
   and random-N.
 - Grade reason codes per arm, and infrastructure failures per arm.
@@ -210,14 +223,18 @@ promise a detectable headline.
 ## Witnessing the tag
 
 Git sets tag and commit dates from the committer's clock, so they prove nothing
-on their own (ADR 0004). The order is:
+on their own (ADR 0004). The tag comes after the gold results are materialized,
+so a gold query that breaks the rules above is fixed before it. The order is:
 
-1. Tag the commit `preregistered`.
-2. Run gitleaks over the full history and the private-terms guard over every
+1. Run gitleaks over the full history and the private-terms guard over every
    commit message.
-3. Make the repo public, then create a GitHub release on the tag, with the
-   tagged commit's SHA in its body. GitHub sets the release's creation time,
-   not the committer.
-4. Start the Phase 3 baseline only after the release exists.
+2. Tag the commit `preregistered`.
+3. Make the repo public, then publish a GitHub release on the tag, with the
+   tagged commit's SHA in its body. The release's `published_at` is set by
+   GitHub when it is published; its `created_at` is the commit's date, so it
+   proves nothing
+   ([GitHub REST API, releases](https://docs.github.com/en/rest/releases/releases),
+   checked 2026-09-26).
+4. Start the Phase 3 baseline only after the release is published.
 
-The results cite the release and its creation time.
+The results cite the release and its `published_at`.
