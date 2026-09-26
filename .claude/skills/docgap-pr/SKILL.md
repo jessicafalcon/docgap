@@ -1,7 +1,7 @@
 ---
 name: docgap-pr
 description: >
-  How pull requests are shaped in docgap: one behaviour change per PR, the title
+  How pull requests are shaped in docgap: one coherent change per PR, the title
   as the squash-merge commit, and what goes in each section of the PR template.
   Read this BEFORE writing a PR title or body (step 5 of the pre-PR gate in
   CLAUDE.md, which owns the gate itself). docgap-voice governs the wording.
