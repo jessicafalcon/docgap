@@ -142,7 +142,7 @@ code is lost to the next session, and the review agents treat it as a finding.
 |---|---|
 | The plan: objective, phases and steps (checkboxes), "Done when", stack, timeline, risks, open decisions | `PROJECT-BRIEF.md` |
 | How we work, and when to invoke each skill, agent, hook and command; current status | `CLAUDE.md` |
-| Why a non-obvious choice was made, and what else was considered | `docs/adr/NNNN-*.md` |
+| Why a non-obvious choice was made, and what else was considered | `docs/adr/NNNN-*.md`, from `docs/adr/template.md` |
 | Evaluation rules, pre-registered at the `preregistered` tag (changes per "After `preregistered`" below) | `docs/EVAL_PROTOCOL.md` |
 | How code, tests and prose are written | `.claude/skills/docgap-*` |
 | What a user sees: quickstart, results (generated), limits | `README.md` |
@@ -213,7 +213,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
     with the output hash.
 - **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
   (arm membership unchanged, recommended) or absorb the flagged band;
-  (b) report delivered drafts per arm next to the headline (recommended).
+  (b) report delivered drafts per arm next to the headline (recommended);
+  (c) how the `preregistered` tag's date is made checkable while the repo is
+  private (ADR 0004).
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
 - **Next step:** PR 5 `feat/contracts`, after `docs/decision-log` merges.
