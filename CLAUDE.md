@@ -142,7 +142,7 @@ code is lost to the next session, and the review agents treat it as a finding.
 |---|---|
 | The plan: objective, phases and steps (checkboxes), "Done when", stack, timeline, risks, open decisions | `PROJECT-BRIEF.md` |
 | How we work, and when to invoke each skill, agent, hook and command; current status | `CLAUDE.md` |
-| Why a non-obvious choice was made, and what else was considered | `docs/adr/NNNN-*.md` |
+| Why a non-obvious choice was made, and what else was considered | `docs/adr/NNNN-*.md`, from `docs/adr/template.md` |
 | Evaluation rules, pre-registered at the `preregistered` tag (changes per "After `preregistered`" below) | `docs/EVAL_PROTOCOL.md` |
 | How code, tests and prose are written | `.claude/skills/docgap-*` |
 | What a user sees: quickstart, results (generated), limits | `README.md` |
@@ -180,24 +180,25 @@ updated, open risks, next step.
 Update after every PR and merge, in the same change. A new session resumes from here.
 
 - **Phase:** 0 (foundations and pre-registration), in progress.
-- **Repo:** `jessicafalcon/docgap` on GitHub, private until the project is
-  complete, then public. No branch protection (not available on a private repo).
+- **Repo:** `jessicafalcon/docgap` on GitHub, private until the `preregistered`
+  tag, then public (ADR 0004). No branch protection until then (not available on
+  this private repo).
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
-  #2 `docs/pr-template`, #3 `docs/lean-gate`.
-- **Open PRs:** `fix/hooks` (PRs 2–3).
+  #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3).
+- **Open PRs:** `docs/decision-log` (PR 4).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
     and ~~`docs/lean-gate`~~ (#3).
-  - **PRs 2–3:** `fix/hooks`. The determinism guard flags listings and `.sample()`
-    on any receiver, plus `os.getcwd()` and `Path.cwd()`, with tests for every
-    rule; the private-terms guard covers staged files, commit messages, `-F` and
-    `--body-file` files, `git -C`; the review agents' allowlist runs from
+  - **PRs 2–3:** ~~`fix/hooks`~~ (#4). The determinism guard flags listings and
+    `.sample()` on any receiver, plus `os.getcwd()` and `Path.cwd()`, with tests
+    for every rule; the private-terms guard covers staged files, commit messages,
+    `-F` and `--body-file` files, `git -C`; the review agents' allowlist runs from
     settings, requires `uv run --frozen` and blocks file-writing flags.
   - **PR 4:** `docs/decision-log`. ADR template with Status and Superseded-by;
-    first records, including repo visibility (private until complete, then public)
-    and hooks that must always run living in `.claude/settings.json` (an untrusted
+    first records, including repo visibility (private until the `preregistered`
+    tag, then public) and hooks that must always run living in `.claude/settings.json` (an untrusted
     folder skips agent frontmatter hooks without a message).
   - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
     `RunManifest` splits a canonical part from an operational part.
@@ -213,7 +214,12 @@ Update after every PR and merge, in the same change. A new session resumes from 
     with the output hash.
 - **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
   (arm membership unchanged, recommended) or absorb the flagged band;
-  (b) report delivered drafts per arm next to the headline (recommended).
+  (b) report delivered drafts per arm next to the headline (recommended);
+  (c) how the repo's going public at the `preregistered` tag is recorded for
+  later readers (ADR 0004).
+- **Open for PR 5:** whether `RunManifest` records the `uv.lock` hash, so a
+  dependency bump that changes outputs (sqlglot, ADR 0002) shows as a changed
+  input rather than only as a failed golden test.
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PR 4 `docs/decision-log`, after `fix/hooks` merges.
+- **Next step:** PR 5 `feat/contracts`, after `docs/decision-log` merges.

@@ -42,7 +42,7 @@ The tool is a deterministic pipeline with three narrow model calls at the edges.
 
 - Read-only by construction: the tool's Snowflake role can't write, and changes reach the warehouse only through a reviewed pull request and dbt.
 - Least privilege, defined in Terraform: one role per job (load, transform, agent, audit). `ACCOUNTADMIN` appears only in the one-time `bootstrap.sql`, for the few objects only it can create.
-- Minimal exposure to the model: query literals are stripped before storage, and profiles are aggregates only. Values seen fewer than *k* times are suppressed, and columns tagged sensitive get no sample values at all.
+- Minimal exposure to the model: query literals are stripped before storage, and profiles are aggregates only. Values carried by fewer than *k* fact rows are suppressed, numeric min and max are clipped to the *k*-th value, and columns tagged sensitive get no sample values at all.
 - An audit trail per run: input hashes, git SHA, model versions, prompt hashes, thresholds and output hash in `run_manifest.json`.
 
 **Coherence**
@@ -149,7 +149,7 @@ Every mart column carries `meta.owner` and `meta.sensitivity` (`public` | `inter
 | --- | --- | --- |
 | Test agent | Table and column names and comments via `information_schema`; results of its own queries (capped at 200 rows) | `RAW`, `STAGING`, anything outside `MARTS` |
 | Failure attribution | Question, agent SQL, gold SQL, the first 20 rows of both results, current docs of the columns involved | Row-level data beyond those samples |
-| Drafter | Column name and type, table description, compiled lineage SQL, aggregate profile | Raw rows; sample values of `restricted` columns; any value seen fewer than *k* = 10 times |
+| Drafter | Column name and type, table description, compiled lineage SQL, aggregate profile | Raw rows; sample values of `restricted` columns; any value carried by fewer than *k* = 11 fact rows |
 | Draft gate | The draft and the same evidence packet | Anything the drafter didn't see |
 
 **Redaction before storage.** Query text is normalized by sqlglot (literals become placeholders) before it touches disk, and raw text is never persisted. Snowflake's `query_parameterized_hash` serves as a cross-check on the fingerprints.
@@ -160,10 +160,10 @@ Every mart column carries `meta.owner` and `meta.sensitivity` (`public` | `inter
 
 Fix the rules before touching data, so no later result can be accused of being tuned. No Snowflake needed yet.
 
-- [x] **Create the repo.** Repo `docgap`, private until the project is complete, then public, MIT license, `uv init`, Python pinned in `.python-version`, ruff + pyright + pytest config, pre-commit with ruff and gitleaks. *Expect:* `uv run pytest` passes, with one smoke test pinning that sockets and DNS are blocked; CI is green.
+- [x] **Create the repo.** Repo `docgap`, private until the `preregistered` tag, then public, MIT license, `uv init`, Python pinned in `.python-version`, ruff + pyright + pytest config, pre-commit with ruff and gitleaks. *Expect:* `uv run pytest` passes, with one smoke test pinning that sockets and DNS are blocked; CI is green.
 - [ ] **Write the data contracts first.** Pydantic models in `src/docgap/models.py`: `ColumnRef`, `QueryRecord`, `ColumnUsage`, `Grade`, `Attribution`, `EvidencePacket`, `Draft`, `GateResult`, `RankedGap`, `RunManifest`. Each has one Parquet or JSON schema. *Expect:* every later stage imports these types, so stage boundaries can't drift.
-- [ ] **Create one config file.** `docgap.toml`: history window, role-to-actor mapping (agent/human), rank weights, *k* = 10, band thresholds, model IDs and sampling settings per call site, timeouts, split seed, random-arm seed. *Expect:* its hash goes into every run manifest; no magic numbers in code.
-- [ ] **Start a decision log.** `docs/adr/`, one numbered record per choice (`0001-snowflake-enterprise-trial.md`, `0002-months-of-data.md`, why sqlglot, why *k* = 10), each with context, options considered, the outcome and its consequences. A later record supersedes an earlier one; accepted records are never rewritten. *Expect:* reviewers see the reasoning, and later changes are explicit.
+- [ ] **Create one config file.** `docgap.toml`: history window, role-to-actor mapping (agent/human), rank weights, *k* = 11, band thresholds, model IDs and sampling settings per call site, timeouts, split seed, random-arm seed. *Expect:* its hash goes into every run manifest; no magic numbers in code.
+- [x] **Start a decision log.** `docs/adr/`, one numbered record per choice, copied from `docs/adr/template.md`: status, context, options considered, the outcome and its consequences. A later record supersedes an earlier one; accepted records are never rewritten. The first records cover the Snowflake edition and trial timing, why sqlglot, why *k* = 11, repo visibility, and where guard hooks are registered; the months of data get theirs when "Study the data dictionary" settles them. *Expect:* reviewers see the reasoning, and later changes are explicit.
 - [ ] **Write the evaluation protocol.** `docs/EVAL_PROTOCOL.md` defines:
   - **What "correct" means**: the result-set match rules.
   - **Repetitions**: 3 per question.
@@ -269,7 +269,7 @@ Create real agent traffic against the warehouse, grade it without a model, and f
   - Adjust difficulty only now.
 
   *Expect:* for the chosen model, accuracy with no docs far from 0% and 100%, and a gap to full docs large enough to pass the kill criterion in the protocol. If the gap is small for both models, the experiment can't show anything, and it's better to know before the trial starts.
-- [ ] **Fix N, split and tag the pre-registration.** Assign the 25 discovery / 15 holdout split by hashing question IDs with the config seed, and report how many columns the two sets share. Run `resolve` on the discovery gold SQL, count the undocumented columns it touches, and fix N by the protocol's rule. Commit questions, gold SQL, split, N, arms and protocol, then create the git tag `preregistered`. *Expect:* anyone can verify nothing changed after the baseline.
+- [ ] **Fix N, split and tag the pre-registration.** Assign the 25 discovery / 15 holdout split by hashing question IDs with the config seed, and report how many columns the two sets share. Run `resolve` on the discovery gold SQL, count the undocumented columns it touches, and fix N by the protocol's rule. Commit questions, gold SQL, split, N, arms and protocol, then create the git tag `preregistered`. Make the repo public right after, before any baseline run: first run gitleaks over the full history and the private-terms guard over every commit message. *Expect:* anyone can verify nothing changed after the baseline.
 - [ ] **Materialize gold results.** Run each gold query once as `DOCGAP_AUDITOR` (tagged `gold:<qid>`, excluded from traffic) and store the results as Parquet with hashes. *Expect:* grading runs offline from then on.
 - [ ] **Build the test agent.** A short tool-calling loop in `eval/agent/`:
   - `list_tables()` and `describe(table)` read `information_schema` names and comments
@@ -289,7 +289,7 @@ Create real agent traffic against the warehouse, grade it without a model, and f
   If `ACCESS_HISTORY` is used as a cross-check, wait at least 3 hours: that's its latency. Compare on successful queries only, since `ACCESS_HISTORY` excludes failed ones.
 
   *Expect:* everything after this point can run without Snowflake, except the arm rebuilds in Phase 6.
-- [ ] **Profile every mart column in the same session.** As `DOCGAP_AUDITOR`, run the aggregate profile queries (Phase 5 rules: *k* = 10, nothing for `restricted`) for all mart columns, not just the top N, and freeze them with a hash. *Expect:* evidence packets for both the top-N and random-N arms are built offline; Phase 5 needs no warehouse.
+- [ ] **Profile every mart column in the same session.** As `DOCGAP_AUDITOR`, run the aggregate profile queries (Phase 5 rules: *k* = 11 fact rows, nothing for `restricted`) for all mart columns, not just the top N, and freeze them with a hash. *Expect:* evidence packets for both the top-N and random-N arms are built offline; Phase 5 needs no warehouse.
 
 **Done when:** the `preregistered` tag exists, 120 graded runs are stored, baseline accuracy is reported for both sets, and the snapshot and profile fixtures are committed.
 
@@ -341,7 +341,7 @@ r_c = \frac{\sum_f P_f(\text{cause} = \text{meaning}) \cdot P_f(\text{column} = 
 
 *Expect:* `rank` now uses *r*; the re-ranking shows which heavily used columns also cause wrong answers.
 
-- [ ] **Evidence packets for the top-N and random-N columns.** Compiled lineage SQL from the manifest, the column's upstream expression via sqlglot lineage, and the frozen profile from Phase 3: null rate, distinct count, min/max for numbers, and top values seen at least *k* = 10 times. `restricted` columns get no values at all. *Expect:* packets stored and hashed; the governance rule is unit-tested.
+- [ ] **Evidence packets for the top-N and random-N columns.** Compiled lineage SQL from the manifest, the column's upstream expression via sqlglot lineage, and the frozen profile from Phase 3: null rate, distinct count, min/max for numbers clipped to the *k*-th smallest and largest value, and top values carried by at least *k* = 11 fact rows. `restricted` columns get no values at all. *Expect:* packets stored and hashed; the governance rule is unit-tested.
 - [ ] **Drafter.** Anthropic API, Opus 5.5 pinned by ID (as are both judgments), default sampling, cached. Structured output `{description (≤ 200 chars), unknowns[]}`. The prompt forbids claims the evidence doesn't support and asks for unknowns instead. *Expect:* short, cautious drafts that name what they couldn't infer.
 - [ ] **Draft gate (Noul).** State = evidence packet + draft. One Noul: *the description is fully supported by the evidence and makes no unsupported claim*. Bands from config: ≥ 0.8 → ready, 0.5–0.8 → owner must confirm, < 0.5 or timeout → no draft, flagged. *Expect:* each gap carries a band and the probability behind it.
 - [ ] **Blind labels for calibration.** Before looking at gate scores, label each draft against the official dictionary as correct, partial or wrong, and commit `eval/draft_labels.yml` with the drafter and gate prompt versions it graded. Those prompts don't change after labeling starts. Then report accuracy per band. The labels score correctness against the dictionary, while the gate scores support by the evidence, so the table checks whether the bands are useful, not whether the gate does its stated job. *Expect:* an honest table. With about 20–30 drafts it's evidence, not calibration, and the README says so. If the scores cluster and the per-band accuracy isn't monotone, fall back to two bands ("ready" and "owner confirms") and log the decision.
