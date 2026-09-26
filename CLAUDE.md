@@ -43,7 +43,7 @@ the file is the current standard, and memory of it may be stale.
 
 | Moment | Invoke | Then |
 |---|---|---|
-| **Fresh clone** | `uv sync`, `uv run pre-commit install`; gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
+| **Fresh clone** | `uv sync`, `uv run pre-commit install` (the pre-commit and commit-msg hooks); gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -127,10 +127,10 @@ disagree with the code or a record and can't tell which is right, they mark it
 
 | Hook | Fires on | When it reports |
 |---|---|---|
-| `private-terms-guard` | Before any write in the repo, and before commits, tags, PR/issue/release text (never files outside the repo; until `fix/hooks`, not `-F`/`--body-file` contents either) | Blocked. Rewrite without the term: describe the fact itself, not its source. The list lives in the gitignored `.claude/private-terms.local`. |
+| `private-terms-guard` | Before any write in the repo (not files outside it); before commits, tags and PR/issue/release text, with the files they name by `-F` or `--body-file`; and through pre-commit on staged files and every commit message | Blocked. Rewrite without the term: describe the fact itself, not its source. A named file it can't read blocks too: give an absolute path, not a variable set in the same command. The list lives in the gitignored `.claude/private-terms.local`. |
 | `ruff-on-edit` | After editing a `*.py` file | Fix any unresolved lint it prints before the next edit. |
 | `determinism-guard` | After editing core `src/docgap/*.py` (not `llm/`, `cli.py`, tests) | Inject the value as a parameter (`as_of`, seed, config), wrap listings in `sorted()`, use `hashlib`, or move the code to `llm/` or `cli.py`. Pre-commit runs the same check. |
-| `reviewer_bash_allowlist` | Shell commands inside the two review agents | Keeps them read-only. Not used in the main session. |
+| `reviewer_bash_allowlist` | Every Bash call; enforced only when `agent_type` is one of the two review agents | Keeps them read-only. Registered in `.claude/settings.json`, not agent frontmatter: Claude Code skips frontmatter hooks in an untrusted folder. |
 
 ## Records: every change or decision updates its owner
 
@@ -193,8 +193,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
   - **PRs 2–3:** `fix/hooks`. The determinism guard flags listings and `.sample()`
     on any receiver, plus `os.getcwd()` and `Path.cwd()`, with tests for every
     rule; the private-terms guard covers staged files, commit messages, `-F` and
-    `--body-file` files, `git -C`. Then drop the `--body-file` caveats in the
-    hooks table and `docgap-pr` (Body).
+    `--body-file` files, `git -C`; the review agents' allowlist runs from
+    settings, requires `uv run --frozen` and blocks file-writing flags.
   - **PR 4:** `docs/decision-log`. ADR template with Status and Superseded-by;
     first records, including repo visibility (private until complete, then public).
   - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
@@ -214,4 +214,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (b) report delivered drafts per arm next to the headline (recommended).
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** finish PRs 2–3 `fix/hooks`, then PR 4 `docs/decision-log`.
+- **Next step:** PR 4 `docs/decision-log`, after `fix/hooks` merges.

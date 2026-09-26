@@ -43,9 +43,8 @@ Every development PR fills all six sections of `.github/pull_request_template.md
 in order, whatever its size; a small PR keeps each to a line or two. The PRs
 docgap itself opens (`docgap/<run_id>`) have their own body, set in the brief's
 Phase 6. Build the body from the template and delete its HTML comments: GitHub
-hides them, but they stay in the raw body that `gh pr view` shows. Pass it
-inline, `gh pr create --body "$(cat <<'EOF' … EOF)"`, so the private-terms guard
-scans the text; it doesn't read `--body-file` contents.
+hides them, but they stay in the raw body that `gh pr view` shows. Pass it with
+`--body-file` and an absolute path, or inline; the private-terms guard reads both.
 
 - **Summary.** The problem, then what this PR changes. Then the brief step it
   serves, the ADR it implements, and any follow-up or issue link, each "none"
