@@ -1,6 +1,11 @@
 # Runs locally before each commit and in CI over every file. Ruff and pyright run from
 # the project venv (`uv run --frozen`) so their versions come from uv.lock and pyright
 # resolves the project's own dependencies.
+# commit-msg too, so a plain `pre-commit install` also installs the message check. Hooks
+# run only at pre-commit unless they name another stage.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -55,3 +60,10 @@ repos:
         entry: uv run --frozen python .claude/hooks/determinism_guard.py
         language: system
         files: ^src/docgap/.*\.py$
+      # Same term list as the Claude Code PreToolUse hook: staged files at pre-commit,
+      # the message at commit-msg. No `.claude/private-terms.local` (CI), no check.
+      - id: private-terms
+        name: private terms
+        entry: uv run --frozen python .claude/hooks/private_terms_guard.py
+        language: system
+        stages: [pre-commit, commit-msg]
