@@ -184,12 +184,12 @@ Update after every PR and merge, in the same change. A new session resumes from 
   complete, then public. No branch protection (not available on a private repo).
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
-  #2 `docs/pr-template`.
-- **Open PRs:** `docs/lean-gate` (the gate sized by PR type; fewer, larger PRs).
+  #2 `docs/pr-template`, #3 `docs/lean-gate`.
+- **Open PRs:** `fix/hooks` (PRs 2–3).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
-    and `docs/lean-gate`.
+    and ~~`docs/lean-gate`~~ (#3).
   - **PRs 2–3:** `fix/hooks`. The determinism guard flags listings and `.sample()`
     on any receiver, plus `os.getcwd()` and `Path.cwd()`, with tests for every
     rule; the private-terms guard covers staged files, commit messages, `-F` and
@@ -214,4 +214,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (b) report delivered drafts per arm next to the headline (recommended).
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PRs 2–3 `fix/hooks`, after `docs/lean-gate` merges.
+- **Next step:** finish PRs 2–3 `fix/hooks`, then PR 4 `docs/decision-log`.
