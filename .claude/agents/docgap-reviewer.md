@@ -55,7 +55,8 @@ The PR body tells you what to check, not what's true.
   success criteria: a ranking anyone can reproduce, drafts an owner can review,
   and a holdout result nobody can call rigged. Flag changes that work locally but
   pull against the goal: a new input to ranking that the holdout could reach, a
-  change to N, arms, split or grading after the `preregistered` tag, a model
+  change after the `preregistered` tag to anything `CLAUDE.md` → "After
+  `preregistered`" freezes, or a protocol change without its ADR, a model
   seeing more than the brief's table allows, a README number typed rather than
   generated.
 - **Records kept.** Using the records map in `CLAUDE.md`, list every record file

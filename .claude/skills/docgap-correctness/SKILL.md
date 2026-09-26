@@ -50,8 +50,8 @@ outputs and run manifest. In `src/docgap/` outside `llm/` and `cli.py`:
 
 ### 4. Evaluation integrity
 
-- Questions, gold SQL, split, N and arms are frozen at the `preregistered` tag;
-  any other protocol change follows `CLAUDE.md` → "After `preregistered`".
+- What is frozen at the `preregistered` tag, and how anything else in the
+  protocol may change, is set in `CLAUDE.md` → "After `preregistered`".
 - **Ranking inputs come from discovery questions only.** Usage and attribution
   filter on discovery `qid`s; a test proves a holdout-tagged query changes nothing.
 - All arms use the same model ID, prompt version and config hash, verified by

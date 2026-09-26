@@ -57,8 +57,8 @@ no Snowflake, no model, no clock.
   (static import check plus a test that fails if the path appears in `src/`).
 - **Arm parity:** the comparison refuses to run if two arms' manifests differ in
   model ID, prompt version or config hash.
-- **Pre-registration:** questions, split, N and arms hash to the values committed
-  at the `preregistered` tag.
+- **Pre-registration:** everything `CLAUDE.md` → "After `preregistered`" freezes
+  hashes to the values committed at the tag.
 
 ## Contract tests at boundaries
 

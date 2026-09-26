@@ -64,7 +64,7 @@ now refuses a window whose end is newer than `as_of - 45 min` and says so.
 
 Wording inside those sections:
 
-- **Root cause is mechanistic.** Name the exact function, value or ordering that
+- **For a fix, the Summary's root cause is mechanistic.** Name the exact function, value or ordering that
   fails and why. Bold the one consequence that matters: "**every run leaked a
   warehouse session**".
 - **Numbers with arrows:** `k 5 → 10`, `sqlglot 26.1 → 27.8`, `parse rate 91% → 98%`.

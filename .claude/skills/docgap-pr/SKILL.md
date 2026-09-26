@@ -54,8 +54,8 @@ scans the text; it doesn't read `--body-file` contents.
   change after the `preregistered` tag follows `CLAUDE.md` → "After
   `preregistered`", or it doesn't land. Compatibility includes anything a
   consumer must do.
-- **Validation.** One box per pre-PR gate step that applied, naming the command
-  or agent and what it showed. An unticked box means not done. Add a line of
+- **Validation.** One box per pre-PR gate step that applied (two for step 3 on a
+  phase's last PR, one per agent), naming the command or agent and what it showed. An unticked box means not done. Add a line of
   prose for a check a box can't carry (a fresh-clone run, a positive control).
 - **Records updated.** Each record touched, per the records map in `CLAUDE.md`,
   or "none implied" after checking the map.
