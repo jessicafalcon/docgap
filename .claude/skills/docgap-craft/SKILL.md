@@ -69,14 +69,16 @@ class ColumnRef(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    fqn: Annotated[str, StringConstraints(pattern=r"^[A-Z0-9_$]+(\.[A-Z0-9_$]+){3}$")]
+    fqn: Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*(\.[A-Z_][A-Z0-9_$]*){3}$")]
 ```
 
 - Validate at the boundary (Snowflake export, manifest load, model output), then
   trust the type inside.
 - A fixed vocabulary (reason codes, bands, actor classes) is a `StrEnum`.
-- A schema change to a contract is a versioned change: bump `schema_version` in
-  the artifact metadata, never silently reshape.
+- A schema change to a contract is a versioned change: bump
+  `RunSetup.schema_version` (one version for every contract, recorded in each run
+  manifest) and regenerate the committed schemas with `pytest --update-golden`,
+  never silently reshape.
 
 ## Polars and Parquet
 

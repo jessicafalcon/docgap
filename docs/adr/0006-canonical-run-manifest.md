@@ -22,6 +22,8 @@ Which fields go into the hash, and how is what ran recorded?
 3. **Canonical part with the environment by value.** The Python version, the
    installed runtime dependency closure as sorted `name==version`, and a hash
    of docgap's own package files; git SHA and timings in the operational part.
+   The environment sits in a setup block with the contract version, config
+   section hashes and model call sites, and the setup has its own hash.
 
 ## Decision Outcome
 
@@ -34,10 +36,20 @@ docs-only commit changes the SHA without changing any output.
 
 ### Consequences
 
-- Good, because a dependency or code change between the baseline and the arms
-  shows up in the manifest comparison, naming the package that moved.
-- Good, because `RunManifest.canonical_sha256()` is the one hash that runs,
-  arms and the pull request body cite.
+- Good, because a dependency change or a change to docgap's code between the
+  baseline and the arms changes the setup hash, and the environment names the
+  package that moved.
+- Good, because each comparison has its own hash. `RunSetup.sha256()` checks arm
+  parity, since arms share a setup but differ in outputs by design.
+  `RunManifest.canonical_sha256()` checks that a re-run of the same inputs
+  reproduced every output, and the pull request body cites it.
+- Good, because each stage record carries the setup hash it ran under, and a
+  manifest refuses a stage recorded under another setup. A resume after
+  `uv lock --upgrade` re-runs the stage instead of relabeling its output.
+- Bad, because the code hash covers docgap's package only, not the evaluation
+  harness in `eval/`. The harness's grading rules are frozen at the
+  `preregistered` tag, and its prompts are pinned by their hashes in the call
+  sites.
 - Bad, because a change that alters no output (a docstring, a patch release)
   still marks the environment as changed. Its answer is the golden tests: equal
   golden outputs mean the move was harmless.
