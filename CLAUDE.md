@@ -195,7 +195,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
   #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5), #7 `feat/config`
   (PR 6), #8 `docs/eval-protocol` (PR 7).
-- **Open PRs:** none.
+- **Open PRs:** `docs/data-study` (PRs 8–9).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -223,10 +223,11 @@ Update after every PR and merge, in the same change. A new session resumes from 
     content at the tag, and keys the agent's cache on the repetition; ADR 0010
     closes the baseline-docs and owner-edits decisions. The tag moves after the
     gold results, inside the trial.
-  - **PRs 8–9:** `docs/data-study`. First commit: CI fails if `src/` references
-    `eval/reference/`. Then measured file facts with their commands,
-    `loader/sources.lock`, the dictionary in `eval/reference/` (brief: "Study the
-    data dictionary", "Keep the dictionary out of the tool's reach"), months ADR.
+  - **PRs 8–9:** `docs/data-study` (open). A test fails CI if `src/` imports
+    `eval` or names `eval/reference/`; the descriptor is stored in
+    `eval/reference/`; `loader/sources.lock` pins `A202501.csv.gz`. ADR 0011 loads
+    that one month and records the measured file facts with their commands.
   - **PR 10:** `feat/offline-sample`. Sampling by hashed dimension key, tests, ADR
     with the output hash.
-- **Next step:** PRs 8–9 `docs/data-study`, in progress.
+- **Next step:** PRs 8–9 `docs/data-study` in review; then PR 10
+  `feat/offline-sample`, the last PR of Phase 0 (whole-repo audit at its gate).
