@@ -11,10 +11,11 @@ import pytest
 SRC = Path(__file__).parents[1] / "src"
 
 # The dictionary is the ground truth that drafts are graded against. A draft written
-# with it in reach would score well for the wrong reason. The pattern also catches the
-# path split across a join, such as `Path("eval") / "reference"` or `joinpath("eval",
-# "reference")`; a path assembled from variables gets past it, which review catches.
-REFERENCE = re.compile(r"""\beval['")]*\s*[/\\.,]['"\s+]*reference\b""")
+# with it in reach would score well for the wrong reason. Any line naming `eval` and then
+# `reference` matches, so a path split across a join or concatenation is caught, and so
+# is the descriptor's file name; a path assembled from variables gets past it, which
+# review catches.
+REFERENCE = re.compile(r"\beval\b.*\breference\b|descriptif")
 
 
 def _eval_imports(tree: ast.AST) -> list[str]:
@@ -34,6 +35,9 @@ def _eval_imports(tree: ast.AST) -> list[str]:
         'Path("eval") / "reference"',
         'root.joinpath("eval", "reference")',
         '"eval/" + "reference"',
+        'Path("eval").joinpath("reference")',
+        'Path("eval") / Path("reference")',
+        'root.rglob("*descriptif*")',
         "eval.reference.labels",
         "eval\\reference\\codes.xls",
     ],

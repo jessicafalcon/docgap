@@ -23,9 +23,15 @@ Measured on 2026-09-26 on `A202501.csv.gz`, with the commands below:
 | Processing month `FLX_ANN_MOI` | `202501` on every row |
 | Care month `SOI_ANN`-`SOI_MOI`, share of rows / of prefiltered spend `FLT_PAI_MNT` | 2025-01: 48.1% / 62.2%; 2024-12: 27.9% / 26.3%; 2024-11: 8.2% / 6.0%; 2024-10: 4.2% / 2.2%; older months back to 2001, placeholders included: 11.6% / 3.4% |
 | Placeholder care dates | 15,607 rows `0000`-`00`, 8 rows `0001`-`01` |
+| Dimension keys (columns 1–16 and 30–56, all but the 13 measures) | No duplicate in the first 2M rows |
+| Download links | Each file link on the yearly list page carries a `token=` query parameter |
 
 The 2025 file list names `A202501` to `A202512`, from 815,025,319 to 973,594,858
-bytes by HTTP `Content-Length`; the 2026 list was empty.
+bytes by HTTP `Content-Length`; the 2026 list was empty. Source:
+[Open DAMIR on data.gouv.fr](https://www.data.gouv.fr/datasets/open-damir-base-complete-sur-les-depenses-dassurance-maladie-interregimes),
+published by the Caisse nationale de l'Assurance Maladie under the
+[Licence Ouverte](https://www.etalab.gouv.fr/licence-ouverte-open-licence), which
+asks reusers to name the source and its last update, as this record does.
 
 The variable descriptor, `2024_descriptif-variables_open-damir-base-complete.xlsx`
 (113,672 bytes, SHA-256 `c243a9f8de420db5909a8d99c7419f779a102d0f12cd8a1098b1f23bfd035a7e`,
@@ -37,14 +43,15 @@ describes a different table.
 
 ```sh
 shasum -a 256 A202501.csv.gz
-gzip -dc A202501.csv.gz | head -1 | tr ';' '\n'   # header
+gzip -dc A202501.csv.gz | head -1 | tr ';' '\n'   # header: 56 names, then an empty 57th field
+gzip -dc A202501.csv.gz | sed -n '2,2000001p' | cut -d';' -f1-16,30-56 | LC_ALL=C sort | uniq -d | wc -l
 gzip -dc A202501.csv.gz | LC_ALL=C awk -F';' 'NR > 1 {
   n++; b += length($0) + 1; if (NF != 57) bad++; if ($57 != "") tail++
   if ($0 ~ /[\200-\377]/) hi++; if ($0 ~ /\r$/) cr++; if (index($0, ",")) comma++
   flx[$1]++; k = $30 "-" $31; rows[k]++; spend[k] += $27; total += $27 }
   END { print n, b, bad + 0, tail + 0, hi + 0, cr + 0, comma + 0
         for (m in flx) print "FLX", m, flx[m]
-        for (k in rows) print "SOI", k, rows[k] / n, spend[k] / total }'
+        for (k in rows) print "SOI", k, rows[k], rows[k] / n, spend[k] / total }'
 ```
 
 ## Considered Options
@@ -56,12 +63,13 @@ gzip -dc A202501.csv.gz | LC_ALL=C awk -F';' 'NR > 1 {
 ## Decision Outcome
 
 Chosen option: **one month, `A202501`**, because the file spans care months
-already, and a third of the trial's load budget buys only a processing-month
+already, and two more loads inside the trial would buy only a processing-month
 trend. Its care months are not a trend: each holds only the part of that month's
 care processed in January 2025, so they show processing lag. Questions can use
 that distinction, since a processing month and a care month are exactly what an
 undocumented `FLX_ANN_MOI` and `SOI_MOI` leave an agent to guess. `A202501` is the
-month the facts above were measured on; the other 2025 months are the same size.
+month the facts above were measured on; the other 2025 files are 815–974 MB,
+none larger.
 
 ### Consequences
 
