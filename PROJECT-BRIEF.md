@@ -311,7 +311,7 @@ Here *u* = executions, *r* = attributed failure rate (0 until Phase 5), and *w* 
 
 - [ ] **Golden-file tests.** Fixture in → exact expected outputs checked into `tests/golden/`. *Expect:* any behaviour change shows as a diff in review.
 - [ ] **Property tests for determinism.** Shuffling input rows, or running twice, must give identical output hashes (hypothesis). *Expect:* order-dependence bugs caught before they reach a ranking.
-- [ ] **`run_manifest.json` from the first stage on.** The `RunManifest` contract: input hashes, config section hashes, environment, git SHA, output hashes, counts (parsed, unresolved, unmanaged). `cli.py` builds the environment from the installed packages and passes it in, and derives the run ID as `<as-of date>-<first 8 hex digits of the setup hash>` (ADR 0007). *Expect:* every run is auditable, even before any model is involved.
+- [ ] **`run_manifest.json` from the first stage on.** The `RunManifest` contract: input hashes, config section hashes, environment, git SHA, output hashes, counts (parsed, unresolved, unmanaged). `cli.py` builds the environment from the installed packages and passes it in, and derives the run ID as `<as-of as YYYYMMDDTHHMMSSZ>-<first 8 hex digits of the setup hash>` with a pure core function (ADR 0007). *Expect:* every run is auditable, even before any model is involved.
 
 **Done when:** `docgap analyze --offline` reproduces the committed ranking byte for byte in CI, and the two coverage numbers appear in the report.
 
@@ -329,7 +329,7 @@ Add exactly two typed judgments and one drafter, all behind `llm/`, all replayab
   - cache key = SHA-256 of canonical JSON `{model, prompt_version, state, questions}`, stored under `fixtures/llm_cache/`
   - `--offline` makes a cache miss an error, so CI can never call a model
   - a per-run spend budget, from a section this step adds to `docgap.toml`
-  - a call that fails (timeout, refusal, malformed answer) is cached with its `FailureReason`, so an offline replay reproduces the failure instead of treating it as a miss
+  - a call that fails (timeout, refusal, malformed answer) is cached with its `FailureReason`, so an offline replay reproduces the failure instead of treating it as a miss. Decide here whether a live run retries a cached failure after its call site's timeout was raised, since the key doesn't hold the timeout (ADR 0007)
 
   *Expect:* a second run makes zero model calls and returns identical outputs.
 - [ ] **Handle the timeout gap.** The adapter's providers don't expose a configurable timeout yet. They build the Anthropic client with the SDK's default 10-minute timeout, so a hung call is bounded, just far too loosely. Pin your fork's commit or add a thin provider subclass with a tight per-call limit, set per call site in `docgap.toml`, and document it accurately in the README's "Known gap" section with a link to your open issue. On timeout, the item goes to the human band. *Expect:* a test with a never-replying fake server: the run completes, the item is flagged, and the manifest counts one timeout. This is the first local fake server, so the same PR first tests that a Unix socket and a marker-opted localhost server still work under pytest's `--disable-socket`.

@@ -58,8 +58,18 @@ def test_every_key_is_required(path: tuple[str, ...]) -> None:
         DocgapConfig.model_validate(_without(_raw(), path))
 
 
+def test_committed_limits_match_the_governance_table() -> None:
+    # Keep in sync with the brief's "What each model call can see" table and ADR 0003:
+    # a looser value here would widen what the drafter and the agent see.
+    config = load_config(CONFIG)
+    assert config.evidence.min_value_count == 11
+    assert config.agent.row_cap == 200
+
+
 # A top-level key would sit in no section, so no section hash would cover it.
-@pytest.mark.parametrize("path", [("k",), ("gate", "flagged_max")], ids=".".join)
+@pytest.mark.parametrize(
+    "path", [("k",), ("gate", "flagged_max"), ("call_sites", "drafter", "timeout")], ids=".".join
+)
 def test_unknown_key_is_rejected(path: tuple[str, ...]) -> None:
     raw = _raw()
     table = raw

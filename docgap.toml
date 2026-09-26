@@ -8,9 +8,9 @@
 history_window_days = 7
 
 [actors]
-# Role → actor class. Only these roles' queries count as usage; the snapshot drops
-# every other role (loads, dbt builds, docgap's own reads) and counts them. No
-# human role exists in this warehouse; a team adds its analysts' roles as "human".
+# Role → actor class. Only these roles' queries count as usage, so loads, dbt
+# builds and docgap's own reads never do. A human role joins when the brief's open
+# decision on where "people" traffic comes from is settled.
 AGENT_READER = "agent"
 
 [evidence]
@@ -24,9 +24,10 @@ ready_min = 0.8
 confirm_min = 0.5
 
 [seeds]
-# Fixed before any question or data existed; the values carry no meaning.
+# Arbitrary values, set before any question existed.
 split = 1
 random_arm = 2
+# Used if the open "baseline docs rule" decision keeps seeded random sampling.
 baseline_docs = 3
 
 [agent]

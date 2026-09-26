@@ -210,8 +210,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
     arm parity and resume (ADR 0006).
   - **PR 6:** `feat/config`. `docgap.toml` loaded by `config.py`: no defaults,
     no key outside a section, one hash per section into `RunSetup.config`. Runs
-    compare by the setup hash, and the run ID is the as-of date plus its first 8
-    hex digits (ADR 0007).
+    compare by the setup hash, and the run ID is the as-of timestamp plus its
+    first 8 hex digits (ADR 0007).
   - **PR 7:** `docs/eval-protocol`. Every brief item, plus pinned split, random-N
     pool, N rounding, bootstrap settings, pilot fallthrough; devils-advocate first.
   - **PRs 8–9:** `docs/data-study`. First commit: CI fails if `src/` references
@@ -226,4 +226,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (c) how the repo's going public at the `preregistered` tag is recorded for
   later readers (ADR 0004); (d) whether the rank weight *w* is fixed at the
   tag, since it picks the top-N columns (the rank step adds it to `docgap.toml`).
+  (e) baseline parity: the baseline runs in Phase 3, before later steps add
+  config and code, so its setup hash can't equal the Phase 6 arms' (brief line
+  171 vs 387). Re-run the baseline in the Phase 6 session (recommended) or
+  compare it on the agent's settings only.
 - **Next step:** PR 6 `feat/config` in review; then PR 7 `docs/eval-protocol`.
