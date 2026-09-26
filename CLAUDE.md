@@ -139,8 +139,9 @@ code is lost to the next session, and the review agents treat it as a finding.
   "Open decisions".
 - **A threshold, key or command changes:** update every record that states it.
 - **A new skill, agent, hook or command:** add it here, with when to invoke it.
-- **After `preregistered`:** `EVAL_PROTOCOL.md` changes only through an ADR with
-  a justification, and the results report the deviation.
+- **After `preregistered`:** questions, gold SQL, split, N and arms never change.
+  Any other `EVAL_PROTOCOL.md` change needs an ADR with a justification, and the
+  results report the deviation. This is the one statement of the rule.
 - **Code and a record disagree** and it's unclear which is right: ask me. Never
   make one match the other silently.
 
@@ -165,7 +166,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Phase:** 0 (foundations and pre-registration), in progress.
 - **Repo:** `jessicafalcon/docgap` on GitHub, private until the project is
   complete, then public. No branch protection (not available on a private repo).
-- **Merged:** #1 `build/tooling-and-ci` (as a merge commit, not a squash).
+- **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
+  now allows squash merges only, with the PR title as the commit title.
 - **Open PRs:** `docs/pr-template` (one PR template for every PR; inserted before PR 2).
 - **Phase 0 PR order** (approved; reviewer findings folded in):
   1. ~~`build/tooling-and-ci`~~ (#1).
