@@ -14,7 +14,7 @@ SRC = Path(__file__).parents[1] / "src"
 # with it in reach would score well for the wrong reason. The pattern also catches the
 # path split across a join, such as `Path("eval") / "reference"` or `joinpath("eval",
 # "reference")`; a path assembled from variables gets past it, which review catches.
-REFERENCE = re.compile(r"""\beval['")]*\s*[/\\.,]\s*['"]*reference\b""")
+REFERENCE = re.compile(r"""\beval['")]*\s*[/\\.,]['"\s+]*reference\b""")
 
 
 def _eval_imports(tree: ast.AST) -> list[str]:
@@ -33,6 +33,7 @@ def _eval_imports(tree: ast.AST) -> list[str]:
         'open("eval/reference/dictionary.csv")',
         'Path("eval") / "reference"',
         'root.joinpath("eval", "reference")',
+        '"eval/" + "reference"',
         "eval.reference.labels",
         "eval\\reference\\codes.xls",
     ],
