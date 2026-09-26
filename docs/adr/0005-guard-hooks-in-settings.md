@@ -27,7 +27,9 @@ ran in that session. Where must a hook be registered to be sure it runs?
 Chosen option: **option 3**, because the settings registration survives an
 untrusted folder, and the frontmatter backup still blocks if a payload arrives
 without `agent_type`. The rule is general: any hook that must always run is
-registered in `.claude/settings.json`, whatever else registers it.
+registered in `.claude/settings.json`, whatever else registers it. A later
+release that runs frontmatter hooks in untrusted folders doesn't remove the
+settings registration.
 
 ### Consequences
 
@@ -36,10 +38,10 @@ registered in `.claude/settings.json`, whatever else registers it.
 - Bad, because the allowlist starts a Python process on every Bash call in
   every session, including the main one, where it exits without checking.
 - Bad, because two registrations must change together. Any change to the
-  allowlist's registration must land in all of:
+  allowlist's registration or to a review agent's name must land in all of:
   - `.claude/settings.json`
   - `.claude/agents/docgap-reviewer.md`
   - `.claude/agents/docgap-coherence-auditor.md`
+  - `REVIEW_AGENTS` in `.claude/hooks/reviewer_bash_allowlist.py`
   - `tests/hooks/test_reviewer_bash_allowlist.py`
-- The behavior was observed on 2.1.283. A later release that runs frontmatter
-  hooks in untrusted folders doesn't remove the settings registration.
+  - the `reviewer_bash_allowlist` row of the hooks table in `CLAUDE.md`

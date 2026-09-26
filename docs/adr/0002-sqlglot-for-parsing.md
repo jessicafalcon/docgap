@@ -32,7 +32,7 @@ deterministically. `ACCESS_HISTORY` stays as a cross-check on successful
 queries (target agreement ≥ 95%), and `query_parameterized_hash` as a
 cross-check on fingerprints. Neither can be the source: both need the warehouse,
 and `ACCESS_HISTORY` needs Enterprise edition and has no column record for a
-failed query. sqlparse has no schema or scope resolution, so it can't expand
+query that errored in Snowflake. sqlparse has no schema or scope resolution, so it can't expand
 `*` or tell which table an unqualified column belongs to.
 
 ### Consequences
@@ -45,5 +45,5 @@ failed query. sqlparse has no schema or scope resolution, so it can't expand
   resolve rates, and unparseable queries are counted with a reason, never
   dropped.
 - Bad, because a sqlglot upgrade can change normalized SQL and therefore
-  fingerprints. It is pinned exactly in `uv.lock` when added, and a version bump
-  is a change to the core's inputs, checked by the determinism tests.
+  fingerprints, and `uv lock --upgrade` can move it. The golden-file tests catch
+  a changed output.

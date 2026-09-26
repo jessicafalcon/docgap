@@ -180,8 +180,9 @@ updated, open risks, next step.
 Update after every PR and merge, in the same change. A new session resumes from here.
 
 - **Phase:** 0 (foundations and pre-registration), in progress.
-- **Repo:** `jessicafalcon/docgap` on GitHub, private until the project is
-  complete, then public. No branch protection (not available on a private repo).
+- **Repo:** `jessicafalcon/docgap` on GitHub, private until the `preregistered`
+  tag, then public (ADR 0004). No branch protection until then (not available on
+  this private repo).
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3).
@@ -196,8 +197,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `-F` and `--body-file` files, `git -C`; the review agents' allowlist runs from
     settings, requires `uv run --frozen` and blocks file-writing flags.
   - **PR 4:** `docs/decision-log`. ADR template with Status and Superseded-by;
-    first records, including repo visibility (private until complete, then public)
-    and hooks that must always run living in `.claude/settings.json` (an untrusted
+    first records, including repo visibility (private until the `preregistered`
+    tag, then public) and hooks that must always run living in `.claude/settings.json` (an untrusted
     folder skips agent frontmatter hooks without a message).
   - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
     `RunManifest` splits a canonical part from an operational part.
@@ -214,8 +215,11 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
   (arm membership unchanged, recommended) or absorb the flagged band;
   (b) report delivered drafts per arm next to the headline (recommended);
-  (c) how the `preregistered` tag's date is made checkable while the repo is
-  private (ADR 0004).
+  (c) how the repo's going public at the `preregistered` tag is recorded for
+  later readers (ADR 0004).
+- **Open for PR 5:** whether `RunManifest` records the `uv.lock` hash, so a
+  dependency bump that changes outputs (sqlglot, ADR 0002) shows as a changed
+  input rather than only as a failed golden test.
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
 - **Next step:** PR 5 `feat/contracts`, after `docs/decision-log` merges.
