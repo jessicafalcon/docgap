@@ -113,7 +113,7 @@ disagree with the code or a record and can't tell which is right, they mark it
 
 | Hook | Fires on | When it reports |
 |---|---|---|
-| `private-terms-guard` | Before any write in the repo, and before commits, tags, PR/issue/release text | Blocked. Rewrite without the term: describe the fact itself, not its source. The list lives in the gitignored `.claude/private-terms.local`. |
+| `private-terms-guard` | Before any write in the repo, and before commits, tags, PR/issue/release text (until PR 3, not files outside the repo or `-F`/`--body-file` contents) | Blocked. Rewrite without the term: describe the fact itself, not its source. The list lives in the gitignored `.claude/private-terms.local`. |
 | `ruff-on-edit` | After editing a `*.py` file | Fix any unresolved lint it prints before the next edit. |
 | `determinism-guard` | After editing core `src/docgap/*.py` (not `llm/`, `cli.py`, tests) | Inject the value as a parameter (`as_of`, seed, config), wrap listings in `sorted()`, use `hashlib`, or move the code to `llm/` or `cli.py`. Pre-commit runs the same check. |
 | `reviewer_bash_allowlist` | Shell commands inside the two review agents | Keeps them read-only. Not used in the main session. |
@@ -131,7 +131,6 @@ code is lost to the next session, and the review agents treat it as a finding.
 | Why a non-obvious choice was made, and what else was considered | `docs/adr/NNNN-*.md` |
 | Evaluation rules, frozen at the `preregistered` tag | `docs/EVAL_PROTOCOL.md` |
 | How code, tests and prose are written | `.claude/skills/docgap-*` |
-| The sections of every PR body | `.github/pull_request_template.md` (rules per section in `docgap-pr`) |
 | What a user sees: quickstart, results (generated), limits | `README.md` |
 
 - **A step lands:** tick its checkbox in the brief; move "Current status".
@@ -169,9 +168,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Merged:** #1 `build/tooling-and-ci` (as a merge commit, not a squash).
 - **Open PRs:** `docs/pr-template` (one PR template for every PR; inserted before PR 2).
 - **Phase 0 PR order** (approved; reviewer findings folded in):
-  1. ~~`build/tooling-and-ci`~~ merged (#1): uv, ruff, pyright (`src`, `tests`), pytest with a
-     smoke test and blocked sockets, pre-commit, CI with no secrets and a
-     full-history `gitleaks git` step.
+  1. ~~`build/tooling-and-ci`~~ (#1).
   2. `fix/determinism-guard-receivers`: flag listings and `.sample()` on any
      receiver, plus `os.getcwd()` and `Path.cwd()`; tests for every rule.
   3. `fix/private-terms-coverage`: staged files, commit messages, `-F` and
