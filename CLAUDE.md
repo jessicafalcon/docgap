@@ -148,6 +148,9 @@ code is lost to the next session, and the review agents treat it as a finding.
 | What a user sees: quickstart, results (generated), limits | `README.md` |
 
 - **A step lands:** tick its checkbox in the brief; move "Current status".
+- **Work owed by a later step** (found while building another): a line in the
+  brief step that owes it, in the same PR. "Current status" holds only the
+  decisions open for the next PRs.
 - **A decision is taken:** write an ADR, write the outcome into every part of the
   brief it affects (as the current design, not as a change), and remove it from
   "Open decisions".
@@ -186,8 +189,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
-  #5 `docs/decision-log` (PR 4).
-- **Open PRs:** `feat/contracts` (PR 5).
+  #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5).
+- **Open PRs:** `feat/config` (PR 6).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -201,7 +204,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
     first records, including repo visibility (private until the `preregistered`
     tag, then public) and hooks that must always run living in `.claude/settings.json` (an untrusted
     folder skips agent frontmatter hooks without a message).
-  - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
+  - **PR 5:** ~~`feat/contracts`~~ (#6). `models.py`, one committed schema per contract;
     `RunManifest` splits a canonical part from an operational part; the run's
     setup (environment, config sections, call sites) has its own hash, used for
     arm parity and resume (ADR 0006).
@@ -223,9 +226,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Open for PR 6:** `RunSetup.config` hashes config per section, but the
   brief (lines 165, 314, 385) and the resilience `run_id` rule say "config
   hash". Either add a whole-config hash or restate those lines per section.
-- **Owed by Phase 5:** a model call that fails (timeout, refusal) must replay
-  offline, so the cache stores failure outcomes, not only responses; the
-  evidence stage checks that `Profile.k` equals the configured *k*.
-- **Owed by the first local fake server** (fault-injection tests): a test that a Unix
-  socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PR 6 `feat/config`, after `feat/contracts` merges.
+- **Next step:** PR 6 `feat/config`, in progress.
