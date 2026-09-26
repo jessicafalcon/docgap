@@ -26,8 +26,9 @@ delegation is about **context**, not price.
   stage's failure handling, a sweep of Snowflake docs). A known file or symbol is
   a direct read. A subagent re-reads context from scratch and costs a full Opus
   pass; it pays only when it keeps many tokens out of the main thread.
-- **A fresh agent costs ~50k tokens before it reads a changed line** (measured on
-  #1 and #2: brief, `CLAUDE.md` and skills). The count of agents drives cost, not
+- **A fresh agent costs ~40–65k tokens on a small diff** (the agents' usage
+  reports on #1 and #2, diffs of 220–370 lines), mostly reading the brief,
+  `CLAUDE.md` and skills. The count of agents drives cost, not
   the diff size. Hence the gate sized by PR type (`CLAUDE.md`), one agent for all
   cleanup angles, no automatic re-review, and prompts that name the brief lines to
   read instead of the whole brief.
@@ -56,8 +57,9 @@ the context (system prompt, CLAUDE.md, tool list) across turns.
   already records.
 - Don't re-read a file you just edited to "verify"; the harness tracks it.
   Don't re-derive a convention; invoke the skill that states it.
-- At a breakpoint (a PR merged, exploration finished before implementation),
-  hand the maintainer a kickoff prompt for a fresh session instead of compacting.
+- When the session has grown long, at a breakpoint (usually right after a merge),
+  hand the maintainer a kickoff prompt for a fresh session instead of continuing
+  or compacting.
   "Current status" in `CLAUDE.md` must be enough to resume from.
 
 ## Runtime

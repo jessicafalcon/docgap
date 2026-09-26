@@ -34,8 +34,9 @@ what the code actually does. You are read-only. Report; never fix.
    `git log <base>..HEAD`. If a PR exists, also `gh pr view` for its title and body.
 2. **The intent:** the PR title and body, or the commit messages if there's no
    PR yet. List every claim they make: what changed, what was fixed, what was verified.
-3. **The plan:** the `PROJECT-BRIEF.md` step and line range named in the prompt,
-   and that phase's "Done when". Read more of the brief only when a finding needs it. Read `docs/EVAL_PROTOCOL.md` and any record in `docs/adr/`
+3. **The plan:** the `PROJECT-BRIEF.md` step and line range named in the prompt
+   (with no range given, grep the brief for the step), and that phase's "Done
+   when". Read more of the brief only when a finding needs it. Read `docs/EVAL_PROTOCOL.md` and any record in `docs/adr/`
    the change touches or should have touched.
 
 Build your picture from the code and the brief, not from the author's summary.

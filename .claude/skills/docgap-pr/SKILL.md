@@ -11,9 +11,11 @@ description: >
 
 ## One change per PR
 
-A PR carries **one behaviour change**: a fix, a feature, a refactor, or a
-dependency bump. Size follows the change, from a one-line fix to a 40-file
-feature, but never two unrelated changes. A phase of the brief is usually several
+A PR carries **one coherent change**: a fix, a feature, a refactor, a
+dependency bump, or related changes to the same area that land together (two
+fixes to the guard hooks). Size follows the change, from a one-line fix to a
+40-file feature, but never two unrelated changes: each gate run costs tokens, so
+batch what belongs together and split what doesn't. A phase of the brief is usually several
 PRs, merged in the phase's step order.
 
 - A fix found while building something else is its own PR, or a follow-up PR

@@ -56,25 +56,29 @@ the file is the current standard, and memory of it may be stale.
 | **Before each commit** | `uv run pytest` and `uv run pre-commit run --all-files` | Commit only when both are green |
 | **Reading across many files or pages** where only the conclusion matters | Skill `docgap-efficiency`, then a subagent | Keep the conclusion, not the dumps |
 | **A result comes back shallow** (a missed finding, a weak root cause, a hand-wavy estimate) | Raise effort from `high` to `xhigh` for that task only | Back to `high` after; `high` is the default for everything, agents included |
-| **A breakpoint** in a long session (a PR merged, exploration done) | Give me a kickoff prompt for a fresh session | I start the new session; no `/compact`. Never mid-task |
+| **A breakpoint** when the session has grown long (usually right after a merge) | Give me a kickoff prompt for a fresh session instead of continuing | I start the new session; no `/compact`. Never mid-task |
 | **Before opening a PR** | The pre-PR gate below | |
-| **After each PR and each merge** | Update "Current status" | In the same change |
+| **After each PR and each merge** | Update "Current status" | In the PR itself; after a merge, in the next PR's first commit |
 | **A durable, non-obvious fact** learned (a vendor limit, a user preference) | Project memory | Not what the repo or git history already records |
 
 ### The pre-PR gate
 
-In this order. Stop at the first step that fails, fix, and restart from there.
+In this order. Stop at the first step that fails, fix, and restart from there;
+after any fix, step 1 always runs again.
 
 1. `uv run pytest` and `uv run pre-commit run --all-files` are green. If `infra/`
    changed: `terraform fmt -check && terraform validate`. If `warehouse/` changed:
    `dbt parse` and `docgap lint`.
 2. Cleanup review with the four `/simplify` angles (reuse, simplification,
-   efficiency, altitude), sized to the PR; fix or answer the findings:
-   - **Docs or process only:** skip it; the auditor in step 3 covers duplication.
-   - **Config or tooling:** run the four angles yourself, no subagents.
-   - **Code in `src/` or `eval/`:** one subagent covering all four angles.
+   efficiency, altitude), sized by what the PR changes; fix or answer the findings:
+   - **Docs only** (every changed path is `*.md`): skip it; the auditor in step 3
+     covers duplication.
+   - **Code** (any changed `*.py`, `*.sql`, `*.tf` or dbt YAML, hooks included):
+     one subagent covering all four angles.
+   - **Anything else** (config, CI, settings): run the four angles yourself, no
+     subagents.
 3. The review agent for this PR:
-   - **Code changed:** `@agent-docgap-reviewer` on the branch.
+   - **Not docs only:** `@agent-docgap-reviewer` on the branch.
    - **Docs only** (every changed path is `*.md`): `@agent-docgap-coherence-auditor`,
      scoped to the changed docs.
    - **Last PR of a phase:** also `@agent-docgap-coherence-auditor` over the whole repo.
@@ -82,13 +86,14 @@ In this order. Stop at the first step that fails, fix, and restart from there.
    Give the agent the diff range, the brief step's line range and the rules at
    stake; it reads further only when a finding needs it.
 4. Fix or answer every blocker and major finding, and verify each fix yourself.
-   Re-run the agent only if a blocker needed a design change. Apply every record
+   Re-run the step 3 agent only if a blocker needed a design change. Apply every record
    update the agents list; bring me each one marked **decide**.
 5. Skill `docgap-pr` for the title and body, built from `.github/pull_request_template.md`;
    skill `docgap-voice` for the wording.
 6. "Current status" is moved forward in this PR.
 7. Push, open the PR, and **stop.** I review it; on my "merge", squash-merge it,
-   pull `main` and continue with the next step.
+   pull `main` and continue with the next step, or, if the session has grown long,
+   give me a kickoff prompt for a fresh one.
 
 A phase is done when its "Done when" holds **and** the whole-repo audit has no
 blockers, with its record updates applied.
@@ -116,7 +121,7 @@ disagree with the code or a record and can't tell which is right, they mark it
 | Agent | When | Scope |
 |---|---|---|
 | `docgap-reviewer` | Gate step 3, every code PR | The branch diff: coherence with the brief, records, invariants, failure design, tests |
-| `docgap-coherence-auditor` | Gate step 3: docs-only PRs, and the last PR of each phase | Whole repo: cross-artifact drift, architecture erosion, stale records, readiness for the next phase and the trial calendar |
+| `docgap-coherence-auditor` | Gate step 3: docs-only PRs, and the last PR of each phase | Docs-only PRs: the changed docs. Phase exit: the whole repo, for cross-artifact drift, architecture erosion, stale records, readiness for the next phase and the trial calendar |
 
 ## Hooks (automatic) and what to do when one fires
 
@@ -157,7 +162,8 @@ code is lost to the next session, and the review agents treat it as a finding.
 
 ## Git
 
-- One behaviour change per branch and PR (`<type>/<slug>`), squash-merged. A phase
+- One coherent change per branch and PR (`<type>/<slug>`), squash-merged: one
+  behaviour change, or related changes to the same area that land together. A phase
   is usually several PRs in step order. Start from an up-to-date `main`.
 - Branch commits are small and green; the PR title becomes the commit on `main`.
 - Confirm before force-push, history rewrite, creating the GitHub repo, or any
@@ -182,25 +188,27 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Open PRs:** `docs/lean-gate` (the gate sized by PR type; fewer, larger PRs).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
-  1. ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2) and
-     `docs/lean-gate`.
-  2–3. `fix/hooks`: the determinism guard flags listings and `.sample()` on any
-     receiver, plus `os.getcwd()` and `Path.cwd()`, with tests for every rule;
-     the private-terms guard covers staged files, commit messages, `-F` and
-     `--body-file` files, `git -C`. Then drop the `--body-file` caveats in the
-     hooks table and `docgap-pr` (Body).
-  4. `docs/decision-log`: ADR template with Status and Superseded-by; first records,
-     including repo visibility (private until complete, then public).
-  5. `feat/contracts`: `models.py`, one committed schema per contract;
-     `RunManifest` splits a canonical part from an operational part.
-  6. `feat/config`: `docgap.toml`, no defaults in code, canonical hash per section.
-  7. `docs/eval-protocol`: every brief item, plus pinned split, random-N pool,
-     N rounding, bootstrap settings, pilot fallthrough; devils-advocate first.
-  8–9. `chore/data`: first commit, CI fails if `src/` references
-     `eval/reference/`; then measured file facts with their commands,
-     `loader/sources.lock`, the dictionary in `eval/reference/`, months ADR.
-  10. `feat/offline-sample`: sampling by hashed dimension key, tests, ADR with
-      the output hash.
+  - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
+    and `docs/lean-gate`.
+  - **PRs 2–3:** `fix/hooks`. The determinism guard flags listings and `.sample()`
+    on any receiver, plus `os.getcwd()` and `Path.cwd()`, with tests for every
+    rule; the private-terms guard covers staged files, commit messages, `-F` and
+    `--body-file` files, `git -C`. Then drop the `--body-file` caveats in the
+    hooks table and `docgap-pr` (Body).
+  - **PR 4:** `docs/decision-log`. ADR template with Status and Superseded-by;
+    first records, including repo visibility (private until complete, then public).
+  - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
+    `RunManifest` splits a canonical part from an operational part.
+  - **PR 6:** `feat/config`. `docgap.toml`, no defaults in code, canonical hash
+    per section.
+  - **PR 7:** `docs/eval-protocol`. Every brief item, plus pinned split, random-N
+    pool, N rounding, bootstrap settings, pilot fallthrough; devils-advocate first.
+  - **PRs 8–9:** `docs/data-study`. First commit: CI fails if `src/` references
+    `eval/reference/`. Then measured file facts with their commands,
+    `loader/sources.lock`, the dictionary in `eval/reference/` (brief: "Study the
+    data dictionary", "Keep the dictionary out of the tool's reach"), months ADR.
+  - **PR 10:** `feat/offline-sample`. Sampling by hashed dimension key, tests, ADR
+    with the output hash.
 - **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
   (arm membership unchanged, recommended) or absorb the flagged band;
   (b) report delivered drafts per arm next to the headline (recommended).
