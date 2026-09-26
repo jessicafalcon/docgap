@@ -156,8 +156,10 @@ code is lost to the next session, and the review agents treat it as a finding.
   "Open decisions".
 - **A threshold, key or command changes:** update every record that states it.
 - **A new skill, agent, hook or command:** add it here, with when to invoke it.
-- **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms
-  and the agent model never change. Any other `EVAL_PROTOCOL.md` change needs an
+- **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
+  the agent model, and the values that pick the arms' content (the rank weight,
+  gate bands, *k*, seeds, and the model and prompt version at the attribution,
+  drafter and gate call sites) never change. Any other `EVAL_PROTOCOL.md` change needs an
   ADR with a justification, and the results report the deviation. Other files
   point here rather than restating the list.
 - **Code and a record disagree** and it's unclear which is right: ask me. Never
@@ -213,22 +215,19 @@ Update after every PR and merge, in the same change. A new session resumes from 
     no key outside a section, one hash per section into `RunSetup.config`. Runs
     compare by the setup hash, and the run ID is the as-of timestamp plus its
     first 8 hex digits (ADR 0007).
-  - **PR 7:** `docs/eval-protocol`. Every brief item, plus pinned split, random-N
-    pool, N rounding, bootstrap settings, pilot fallthrough; devils-advocate first.
+  - **PR 7:** `docs/eval-protocol` (open). `docs/EVAL_PROTOCOL.md`; ADR 0008
+    keeps the 25/15 split and states the detectable effect (about 28 points);
+    ADR 0009 re-runs the baseline with the arms and fixes what picks arm
+    content at the tag.
   - **PRs 8–9:** `docs/data-study`. First commit: CI fails if `src/` references
     `eval/reference/`. Then measured file facts with their commands,
     `loader/sources.lock`, the dictionary in `eval/reference/` (brief: "Study the
     data dictionary", "Keep the dictionary out of the tool's reach"), months ADR.
   - **PR 10:** `feat/offline-sample`. Sampling by hashed dimension key, tests, ADR
     with the output hash.
-- **Open for PR 7:** (a) the two-band fallback: merge "ready" and "confirm"
-  (arm membership unchanged, recommended) or absorb the flagged band;
-  (b) report delivered drafts per arm next to the headline (recommended);
-  (c) how the repo's going public at the `preregistered` tag is recorded for
-  later readers (ADR 0004); (d) whether the rank weight *w* is fixed at the
-  tag, since it picks the top-N columns (the rank step adds it to `docgap.toml`).
-  (e) baseline parity: the baseline runs in Phase 3, before later steps add
-  config and code, so its setup hash can't equal the Phase 6 arms' (brief line
-  171 vs 387). Re-run the baseline in the Phase 6 session (recommended) or
-  compare it on the agent's settings only.
-- **Next step:** PR 7 `docs/eval-protocol`.
+- **Open before the tag:** the brief's open decisions "Baseline docs rule" and
+  "Owner edits in the experiment" are written into the protocol at their
+  defaults (seeded 50%, unedited drafts); close them, or change the protocol,
+  before `preregistered`.
+- **Next step:** PR 7 `docs/eval-protocol` in review; then PRs 8–9
+  `docs/data-study`.
