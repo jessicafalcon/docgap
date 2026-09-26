@@ -20,7 +20,8 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_bash_allowlist.py\""
+          # Backup to the settings.json registration; see the hook's docstring.
+          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_bash_allowlist.py\" --enforce"
           timeout: 10
 ---
 
@@ -88,8 +89,9 @@ quality gates, locks.
 
 ## Pass 3: tests and checks
 
-Run `uv run pytest`, `uv run pyright` and `uv run ruff check`, plus
-`python3 .claude/hooks/determinism_guard.py` on the changed `src/docgap/` files.
+Run `uv run --frozen pytest`, `uv run --frozen pyright` and
+`uv run --frozen ruff check`, plus `python3 .claude/hooks/determinism_guard.py` on
+the changed `src/docgap/` files.
 Then apply `docgap-tests`: is every new behaviour and failure path pinned by a
 test that would fail if it broke? Name the missing test precisely.
 

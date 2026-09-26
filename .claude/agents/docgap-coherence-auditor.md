@@ -18,7 +18,8 @@ hooks:
     - matcher: "Bash"
       hooks:
         - type: command
-          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_bash_allowlist.py\""
+          # Backup to the settings.json registration; see the hook's docstring.
+          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_bash_allowlist.py\" --enforce"
           timeout: 10
 ---
 
