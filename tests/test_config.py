@@ -58,17 +58,14 @@ def test_every_key_is_required(path: tuple[str, ...]) -> None:
         DocgapConfig.model_validate(_without(_raw(), path))
 
 
-def test_key_outside_a_section_is_rejected(tmp_path: Path) -> None:
-    # A top-level key would sit in no section, so no section hash would cover it.
-    path = tmp_path / "docgap.toml"
-    path.write_text("k = 11\n" + CONFIG.read_text(encoding="utf-8"), encoding="utf-8")
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        load_config(path)
-
-
-def test_unknown_key_in_a_section_is_rejected() -> None:
+# A top-level key would sit in no section, so no section hash would cover it.
+@pytest.mark.parametrize("path", [("k",), ("gate", "flagged_max")], ids=".".join)
+def test_unknown_key_is_rejected(path: tuple[str, ...]) -> None:
     raw = _raw()
-    raw["gate"]["flagged_max"] = 0.2
+    table = raw
+    for key in path[:-1]:
+        table = table[key]
+    table[path[-1]] = 11
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         DocgapConfig.model_validate(raw)
 

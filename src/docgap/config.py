@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import tomllib
 from pathlib import Path
 from typing import Annotated, Self
@@ -15,16 +14,22 @@ from pydantic import (
     PositiveInt,
     RootModel,
     Strict,
-    StringConstraints,
     model_validator,
 )
 
-from docgap.models import Actor, Key, NonEmptyStr, Probability, canonical_json
+from docgap.models import (
+    CONTRACT_CONFIG,
+    Actor,
+    Key,
+    ModelSettings,
+    Probability,
+    RoleName,
+    canonical_sha256,
+)
 
 __all__ = [
     "ActorsConfig",
     "AgentConfig",
-    "CallSiteConfig",
     "CallSitesConfig",
     "DocgapConfig",
     "EvidenceConfig",
@@ -34,13 +39,10 @@ __all__ = [
     "load_config",
 ]
 
-# An unquoted Snowflake role name, uppercased as Snowflake stores it.
-RoleName = Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*$")]
-
 
 class _Section(BaseModel):
     # No field has a default: a key missing from the file fails loading.
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True, allow_inf_nan=False)
+    model_config = CONTRACT_CONFIG
 
 
 class SnapshotConfig(_Section):
@@ -93,14 +95,7 @@ class AgentConfig(_Section):
     row_cap: PositiveInt
 
 
-class CallSiteConfig(_Section):
-    """The pinned model and the sampling settings sent at one call site."""
-
-    model: NonEmptyStr
-    sampling: dict[Key, str | int | float | bool]
-
-
-class CallSitesConfig(RootModel[dict[Key, CallSiteConfig]]):
+class CallSitesConfig(RootModel[dict[Key, ModelSettings]]):
     """Call site name to its model settings."""
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -121,11 +116,11 @@ class DocgapConfig(_Section):
         """Hash each section's validated values, the entries of `RunSetup.config`.
 
         Values are hashed, not file bytes, so a comment, whitespace or key-order
-        edit changes nothing, and `1` and `1.0` for a float hash the same.
+        edit changes nothing, and `1` and `1.0` for a float field hash the same.
+        A `sampling` value keeps its TOML type, so there `1` and `1.0` differ.
         """
         return {
-            name: hashlib.sha256(canonical_json(getattr(self, name))).hexdigest()
-            for name in sorted(type(self).model_fields)
+            name: canonical_sha256(getattr(self, name)) for name in sorted(type(self).model_fields)
         }
 
 
