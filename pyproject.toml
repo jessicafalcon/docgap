@@ -48,6 +48,6 @@ max-line-length = 120
 "tests/**" = ["S101"]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", ".claude/hooks"]
 strict = ["src"]
 extraPaths = [".claude/hooks"]

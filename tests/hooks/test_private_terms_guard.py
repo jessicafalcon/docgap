@@ -76,6 +76,7 @@ def test_reads_are_not(root: Path, command: str) -> None:
         ("gh pr create --title t --body-file msg.txt", "msg.txt"),
         ('gh pr comment 3 -F "msg.txt"', "msg.txt"),
         ("gh release create v1 --notes-file msg.txt", "msg.txt"),
+        ("gh pr create -t t -Fmsg.txt", "msg.txt"),
     ],
 )
 def test_message_files_are_read(root: Path, command: str, name: str) -> None:

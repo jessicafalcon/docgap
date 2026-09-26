@@ -18,7 +18,6 @@ import ast
 import json
 import os
 import sys
-from collections.abc import Callable
 from pathlib import Path
 
 CORE_PREFIX = "src/docgap/"
@@ -88,11 +87,6 @@ def check_source(source: str, rel_path: str) -> list[str]:
     parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
     findings: list[str] = []
 
-    def resolve(dotted: str) -> str:
-        head, _, rest = dotted.partition(".")
-        full = names.get(head, head)
-        return f"{full}.{rest}" if rest else full
-
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             modules = (
@@ -107,7 +101,7 @@ def check_source(source: str, rel_path: str) -> list[str]:
                     )
         elif (
             isinstance(node, (ast.Attribute, ast.Name))
-            and resolve(_dotted(node) or "") == "os.environ"
+            and _resolve(_dotted(node) or "", names) == "os.environ"
         ):
             findings.append(
                 f"line {node.lineno}: environment read; pass configuration in explicitly"
@@ -117,7 +111,7 @@ def check_source(source: str, rel_path: str) -> list[str]:
             # `pl.read_parquet(p).sample(n=5)`) has no dotted name, but the method rules
             # below still apply to it.
             dotted = _dotted(node.func)
-            full = resolve(dotted) if dotted else ""
+            full = _resolve(dotted, names) if dotted else ""
             if full in FORBIDDEN_CALLS and not (
                 full in SORTABLE_CALLS and _in_sorted(node, parents)
             ):
@@ -135,7 +129,8 @@ def check_source(source: str, rel_path: str) -> list[str]:
                 elif (
                     method in SEEDED_METHODS
                     and not any(k.arg == "seed" for k in node.keywords)
-                    and not _is_seeded_receiver(node.func.value, seeded, resolve)
+                    and not _is_seeded_call(node.func.value, names)
+                    and _dotted(node.func.value) not in seeded
                 ):
                     findings.append(
                         f"line {node.lineno}: .{method}() without seed=; pass the seed from config"
@@ -143,29 +138,30 @@ def check_source(source: str, rel_path: str) -> list[str]:
     return sorted(set(findings), key=lambda f: int(f.split()[1].rstrip(":")))
 
 
+def _resolve(dotted: str, names: dict[str, str]) -> str:
+    """Qualify a dotted name through the imports (`dt.now` -> `datetime.datetime.now`)."""
+    head, _, rest = dotted.partition(".")
+    full = names.get(head, head)
+    return f"{full}.{rest}" if rest else full
+
+
+def _is_seeded_call(expr: ast.expr, names: dict[str, str]) -> bool:
+    """`random.Random(seed)` or `numpy.random.default_rng(seed)`, inline or assigned."""
+    if not isinstance(expr, ast.Call):
+        return False
+    dotted = _dotted(expr.func)
+    return dotted is not None and _is_seeded_rng(_resolve(dotted, names), expr)
+
+
 def _seeded_rng_names(tree: ast.Module, names: dict[str, str]) -> set[str]:
     """Names bound to a seeded RNG (`rng = random.Random(seed)`); their methods are fine."""
     bound: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-            dotted = _dotted(node.value.func) or ""
-            head, _, rest = dotted.partition(".")
-            full = f"{names.get(head, head)}.{rest}" if rest else names.get(head, head)
-            if _is_seeded_rng(full, node.value):
-                # A tuple or subscript target has no dotted name; leaving None out keeps
-                # an expression receiver from matching it later.
-                bound.update(name for target in node.targets if (name := _dotted(target)))
+        if isinstance(node, ast.Assign) and _is_seeded_call(node.value, names):
+            # A tuple or subscript target has no dotted name; leaving None out keeps an
+            # expression receiver from matching it later.
+            bound.update(name for target in node.targets if (name := _dotted(target)))
     return bound
-
-
-def _is_seeded_receiver(
-    receiver: ast.expr, seeded: set[str], resolve: Callable[[str], str]
-) -> bool:
-    """`rng.sample(...)` on a seeded name, or `random.Random(seed).sample(...)` inline."""
-    if isinstance(receiver, ast.Call):
-        dotted = _dotted(receiver.func)
-        return dotted is not None and _is_seeded_rng(resolve(dotted), receiver)
-    return _dotted(receiver) in seeded
 
 
 def _in_sorted(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:

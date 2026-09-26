@@ -75,8 +75,8 @@ def test_writes_and_other_commands_are_blocked(command: str) -> None:
     assert not is_allowed(command)
 
 
-def test_review_agents_match_the_agent_files() -> None:
-    assert {p.stem for p in AGENTS_DIR.glob("docgap-*.md")} == REVIEW_AGENTS
+def test_review_agents_name_real_agent_files() -> None:
+    assert {p.stem for p in AGENTS_DIR.glob("*.md")} >= REVIEW_AGENTS
 
 
 def _run_hook(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:

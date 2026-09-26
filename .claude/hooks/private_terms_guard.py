@@ -7,7 +7,7 @@ Two entry points, one term list:
   Write/Edit/MultiEdit, and Bash commands that publish text (git commit/tag/notes, also
   behind `git -C dir`; gh pr/issue create/edit/comment/review/merge/close; gh release
   create/edit), including the files they name with `-F`, `--file`, `--body-file` or
-  `--notes-file`. Exits 2 on a hit.
+  `--notes-file`. Exits 2 on a hit, or when a named file can't be read.
 - git hook through pre-commit (`FILE...`): the staged files at the pre-commit stage and
   the message file at the commit-msg stage. That covers what the Bash check can't see:
   files staged in the same command (`git add . && git commit`), `commit -a`, messages
@@ -25,21 +25,19 @@ import re
 import sys
 from pathlib import Path
 
-# A shell word: quoted, or up to the next space.
-_WORD = r"""(?:"[^"]*"|'[^']*'|\S+)"""
+# A shell word: unquoted characters and quoted strings, so a message passed in quotes is
+# one word and a flag named inside it is never read as a real flag.
+SHELL_WORD = re.compile(r"""(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])+""")
 # Only subcommands that publish text. Reads (`gh pr list`, `gh pr view`) stay unguarded.
 # git takes global options before the subcommand (`git -C dir -c k=v commit`).
 PUBLISHING_COMMAND = re.compile(
-    rf"\b(git(\s+(-[Cc]\s+{_WORD}|--[\w-]+(={_WORD})?))*\s+(commit|tag|notes)"
+    rf"\b(git(\s+(-[Cc]\s+{SHELL_WORD.pattern}|--[\w-]+(={SHELL_WORD.pattern})?))*\s+(commit|tag|notes)"
     r"|gh\s+(pr|issue)\s+(create|edit|comment|review|merge|close)"
     r"|gh\s+release\s+(create|edit))\b"
 )
 # A heredoc body is text, not words: its quotes need not balance. It is scanned as part
 # of the command; the flag search skips it.
 HEREDOC = re.compile(r"""(<<-?\s*(['"]?)(\w+)\2)([^\n]*)\n.*?^\t*\3$""", re.DOTALL | re.MULTILINE)
-# A shell word: unquoted characters and quoted strings, so a message passed in quotes is
-# one word and a flag named inside it is never read as a real flag.
-SHELL_WORD = re.compile(r"""(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"'])+""")
 # The flags that take the published text from a file, across git and gh.
 FILE_FLAGS = ("-F", "--file", "--body-file", "--notes-file")
 
@@ -61,17 +59,20 @@ def _unquote(word: str) -> str:
 
 
 def flag_values(command: str, flags: tuple[str, ...]) -> list[str]:
-    """Values given to `flags` in a shell command, as `flag VALUE` or `flag=VALUE`.
+    """Values given to `flags` in a shell command: `flag VALUE`, `flag=VALUE`, or `-FVALUE`.
 
-    >>> flag_values('gh pr create --title "use -F x" --body-file=b.md', ("-F", "--body-file"))
-    ['b.md']
+    >>> flag_values('gh pr create --title "use -F x" --body-file=b.md -Fc.md', ("-F", "--body-file"))
+    ['b.md', 'c.md']
     """
     words = SHELL_WORD.findall(HEREDOC.sub(r"\1\4", command))
+    short = tuple(f for f in flags if len(f) == 2)
     values: list[str] = []
     for i, word in enumerate(words):
         name, equals, value = word.partition("=")
         if name in flags and (equals or i + 1 < len(words)):
             values.append(_unquote(value if equals else words[i + 1]))
+        elif word.startswith(short) and len(word) > 2:  # attached short form, as gh accepts
+            values.append(_unquote(word[2:]))
     return values
 
 
@@ -116,6 +117,10 @@ def find_hits(texts: list[str], terms: list[re.Pattern[str]]) -> list[str]:
     return sorted({m.group(0) for text in texts for term in terms for m in term.finditer(text)})
 
 
+def _quoted(hits: list[str]) -> str:
+    return ", ".join(repr(h) for h in hits)
+
+
 def _blocked(what: str) -> None:
     print(
         f"private-terms-guard: blocked, {what}. These terms must not appear in repo files, "
@@ -139,7 +144,7 @@ def main() -> int:
                 continue
             hits = find_hits([path.read_text(encoding="utf-8", errors="replace")], terms)
             if hits:
-                report.append(f"{name} contains {', '.join(repr(h) for h in hits)}")
+                report.append(f"{name} contains {_quoted(hits)}")
         if report:
             _blocked("; ".join(report))
         return 1 if report else 0
@@ -160,7 +165,7 @@ def main() -> int:
     hits = find_hits(texts, terms)
     if not hits:
         return 0
-    _blocked(f"the text contains {', '.join(repr(h) for h in hits)}")
+    _blocked(f"the text contains {_quoted(hits)}")
     return 2
 
 
