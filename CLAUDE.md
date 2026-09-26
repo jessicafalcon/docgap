@@ -202,7 +202,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
     tag, then public) and hooks that must always run living in `.claude/settings.json` (an untrusted
     folder skips agent frontmatter hooks without a message).
   - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
-    `RunManifest` splits a canonical part from an operational part.
+    `RunManifest` splits a canonical part from an operational part, with the
+    environment that ran in the canonical part (ADR 0006).
   - **PR 6:** `feat/config`. `docgap.toml`, no defaults in code, canonical hash
     per section.
   - **PR 7:** `docs/eval-protocol`. Every brief item, plus pinned split, random-N
@@ -218,9 +219,6 @@ Update after every PR and merge, in the same change. A new session resumes from 
   (b) report delivered drafts per arm next to the headline (recommended);
   (c) how the repo's going public at the `preregistered` tag is recorded for
   later readers (ADR 0004).
-- **Open for PR 5:** whether `RunManifest` records the `uv.lock` hash, so a
-  dependency bump that changes outputs (sqlglot, ADR 0002) shows as a changed
-  input rather than only as a failed golden test.
 - **Owed by the first local fake server** (fault-injection tests): a test that a Unix
   socket and a marker-opted localhost server still work under `--disable-socket`.
-- **Next step:** PR 5 `feat/contracts`, in progress.
+- **Next step:** PR 6 `feat/config`, after `feat/contracts` merges.

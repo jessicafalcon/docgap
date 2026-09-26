@@ -43,7 +43,7 @@ The tool is a deterministic pipeline with three narrow model calls at the edges.
 - Read-only by construction: the tool's Snowflake role can't write, and changes reach the warehouse only through a reviewed pull request and dbt.
 - Least privilege, defined in Terraform: one role per job (load, transform, agent, audit). `ACCOUNTADMIN` appears only in the one-time `bootstrap.sql`, for the few objects only it can create.
 - Minimal exposure to the model: query literals are stripped before storage, and profiles are aggregates only. Values carried by fewer than *k* fact rows are suppressed, numeric min and max are clipped to the *k*-th value, and columns tagged sensitive get no sample values at all.
-- An audit trail per run: input hashes, git SHA, model versions, prompt hashes, thresholds and output hash in `run_manifest.json`.
+- An audit trail per run: input hashes, the environment that ran (Python, runtime dependencies, docgap's code), git SHA, model versions, prompt hashes, thresholds and output hash in `run_manifest.json`.
 
 **Coherence**
 
@@ -154,14 +154,14 @@ Every mart column carries `meta.owner` and `meta.sensitivity` (`public` | `inter
 
 **Redaction before storage.** Query text is normalized by sqlglot (literals become placeholders) before it touches disk, and raw text is never persisted. Snowflake's `query_parameterized_hash` serves as a cross-check on the fingerprints.
 
-**Audit record per run.** `run_manifest.json` holds run ID, git SHA, input hashes (snapshot, manifest, config), model IDs, prompt versions, cache hit rate, thresholds and output hashes. Two runs with equal input hashes must have equal output hashes; CI checks this.
+**Audit record per run.** `run_manifest.json` has a canonical part and an operational part (ADR 0006). The canonical part holds the as-of date, input hashes (snapshot, manifest, config per section), the environment (Python version, installed runtime dependencies, a hash of docgap's code), model IDs and prompt versions per call site, and per stage the output hashes, counts and gate values with their thresholds. The operational part holds run ID, git SHA, stage status and timings, cache hit rate and spend. Two runs with equal inputs must have equal canonical parts; CI checks this. The canonical hash is the one runs, arms and the pull request cite.
 
 ## Phase 0: Foundations and pre-registration
 
 Fix the rules before touching data, so no later result can be accused of being tuned. No Snowflake needed yet.
 
 - [x] **Create the repo.** Repo `docgap`, private until the `preregistered` tag, then public, MIT license, `uv init`, Python pinned in `.python-version`, ruff + pyright + pytest config, pre-commit with ruff and gitleaks. *Expect:* `uv run pytest` passes, with one smoke test pinning that sockets and DNS are blocked; CI is green.
-- [ ] **Write the data contracts first.** Pydantic models in `src/docgap/models.py`: `ColumnRef`, `QueryRecord`, `ColumnUsage`, `Grade`, `Attribution`, `EvidencePacket`, `Draft`, `GateResult`, `RankedGap`, `RunManifest`. Each has one Parquet or JSON schema. *Expect:* every later stage imports these types, so stage boundaries can't drift.
+- [x] **Write the data contracts first.** Pydantic models in `src/docgap/models.py`: `ColumnRef`, `QueryRecord`, `ColumnUsage`, `Grade`, `Attribution`, `EvidencePacket`, `Draft`, `GateResult`, `RankedGap`, `RunManifest`. Each has one JSON Schema committed in `src/docgap/schemas/`, and a test fails when it drifts from the model. *Expect:* every later stage imports these types, so stage boundaries can't drift.
 - [ ] **Create one config file.** `docgap.toml`: history window, role-to-actor mapping (agent/human), rank weights, *k* = 11, band thresholds, model IDs and sampling settings per call site, timeouts, split seed, random-arm seed. *Expect:* its hash goes into every run manifest; no magic numbers in code.
 - [x] **Start a decision log.** `docs/adr/`, one numbered record per choice, copied from `docs/adr/template.md`: status, context, options considered, the outcome and its consequences. A later record supersedes an earlier one; accepted records are never rewritten. The first records cover the Snowflake edition and trial timing, why sqlglot, why *k* = 11, repo visibility, and where guard hooks are registered; the months of data get theirs when "Study the data dictionary" settles them. *Expect:* reviewers see the reasoning, and later changes are explicit.
 - [ ] **Write the evaluation protocol.** `docs/EVAL_PROTOCOL.md` defines:
@@ -311,7 +311,7 @@ Here *u* = executions, *r* = attributed failure rate (0 until Phase 5), and *w* 
 
 - [ ] **Golden-file tests.** Fixture in → exact expected outputs checked into `tests/golden/`. *Expect:* any behaviour change shows as a diff in review.
 - [ ] **Property tests for determinism.** Shuffling input rows, or running twice, must give identical output hashes (hypothesis). *Expect:* order-dependence bugs caught before they reach a ranking.
-- [ ] **`run_manifest.json` from the first stage on.** Input hashes, config hash, git SHA, output hashes, counts (parsed, unresolved, unmanaged). *Expect:* every run is auditable, even before any model is involved.
+- [ ] **`run_manifest.json` from the first stage on.** The `RunManifest` contract: input hashes, config hash, environment, git SHA, output hashes, counts (parsed, unresolved, unmanaged). `cli.py` builds the environment from the installed packages and passes it in. *Expect:* every run is auditable, even before any model is involved.
 
 **Done when:** `docgap analyze --offline` reproduces the committed ranking byte for byte in CI, and the two coverage numbers appear in the report.
 
