@@ -1,7 +1,7 @@
 ---
 name: docgap-pr
 description: >
-  How pull requests are shaped in docgap: one behaviour change per PR, the title
+  How pull requests are shaped in docgap: one coherent change per PR, the title
   as the squash-merge commit, and what goes in each section of the PR template.
   Read this BEFORE writing a PR title or body (step 5 of the pre-PR gate in
   CLAUDE.md, which owns the gate itself). docgap-voice governs the wording.
@@ -11,9 +11,11 @@ description: >
 
 ## One change per PR
 
-A PR carries **one behaviour change**: a fix, a feature, a refactor, or a
-dependency bump. Size follows the change, from a one-line fix to a 40-file
-feature, but never two unrelated changes. A phase of the brief is usually several
+A PR carries **one coherent change**: a fix, a feature, a refactor, a
+dependency bump, or related changes to the same area that land together (two
+fixes to the guard hooks). Size follows the change, from a one-line fix to a
+40-file feature, but never two unrelated changes: each gate run costs tokens, so
+batch what belongs together and split what doesn't. A phase of the brief is usually several
 PRs, merged in the phase's step order.
 
 - A fix found while building something else is its own PR, or a follow-up PR
@@ -65,7 +67,7 @@ scans the text; it doesn't read `--body-file` contents.
 
 ## Before you push
 
-The pre-PR gate (checks, `/simplify`, which review agent, record updates, current
+The pre-PR gate (checks, cleanup review, which review agent, record updates, current
 status, then stop) is defined in `CLAUDE.md` → "The pre-PR gate", and only there,
 so the two can't drift. This skill covers the PR's shape. In the diff itself: no
 debug output, commented-out code or stray files, and a non-obvious line is
