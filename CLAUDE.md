@@ -189,8 +189,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
   now allows squash merges only, with the PR title as the commit title.
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
-  #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5).
-- **Open PRs:** `feat/config` (PR 6).
+  #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5), #7 `feat/config`
+  (PR 6).
+- **Open PRs:** `docs/eval-protocol` (PR 7).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -208,7 +209,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `RunManifest` splits a canonical part from an operational part; the run's
     setup (environment, config sections, call sites) has its own hash, used for
     arm parity and resume (ADR 0006).
-  - **PR 6:** `feat/config`. `docgap.toml` loaded by `config.py`: no defaults,
+  - **PR 6:** ~~`feat/config`~~ (#7). `docgap.toml` loaded by `config.py`: no defaults,
     no key outside a section, one hash per section into `RunSetup.config`. Runs
     compare by the setup hash, and the run ID is the as-of timestamp plus its
     first 8 hex digits (ADR 0007).
@@ -230,4 +231,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
   config and code, so its setup hash can't equal the Phase 6 arms' (brief line
   171 vs 387). Re-run the baseline in the Phase 6 session (recommended) or
   compare it on the agent's settings only.
-- **Next step:** PR 6 `feat/config` in review; then PR 7 `docs/eval-protocol`.
+- **Next step:** PR 7 `docs/eval-protocol`.
