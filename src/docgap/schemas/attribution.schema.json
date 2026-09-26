@@ -18,6 +18,8 @@
       "enum": [
         "timeout",
         "malformed_answer",
+        "refused",
+        "retries_exhausted",
         "budget_exhausted"
       ],
       "title": "FailureReason",

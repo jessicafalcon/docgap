@@ -34,6 +34,7 @@ from docgap.models import (
     RunCanonical,
     RunManifest,
     RunOperational,
+    RunSetup,
     Sensitivity,
     StageRecord,
     StageRun,
@@ -83,37 +84,47 @@ def _environment(**overrides: Any) -> Environment:
     return Environment(**(fields | overrides))
 
 
-def _manifest(environment: Environment | None = None, **operational: Any) -> RunManifest:
-    canonical = RunCanonical(
-        schema_version=1,
-        as_of=T0,
-        config={"rank": HASH},
-        environment=environment or _environment(),
-        call_sites={
+def _setup(**overrides: Any) -> RunSetup:
+    fields: dict[str, Any] = {
+        "schema_version": 1,
+        "config": {"rank": HASH, "snapshot": HASH},
+        "environment": _environment(),
+        "call_sites": {
             "drafter": CallSite(
                 model="claude-opus-5-5", prompt_version="v1", prompt_sha256=HASH, sampling={}
             )
         },
-        stages={
-            "snapshot": StageRecord(
-                inputs={"query_history": HASH},
-                outputs={"query_snapshot": HASH},
-                counts={"parsed": 118, "unparseable.syntax": 2},
-                gates={"parse_rate": GateCheck(value=0.98, threshold=0.9, passed=True)},
-            )
-        },
+    }
+    return RunSetup(**(fields | overrides))
+
+
+def _stage_record(setup: RunSetup) -> StageRecord:
+    return StageRecord(
+        setup_sha256=setup.sha256(),
+        inputs={"query_history": HASH},
+        outputs={"query_snapshot": HASH},
+        counts={"parsed": 118, "unparseable.syntax": 2},
+        gates={"parse_rate": GateCheck(value=0.98, threshold=0.9, passed=True)},
     )
+
+
+def _stage_run(**overrides: Any) -> StageRun:
+    fields: dict[str, Any] = {
+        "status": StageStatus.SUCCEEDED,
+        "started_at": T0,
+        "finished_at": T0 + timedelta(seconds=3),
+        "retries": 0,
+    }
+    return StageRun(**(fields | overrides))
+
+
+def _manifest(setup: RunSetup | None = None, **operational: Any) -> RunManifest:
+    setup = setup or _setup()
+    canonical = RunCanonical(setup=setup, as_of=T0, stages={"snapshot": _stage_record(setup)})
     fields: dict[str, Any] = {
         "run_id": "20260926-abcdef12",
         "git_sha": "a" * 40,
-        "stages": {
-            "snapshot": StageRun(
-                status=StageStatus.SUCCEEDED,
-                started_at=T0,
-                finished_at=T0 + timedelta(seconds=3),
-                retries=0,
-            )
-        },
+        "stages": {"snapshot": _stage_run()},
         "cache_hits": 0,
         "cache_misses": 0,
         "model_calls": 0,
@@ -129,6 +140,7 @@ def _query_record(**overrides: Any) -> QueryRecord:
         "role": "AGENT_READER",
         "actor": Actor.AGENT,
         "qid": "q01",
+        "repetition": 2,
         "succeeded": False,
         "normalized_sql": SQL,
         "fingerprint": hashlib.sha256(SQL.encode()).hexdigest(),
@@ -159,6 +171,7 @@ EXAMPLES: list[BaseModel] = [
         fingerprints_agent=4,
         fingerprints_human=0,
         questions=3,
+        runs=5,
     ),
     Grade(qid="q01", repetition=2, passed=False, reason=GradeReason.VALUE_MISMATCH),
     Attribution(
@@ -236,29 +249,74 @@ def test_query_record_rejects_a_fingerprint_of_other_sql() -> None:
         _query_record(normalized_sql="SELECT 1")
 
 
-def test_timestamps_must_be_utc() -> None:
-    paris = timezone(timedelta(hours=2))
-    with pytest.raises(ValidationError, match="must be in UTC"):
-        StageRun(
-            status=StageStatus.RUNNING, started_at=T0.astimezone(paris), finished_at=None, retries=0
-        )
+@pytest.mark.parametrize(
+    "started_at",
+    [T0.astimezone(timezone(timedelta(hours=2))), T0.replace(tzinfo=None)],
+    ids=["paris", "naive"],
+)
+def test_timestamps_must_be_utc(started_at: datetime) -> None:
+    with pytest.raises(ValidationError, match=r"UTC|timezone"):
+        _stage_run(started_at=started_at)
 
 
-def test_nan_is_rejected() -> None:
+@pytest.mark.parametrize(
+    "overrides",
+    [{"score": float("nan")}, {"score": float("inf")}, {"failure_rate": 1.5}],
+    ids=["nan", "inf", "probability-above-1"],
+)
+def test_out_of_range_numbers_are_rejected(overrides: dict[str, Any]) -> None:
+    fields: dict[str, Any] = {
+        "rank": 1,
+        "fqn": FQN,
+        "score": 1.0,
+        "executions": 1,
+        "failure_rate": 0.0,
+    }
     with pytest.raises(ValidationError):
-        RankedGap(rank=1, fqn=FQN, score=float("nan"), executions=1, failure_rate=0.0)
+        RankedGap(**(fields | overrides))
 
 
-def test_usage_rejects_more_fingerprints_than_executions() -> None:
-    with pytest.raises(ValidationError, match="cannot exceed executions"):
-        ColumnUsage(
-            fqn=FQN,
-            executions_agent=1,
-            executions_human=0,
-            fingerprints_agent=2,
-            fingerprints_human=0,
-            questions=1,
-        )
+@pytest.mark.parametrize("qid", ["q:01", "q/01", ".q01"], ids=["colon", "slash", "dot"])
+def test_qid_cannot_break_a_tag_or_a_path(qid: str) -> None:
+    with pytest.raises(ValidationError, match="qid"):
+        Grade(qid=qid, repetition=1, passed=True, reason=None)
+
+
+@pytest.mark.parametrize(
+    "overrides", [{"repetition": None}, {"qid": None}], ids=["no-repetition", "no-qid"]
+)
+def test_query_record_takes_qid_and_repetition_together(overrides: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="both or neither"):
+        _query_record(**overrides)
+
+
+def _usage(**overrides: Any) -> ColumnUsage:
+    fields: dict[str, Any] = {
+        "fqn": FQN,
+        "executions_agent": 4,
+        "executions_human": 1,
+        "fingerprints_agent": 2,
+        "fingerprints_human": 1,
+        "questions": 2,
+        "runs": 3,
+    }
+    return ColumnUsage(**(fields | overrides))
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"fingerprints_agent": 5}, "cannot exceed executions"),
+        ({"fingerprints_human": 2}, "cannot exceed executions"),
+        ({"questions": 4}, "questions <= runs"),
+        ({"runs": 5}, "runs <= agent executions"),
+    ],
+)
+def test_usage_distinct_counts_stay_within_executions(
+    overrides: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        _usage(**overrides)
 
 
 @pytest.mark.parametrize(("passed", "reason"), [(True, GradeReason.ERROR), (False, None)])
@@ -309,6 +367,10 @@ def test_attribution_records_a_failed_call_without_maps() -> None:
             "ordered by row count, then value",
         ),
         ({"min": 2.0, "max": 1.0}, "min cannot exceed max"),
+        (
+            {"top_values": (TopValue(value="A", rows=12), TopValue(value="A", rows=11))},
+            "must be distinct",
+        ),
     ],
 )
 def test_profile_enforces_k_and_order(overrides: dict[str, Any], message: str) -> None:
@@ -341,6 +403,17 @@ def test_draft_has_a_description_or_a_failure(
         Draft(fqn=FQN, evidence_sha256=HASH, description=description, unknowns=(), failure=failure)
 
 
+def test_failed_draft_has_no_unknowns() -> None:
+    with pytest.raises(ValidationError, match="no unknowns"):
+        Draft(
+            fqn=FQN,
+            evidence_sha256=HASH,
+            description=None,
+            unknowns=("currency",),
+            failure=FailureReason.REFUSED,
+        )
+
+
 def test_draft_description_is_at_most_200_characters() -> None:
     with pytest.raises(ValidationError, match="200"):
         Draft(fqn=FQN, evidence_sha256=HASH, description="x" * 201, unknowns=(), failure=None)
@@ -371,19 +444,50 @@ def test_environment_packages_are_sorted_and_unique(packages: tuple[str, ...]) -
         Environment(python="3.12.11", packages=packages, code_sha256=HASH)
 
 
-def test_stage_cannot_finish_before_it_starts() -> None:
-    with pytest.raises(ValidationError, match="cannot precede"):
-        StageRun(
-            status=StageStatus.SUCCEEDED,
-            started_at=T0,
-            finished_at=T0 - timedelta(seconds=1),
-            retries=0,
-        )
+@pytest.mark.parametrize("package", ["typing_extensions==4.15.0", "PyYAML==6.0.3"])
+def test_environment_package_names_are_normalized(package: str) -> None:
+    with pytest.raises(ValidationError, match="packages"):
+        Environment(python="3.12.11", packages=(package,), code_sha256=HASH)
 
 
-def test_canonical_stage_needs_an_operational_entry() -> None:
-    with pytest.raises(ValidationError, match=r"no operational entry: \['snapshot'\]"):
-        _manifest(stages={})
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"finished_at": T0 - timedelta(seconds=1)}, "cannot precede"),
+        ({"finished_at": None}, "running stage has no finished_at"),
+        ({"status": StageStatus.RUNNING}, "running stage has no finished_at"),
+    ],
+    ids=["before-start", "succeeded-unfinished", "running-finished"],
+)
+def test_stage_run_timing_matches_its_status(overrides: dict[str, Any], message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        _stage_run(**overrides)
+
+
+@pytest.mark.parametrize(
+    "stages",
+    [
+        {},
+        {"snapshot": _stage_run(status=StageStatus.RUNNING, finished_at=None)},
+        {"snapshot": _stage_run(status=StageStatus.FAILED)},
+    ],
+    ids=["missing", "running", "failed"],
+)
+def test_canonical_stage_must_have_finished(stages: dict[str, StageRun]) -> None:
+    with pytest.raises(ValidationError, match=r"recorded without finishing: \['snapshot'\]"):
+        _manifest(stages=stages)
+
+
+def test_skipped_stage_keeps_its_canonical_record() -> None:
+    assert _manifest(stages={"snapshot": _stage_run(status=StageStatus.SKIPPED)})
+
+
+def test_stage_recorded_under_another_setup_is_rejected() -> None:
+    # A resume after a dependency bump must re-run the stage, not relabel its output.
+    old = _setup()
+    new = _setup(environment=_environment(code_sha256="1" * 64))
+    with pytest.raises(ValidationError, match=r"another setup: \['snapshot'\]"):
+        RunCanonical(setup=new, as_of=T0, stages={"snapshot": _stage_record(old)})
 
 
 def test_canonical_hash_ignores_the_operational_part() -> None:
@@ -391,14 +495,41 @@ def test_canonical_hash_ignores_the_operational_part() -> None:
     assert rerun.canonical_sha256() == _manifest().canonical_sha256()
 
 
-def test_canonical_hash_changes_with_the_environment() -> None:
-    bumped = _environment(packages=("pydantic==2.13.5", "sqlglot==27.9.0"))
-    assert _manifest(bumped).canonical_sha256() != _manifest().canonical_sha256()
+def test_canonical_hash_ignores_key_order() -> None:
+    reordered = _setup(config={"snapshot": HASH, "rank": HASH})
+    assert _manifest(reordered).canonical_sha256() == _manifest().canonical_sha256()
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [
+        _environment(packages=("pydantic==2.13.5", "sqlglot==27.9.0")),
+        _environment(code_sha256="1" * 64),
+        _environment(python="3.12.12"),
+    ],
+    ids=["dependency", "code", "python"],
+)
+def test_setup_and_canonical_hashes_change_with_the_environment(environment: Environment) -> None:
+    moved = _manifest(_setup(environment=environment))
+    assert moved.canonical.setup.sha256() != _setup().sha256()
+    assert moved.canonical_sha256() != _manifest().canonical_sha256()
+
+
+def test_arms_share_a_setup_hash_despite_different_outputs() -> None:
+    # Arm parity compares the setup; outputs and as_of legitimately differ between arms.
+    setup = _setup()
+    other_arm = RunCanonical(
+        setup=setup,
+        as_of=T0 + timedelta(hours=2),
+        stages={"snapshot": _stage_record(setup).model_copy(update={"outputs": {"grades": HASH}})},
+    )
+    assert other_arm.setup.sha256() == _manifest().canonical.setup.sha256()
+    assert other_arm != _manifest().canonical
 
 
 def test_canonical_hash_is_pinned() -> None:
     # Every run hash depends on the canonical bytes. A change to the serialization or
     # to the example shows here and must be deliberate.
     assert _manifest().canonical_sha256() == (
-        "6ef838f91b8ef4715f539790c5eb13ee563aebbebd882857543289023b234285"
+        "ad4dba7b7a9662a420dd590ffdecf994b534ab0680bc6a002c5b890f5e40b0f8"
     )

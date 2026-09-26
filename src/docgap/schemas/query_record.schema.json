@@ -43,6 +43,18 @@
       "title": "Query Id",
       "type": "string"
     },
+    "repetition": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Repetition"
+    },
     "role": {
       "pattern": "^[A-Z_][A-Z0-9_$]*$",
       "title": "Role",
@@ -64,6 +76,7 @@
     "role",
     "actor",
     "qid",
+    "repetition",
     "succeeded",
     "normalized_sql",
     "fingerprint"

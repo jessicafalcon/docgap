@@ -52,6 +52,7 @@ __all__ = [
     "RunCanonical",
     "RunManifest",
     "RunOperational",
+    "RunSetup",
     "Sensitivity",
     "StageRecord",
     "StageRun",
@@ -158,6 +159,8 @@ class FailureReason(StrEnum):
 
     TIMEOUT = "timeout"
     MALFORMED_ANSWER = "malformed_answer"
+    REFUSED = "refused"
+    RETRIES_EXHAUSTED = "retries_exhausted"
     BUDGET_EXHAUSTED = "budget_exhausted"
 
 
@@ -196,7 +199,9 @@ class QueryRecord(_Contract):
     start_time: UtcDatetime
     role: Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*$")]
     actor: Actor
+    # From the tag `agent:<run_id>:<qid>:<rep>`; both are None for untagged traffic.
     qid: Qid | None
+    repetition: PositiveInt | None
     succeeded: bool
     normalized_sql: NonEmptyStr
     fingerprint: Sha256
@@ -205,6 +210,8 @@ class QueryRecord(_Contract):
     def _fingerprint_is_hash_of_sql(self) -> Self:
         if hashlib.sha256(self.normalized_sql.encode()).hexdigest() != self.fingerprint:
             raise ValueError("fingerprint must be the SHA-256 of normalized_sql")
+        if (self.qid is None) != (self.repetition is None):
+            raise ValueError("qid and repetition come from one tag: both or neither")
         return self
 
 
@@ -218,7 +225,11 @@ class ColumnRef(_Contract):
 
 
 class ColumnUsage(_Contract):
-    """One row of `column_usage.parquet`: per-column counts, split by actor."""
+    """One row of `column_usage.parquet`: per-column counts, split by actor.
+
+    `runs` counts distinct agent runs (question and repetition) touching the column:
+    the denominator of the attributed failure rate.
+    """
 
     fqn: Fqn
     executions_agent: NonNegativeInt
@@ -226,14 +237,17 @@ class ColumnUsage(_Contract):
     fingerprints_agent: NonNegativeInt
     fingerprints_human: NonNegativeInt
     questions: NonNegativeInt
+    runs: NonNegativeInt
 
     @model_validator(mode="after")
-    def _fingerprints_within_executions(self) -> Self:
+    def _distinct_counts_within_executions(self) -> Self:
         if (
             self.fingerprints_agent > self.executions_agent
             or self.fingerprints_human > self.executions_human
         ):
             raise ValueError("distinct fingerprints cannot exceed executions")
+        if not self.questions <= self.runs <= self.executions_agent:
+            raise ValueError("need questions <= runs <= agent executions")
         return self
 
 
@@ -303,6 +317,8 @@ class Profile(_Contract):
     def _values_respect_k_and_order(self) -> Self:
         if any(top.rows < self.k for top in self.top_values):
             raise ValueError("every top value must be carried by at least k fact rows")
+        if len({top.value for top in self.top_values}) != len(self.top_values):
+            raise ValueError("top values must be distinct")
         if list(self.top_values) != sorted(self.top_values, key=lambda t: (-t.rows, t.value)):
             raise ValueError("top values must be ordered by row count, then value")
         if self.min is not None and self.max is not None and self.min > self.max:
@@ -311,7 +327,9 @@ class Profile(_Contract):
 
 
 class EvidencePacket(_Contract):
-    """Everything the drafter and the gate may see about one column."""
+    """The evidence for one column. `sensitivity` decides what the profile may hold;
+    the drafter and the gate see every other field.
+    """
 
     fqn: Fqn
     data_type: NonEmptyStr
@@ -344,11 +362,17 @@ class Draft(_Contract):
     def _description_or_failure(self) -> Self:
         if (self.description is None) == (self.failure is None):
             raise ValueError("either a description or a failure reason")
+        if self.failure is not None and self.unknowns:
+            raise ValueError("a failed draft has no unknowns")
         return self
 
 
 class GateResult(_Contract):
-    """The draft gate's support probability for one draft, and the band it sets."""
+    """The draft gate's support probability for one draft, and the band it sets.
+
+    A failed draft is not sent to the gate: its result carries the draft's failure
+    reason and the flagged band, so every gap has a band.
+    """
 
     fqn: Fqn
     draft_sha256: Sha256
@@ -379,10 +403,15 @@ class RankedGap(_Contract):
 
 
 class Environment(_Contract):
-    """What ran: the interpreter, the runtime dependency set and docgap's own files."""
+    """What ran: the interpreter, the runtime dependency set and docgap's own files.
+
+    Package names are normalized (PEP 503), so one package can't appear twice.
+    """
 
     python: Annotated[str, StringConstraints(pattern=r"^\d+\.\d+\.\d+$")]
-    packages: tuple[Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9._-]*==\S+$")], ...]
+    packages: tuple[
+        Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*==\S+$")], ...
+    ]
     code_sha256: Sha256
 
     @model_validator(mode="after")
@@ -410,9 +439,28 @@ class GateCheck(_Contract):
     passed: bool
 
 
-class StageRecord(_Contract):
-    """What one stage read and wrote, by canonical content hash, and what it counted."""
+class RunSetup(_Contract):
+    """What a run is set up with: arms and resumed stages must match it exactly."""
 
+    # Bump on any change to a contract's shape, and regenerate the committed schemas.
+    schema_version: Literal[1]
+    config: dict[Key, Sha256]
+    environment: Environment
+    call_sites: dict[Key, CallSite]
+
+    def sha256(self) -> str:
+        """Hash the setup; arm parity and "skip when done" compare this value."""
+        return hashlib.sha256(canonical_json(self)).hexdigest()
+
+
+class StageRecord(_Contract):
+    """What one stage read and wrote, by canonical content hash, and what it counted.
+
+    `setup_sha256` is the setup the stage ran under. A resumed run keeps a finished
+    stage only when it equals the current one.
+    """
+
+    setup_sha256: Sha256
     inputs: dict[Key, Sha256]
     outputs: dict[Key, Sha256]
     counts: dict[Key, NonNegativeInt]
@@ -422,18 +470,24 @@ class StageRecord(_Contract):
 class RunCanonical(_Contract):
     """The part of the manifest that equal inputs must reproduce byte for byte.
 
-    Config is hashed per section. The git SHA is operational: the arms run from
-    branches that differ only in dbt YAML, and a docs-only commit changes the SHA
-    without changing any output. `environment.code_sha256` pins the code instead.
+    The git SHA is operational: the arms run from branches that differ only in dbt
+    YAML, and a docs-only commit changes the SHA without changing any output.
+    `setup.environment.code_sha256` pins docgap's code instead.
     """
 
-    # Bump on any change to a contract's shape, and regenerate the committed schemas.
-    schema_version: Literal[1]
+    setup: RunSetup
     as_of: UtcDatetime
-    config: dict[Key, Sha256]
-    environment: Environment
-    call_sites: dict[Key, CallSite]
     stages: dict[Key, StageRecord]
+
+    @model_validator(mode="after")
+    def _stages_ran_under_this_setup(self) -> Self:
+        setup_sha256 = self.setup.sha256()
+        stale = sorted(
+            name for name, stage in self.stages.items() if stage.setup_sha256 != setup_sha256
+        )
+        if stale:
+            raise ValueError(f"stages recorded under another setup: {stale}")
+        return self
 
 
 class StageRun(_Contract):
@@ -445,7 +499,9 @@ class StageRun(_Contract):
     retries: NonNegativeInt
 
     @model_validator(mode="after")
-    def _finishes_after_start(self) -> Self:
+    def _finished_iff_not_running(self) -> Self:
+        if (self.finished_at is None) != (self.status is StageStatus.RUNNING):
+            raise ValueError("a running stage has no finished_at and any other stage has one")
         if self.finished_at is not None and self.finished_at < self.started_at:
             raise ValueError("finished_at cannot precede started_at")
         return self
@@ -470,14 +526,20 @@ class RunManifest(_Contract):
     operational: RunOperational
 
     @model_validator(mode="after")
-    def _canonical_stages_have_run(self) -> Self:
+    def _canonical_stages_finished(self) -> Self:
         # A stage writes its canonical record last, as its commit marker, so every
-        # recorded stage has an operational entry but not the other way round.
-        missing = sorted(set(self.canonical.stages) - set(self.operational.stages))
-        if missing:
-            raise ValueError(f"stages with no operational entry: {missing}")
+        # recorded stage has finished or was skipped as already done.
+        done = {StageStatus.SUCCEEDED, StageStatus.SKIPPED}
+        unfinished = sorted(
+            name
+            for name in self.canonical.stages
+            if name not in self.operational.stages
+            or self.operational.stages[name].status not in done
+        )
+        if unfinished:
+            raise ValueError(f"stages recorded without finishing: {unfinished}")
         return self
 
     def canonical_sha256(self) -> str:
-        """Hash the canonical part only; this is the hash runs and arms are compared by."""
+        """Hash the canonical part only: two runs of the same inputs must agree on it."""
         return hashlib.sha256(canonical_json(self.canonical)).hexdigest()

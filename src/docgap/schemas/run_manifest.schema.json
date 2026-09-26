@@ -53,7 +53,7 @@
     },
     "Environment": {
       "additionalProperties": false,
-      "description": "What ran: the interpreter, the runtime dependency set and docgap's own files.",
+      "description": "What ran: the interpreter, the runtime dependency set and docgap's own files.\n\nPackage names are normalized (PEP 503), so one package can't appear twice.",
       "properties": {
         "code_sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -62,7 +62,7 @@
         },
         "packages": {
           "items": {
-            "pattern": "^[a-z0-9][a-z0-9._-]*==\\S+$",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*==\\S+$",
             "type": "string"
           },
           "title": "Packages",
@@ -109,39 +109,15 @@
     },
     "RunCanonical": {
       "additionalProperties": false,
-      "description": "The part of the manifest that equal inputs must reproduce byte for byte.\n\nConfig is hashed per section. The git SHA is operational: the arms run from\nbranches that differ only in dbt YAML, and a docs-only commit changes the SHA\nwithout changing any output. `environment.code_sha256` pins the code instead.",
+      "description": "The part of the manifest that equal inputs must reproduce byte for byte.\n\nThe git SHA is operational: the arms run from branches that differ only in dbt\nYAML, and a docs-only commit changes the SHA without changing any output.\n`setup.environment.code_sha256` pins docgap's code instead.",
       "properties": {
         "as_of": {
           "format": "date-time",
           "title": "As Of",
           "type": "string"
         },
-        "call_sites": {
-          "patternProperties": {
-            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
-              "$ref": "#/$defs/CallSite"
-            }
-          },
-          "title": "Call Sites",
-          "type": "object"
-        },
-        "config": {
-          "patternProperties": {
-            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            }
-          },
-          "title": "Config",
-          "type": "object"
-        },
-        "environment": {
-          "$ref": "#/$defs/Environment"
-        },
-        "schema_version": {
-          "const": 1,
-          "title": "Schema Version",
-          "type": "integer"
+        "setup": {
+          "$ref": "#/$defs/RunSetup"
         },
         "stages": {
           "patternProperties": {
@@ -154,11 +130,8 @@
         }
       },
       "required": [
-        "schema_version",
+        "setup",
         "as_of",
-        "config",
-        "environment",
-        "call_sites",
         "stages"
       ],
       "title": "RunCanonical",
@@ -227,9 +200,50 @@
       "title": "RunOperational",
       "type": "object"
     },
+    "RunSetup": {
+      "additionalProperties": false,
+      "description": "What a run is set up with: arms and resumed stages must match it exactly.",
+      "properties": {
+        "call_sites": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "$ref": "#/$defs/CallSite"
+            }
+          },
+          "title": "Call Sites",
+          "type": "object"
+        },
+        "config": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "title": "Config",
+          "type": "object"
+        },
+        "environment": {
+          "$ref": "#/$defs/Environment"
+        },
+        "schema_version": {
+          "const": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "config",
+        "environment",
+        "call_sites"
+      ],
+      "title": "RunSetup",
+      "type": "object"
+    },
     "StageRecord": {
       "additionalProperties": false,
-      "description": "What one stage read and wrote, by canonical content hash, and what it counted.",
+      "description": "What one stage read and wrote, by canonical content hash, and what it counted.\n\n`setup_sha256` is the setup the stage ran under. A resumed run keeps a finished\nstage only when it equals the current one.",
       "properties": {
         "counts": {
           "patternProperties": {
@@ -269,9 +283,15 @@
           },
           "title": "Outputs",
           "type": "object"
+        },
+        "setup_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Setup Sha256",
+          "type": "string"
         }
       },
       "required": [
+        "setup_sha256",
         "inputs",
         "outputs",
         "counts",

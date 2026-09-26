@@ -94,7 +94,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Everything the drafter and the gate may see about one column.",
+  "description": "The evidence for one column. `sensitivity` decides what the profile may hold;\nthe drafter and the gate see every other field.",
   "properties": {
     "data_type": {
       "minLength": 1,
