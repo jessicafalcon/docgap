@@ -15,13 +15,6 @@ skills:
   - docgap-correctness
   - docgap-resilience
   - docgap-tests
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: command
-          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_bash_allowlist.py\""
-          timeout: 10
 ---
 
 You review one docgap branch before its PR is opened. You didn't write it, and
@@ -88,8 +81,9 @@ quality gates, locks.
 
 ## Pass 3: tests and checks
 
-Run `uv run pytest`, `uv run pyright` and `uv run ruff check`, plus
-`python3 .claude/hooks/determinism_guard.py` on the changed `src/docgap/` files.
+Run `uv run --frozen pytest`, `uv run --frozen pyright` and
+`uv run --frozen ruff check`, plus `python3 .claude/hooks/determinism_guard.py` on
+the changed `src/docgap/` files.
 Then apply `docgap-tests`: is every new behaviour and failure path pinned by a
 test that would fail if it broke? Name the missing test precisely.
 
