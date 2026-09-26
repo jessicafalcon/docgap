@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 from private_terms_guard import find_hits, flag_values, load_terms, texts_to_check
 
-GUARD = Path(__file__).parents[2] / ".claude" / "hooks" / "private_terms_guard.py"
+REPO = Path(__file__).parents[2]
+GUARD = REPO / ".claude" / "hooks" / "private_terms_guard.py"
 TERM = "zorblax"
 
 
@@ -55,6 +56,8 @@ def test_writes_outside_the_project_are_not(
         "git -C ../other commit -m 'x'",
         'git -C "dir with space" -c user.name=x commit -m "x"',
         "git --no-pager tag -a v1 -m 'x'",
+        "git -P notes add -m 'x'",
+        "git --git-dir .git tag -a v1 -m 'x'",
         "gh pr create --title x --body y",
         "gh release edit v1 --notes y",
     ],
@@ -77,6 +80,8 @@ def test_reads_are_not(root: Path, command: str) -> None:
         ('gh pr comment 3 -F "msg.txt"', "msg.txt"),
         ("gh release create v1 --notes-file msg.txt", "msg.txt"),
         ("gh pr create -t t -Fmsg.txt", "msg.txt"),
+        ("gh pr create -t t -dF msg.txt", "msg.txt"),
+        ("git commit -aF msg.txt", "msg.txt"),
     ],
 )
 def test_message_files_are_read(root: Path, command: str, name: str) -> None:
@@ -100,6 +105,26 @@ def test_message_file_resolves_against_git_dash_c(root: Path) -> None:
 def test_missing_message_file_fails_closed(root: Path) -> None:
     with pytest.raises(FileNotFoundError):
         _bash("gh pr create --body-file absent.md", root)
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["cat body.md | gh pr create --body-file -", "gh pr create -F - < body.md"],
+)
+def test_stdin_from_a_pipe_or_redirect_fails_closed(root: Path, command: str) -> None:
+    with pytest.raises(FileNotFoundError):
+        _bash(command, root)
+
+
+def test_double_quoted_variables_are_expanded(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BODY_DIR", str(root))
+    (root / "msg.txt").write_text("from a variable")
+    assert "from a variable" in _bash('gh pr create --body-file "$BODY_DIR/msg.txt"', root)
+
+
+def test_single_quoted_variables_are_not_expanded(root: Path) -> None:
+    with pytest.raises(FileNotFoundError, match=r"\$HOME"):
+        _bash("gh pr create --body-file '$HOME/msg.txt'", root)
 
 
 def test_stdin_message_is_not_a_file(root: Path) -> None:
@@ -166,6 +191,31 @@ def test_git_hook_mode_blocks_a_staged_file_or_message(root: Path) -> None:
     assert result.returncode == 1
     assert "COMMIT_EDITMSG contains 'ZORBLAX'" in result.stderr
     assert "clean.md" not in result.stderr
+
+
+def test_a_guard_crash_blocks(root: Path) -> None:
+    result = _run_guard(root, stdin="not json")
+    assert result.returncode == 2
+    assert "the guard failed" in result.stderr
+
+
+def test_git_hooks_run_the_guard_on_staged_files_and_messages() -> None:
+    config = (REPO / ".pre-commit-config.yaml").read_text()
+    assert "default_install_hook_types: [pre-commit, commit-msg]" in config
+    hook = config.split("id: private-terms")[1]
+    assert "private_terms_guard.py" in hook
+    assert "stages: [pre-commit, commit-msg]" in hook
+
+
+def test_settings_run_the_guard_before_writes_and_commands() -> None:
+    settings = json.loads((REPO / ".claude" / "settings.json").read_text())
+    matchers = [
+        entry["matcher"]
+        for entry in settings["hooks"]["PreToolUse"]
+        for hook in entry["hooks"]
+        if hook["command"].endswith('private_terms_guard.py"')
+    ]
+    assert matchers == ["Write|Edit|MultiEdit|Bash"]
 
 
 def test_without_a_terms_file_nothing_is_checked(tmp_path: Path) -> None:

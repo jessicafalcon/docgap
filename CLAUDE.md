@@ -127,10 +127,10 @@ disagree with the code or a record and can't tell which is right, they mark it
 
 | Hook | Fires on | When it reports |
 |---|---|---|
-| `private-terms-guard` | Before any write in the repo (not files outside it); before commits, tags and PR/issue/release text, with the files they name by `-F` or `--body-file`; and through pre-commit on staged files and every commit message | Blocked. Rewrite without the term: describe the fact itself, not its source. A named file it can't read blocks too: give an absolute path, not a variable set in the same command. The list lives in the gitignored `.claude/private-terms.local`. |
+| `private-terms-guard` | Before any write in the repo (not files outside it); before commits, tags and PR/issue/release text, with the files they name by `-F` or `--body-file`; and through pre-commit on staged files and every commit message | Blocked. Rewrite without the term: describe the fact itself, not its source. A named file it can't read blocks too: give an absolute path, not a variable set in the same command. A stdin body (`-F -`) is read only as a heredoc; piped or redirected stdin blocks. The list lives in the gitignored `.claude/private-terms.local`. |
 | `ruff-on-edit` | After editing a `*.py` file | Fix any unresolved lint it prints before the next edit. |
 | `determinism-guard` | After editing core `src/docgap/*.py` (not `llm/`, `cli.py`, tests) | Inject the value as a parameter (`as_of`, seed, config), wrap listings in `sorted()`, use `hashlib`, or move the code to `llm/` or `cli.py`. Pre-commit runs the same check. |
-| `reviewer_bash_allowlist` | Every Bash call; enforced only when `agent_type` is one of the two review agents | Keeps them read-only. Registered in `.claude/settings.json`, not agent frontmatter: Claude Code skips frontmatter hooks in an untrusted folder. |
+| `reviewer_bash_allowlist` | Every Bash call; enforced only when `agent_type` is one of the two review agents | Keeps them read-only. Registered in `.claude/settings.json`, because Claude Code skips agent frontmatter hooks in an untrusted folder, and in each review agent's frontmatter with `--enforce` as a backup. |
 
 ## Records: every change or decision updates its owner
 
@@ -196,7 +196,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `--body-file` files, `git -C`; the review agents' allowlist runs from
     settings, requires `uv run --frozen` and blocks file-writing flags.
   - **PR 4:** `docs/decision-log`. ADR template with Status and Superseded-by;
-    first records, including repo visibility (private until complete, then public).
+    first records, including repo visibility (private until complete, then public)
+    and hooks that must always run living in `.claude/settings.json` (an untrusted
+    folder skips agent frontmatter hooks without a message).
   - **PR 5:** `feat/contracts`. `models.py`, one committed schema per contract;
     `RunManifest` splits a canonical part from an operational part.
   - **PR 6:** `feat/config`. `docgap.toml`, no defaults in code, canonical hash

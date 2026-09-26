@@ -13,6 +13,14 @@ effort: high
 color: purple
 skills:
   - docgap-correctness
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          # Backup to the settings.json registration; see the hook's docstring.
+          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_bash_allowlist.py\" --enforce"
+          timeout: 10
 ---
 
 You audit whole-system coherence at a phase boundary of docgap. You are not a

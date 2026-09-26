@@ -29,6 +29,8 @@ AGENTS_DIR = Path(__file__).parents[2] / ".claude" / "agents"
         "git show HEAD:CLAUDE.md",
         "git branch --show-current",
         "gh pr view 4",
+        "git log --format='%h %s' HEAD@{1}",
+        'git log -S"quoted term" main..HEAD',
     ],
 )
 def test_checks_and_reads_are_allowed(command: str) -> None:
@@ -56,6 +58,20 @@ def test_checks_and_reads_are_allowed(command: str) -> None:
         "git diff --output=CLAUDE.md",
         "git diff --output CLAUDE.md main",
         "git log -p --output=x.patch",
+        "uv run --frozen ruff check --config fix=true .",
+        "uv run --frozen ruff check --cache-dir /tmp/x .",
+        "uv run --frozen pytest --override-ini cache_dir=src",
+        "uv run --frozen pytest -o cache_dir=src",
+        "uv run --frozen pytest -ocache_dir=src",
+        "uv run --frozen pytest -c other.ini",
+        "uv run --frozen pytest --rootdir=/",
+        # the shell strips quoting and expands these before the tool sees a flag
+        'uv run --frozen pytest "--basetemp=src"',
+        "git diff '--output=CLAUDE.md'",
+        "git diff \\--output=x",
+        "git diff ${IFS}--output=x",
+        "git diff {--output=x,}",
+        "git diff 'unbalanced",
         # chaining, redirection, substitution, a second line
         "git status; rm -rf src",
         "git diff main | head",
@@ -75,14 +91,34 @@ def test_writes_and_other_commands_are_blocked(command: str) -> None:
     assert not is_allowed(command)
 
 
-def test_review_agents_name_real_agent_files() -> None:
-    assert {p.stem for p in AGENTS_DIR.glob("*.md")} >= REVIEW_AGENTS
+def _frontmatter(agent: str) -> str:
+    return (AGENTS_DIR / f"{agent}.md").read_text().split("---")[1]
 
 
-def _run_hook(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
+@pytest.mark.parametrize("agent", sorted(REVIEW_AGENTS))
+def test_each_review_agent_registers_the_enforcing_backup(agent: str) -> None:
+    # `agent_type` carries the frontmatter name, not the file name.
+    frontmatter = _frontmatter(agent)
+    assert f"\nname: {agent}\n" in frontmatter
+    assert 'reviewer_bash_allowlist.py\\" --enforce' in frontmatter
+
+
+def test_settings_register_the_hook_for_every_bash_call() -> None:
+    # The registration that still runs in an untrusted folder, where frontmatter hooks don't.
+    settings = json.loads((HOOK.parents[1] / "settings.json").read_text())
+    commands = [
+        hook["command"]
+        for entry in settings["hooks"]["PreToolUse"]
+        if "Bash" in entry["matcher"].split("|")
+        for hook in entry["hooks"]
+    ]
+    assert any(c.endswith('reviewer_bash_allowlist.py"') for c in commands)
+
+
+def _run_hook(payload: dict[str, object] | str, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603 (fixed argv: this interpreter and the hook script)
-        [sys.executable, str(HOOK)],
-        input=json.dumps(payload),
+        [sys.executable, str(HOOK), *args],
+        input=payload if isinstance(payload, str) else json.dumps(payload),
         capture_output=True,
         text=True,
         check=False,
@@ -107,3 +143,14 @@ def test_hook_leaves_other_sessions_alone(agent_type: str | None) -> None:
     if agent_type:
         payload["agent_type"] = agent_type
     assert _run_hook(payload).returncode == 0
+
+
+def test_enforce_flag_blocks_without_agent_type() -> None:
+    result = _run_hook({"tool_input": {"command": "git status; echo hi"}}, "--enforce")
+    assert result.returncode == 2
+
+
+def test_a_hook_crash_blocks() -> None:
+    result = _run_hook("not json")
+    assert result.returncode == 2
+    assert "the hook failed" in result.stderr

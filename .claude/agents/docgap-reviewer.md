@@ -15,6 +15,14 @@ skills:
   - docgap-correctness
   - docgap-resilience
   - docgap-tests
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          # Backup to the settings.json registration; see the hook's docstring.
+          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/reviewer_bash_allowlist.py\" --enforce"
+          timeout: 10
 ---
 
 You review one docgap branch before its PR is opened. You didn't write it, and
