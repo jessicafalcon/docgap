@@ -13,9 +13,9 @@ src/docgap/        the tool: deterministic core + llm/ (the only model edge) + c
 eval/              questions + gold SQL, test agent, reference dictionary (never read by src/)
 warehouse/dbt/     dbt project over Open DAMIR (Snowflake and DuckDB profiles)
 infra/             bootstrap.sql (ACCOUNTADMIN, once) + terraform/
-loader/            download, checksum, stage, COPY
+loader/            download, checksum, stage, COPY; offline sample
 orchestration/     one Airflow DAG calling the CLI
-fixtures/          frozen snapshot, manifest, profiles, model cache (offline mode)
+fixtures/          DAMIR fixture, frozen snapshot, manifest, profiles, model cache (offline mode)
 tests/             unit, golden, determinism, integrity, fault injection
 docs/              EVAL_PROTOCOL.md, adr/, RESULTS.md (generated)
 .claude/           settings, hooks/, skills/, agents/
@@ -233,7 +233,11 @@ Update after every PR and merge, in the same change. A new session resumes from 
     in `loader/sources.lock`. Trends are read by processing month, questions
     name their month in words, and a gold query over 20 s on XS moves `WH_AGENT`
     and `WH_AUDIT` to S before the tag.
-  - **PR 10:** `feat/offline-sample`. Sampling by hashed dimension key, tests, ADR
-    with the output hash.
-- **Next step:** PR 10 `feat/offline-sample` (sampled within each processing
-  month), the last PR of Phase 0 (whole-repo audit at its gate).
+  - **PR 10:** `feat/offline-sample` (open). ADR 0013 keeps a source line when the
+    SHA-256 of its grain key (fields 1–16, 30–56) falls under 2⁶⁴ / 50:
+    2,141,851 rows in `data/sample/`, gitignored. The 1-in-5,000 subset,
+    21,245 rows, is committed in `fixtures/damir/`. `loader/offline_sample.py`
+    cuts both, and `loader/sample.lock` pins them. Gold queries are also checked
+    on the full three months in DuckDB before the trial (owed by Phase 3).
+- **Next step:** PR 10 in review, the last PR of Phase 0; after its merge, Phase 1
+  planning (the PR split goes through `devils-advocate`).

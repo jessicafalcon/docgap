@@ -96,7 +96,7 @@ The top row is a normal dbt-on-Snowflake setup. The bottom row is docgap; it rea
 docgap/
   infra/terraform/          # roles, grants, warehouses, service users
   warehouse/dbt/            # dbt project over Open DAMIR (models, YAML docs, tests)
-  loader/                   # download + checksum + PUT/COPY into RAW
+  loader/                   # download + checksum + PUT/COPY into RAW; offline sample
   eval/questions.yml        # pre-registered questions + gold SQL + split
   eval/agent/               # test agent (2 tools: list/describe, run_sql)
   src/docgap/
@@ -108,7 +108,7 @@ docgap/
     llm/                    # adapter client, prompts, cache, timeouts
     patch.py                # ruamel.yaml edits -> PR
     report.py               # report.md + run_manifest.json
-  fixtures/                 # frozen snapshot, manifest, cached responses
+  fixtures/                 # DAMIR fixture, frozen snapshot, manifest, cached responses
   orchestration/airflow/    # one DAG calling the CLI
   .github/workflows/        # CI
 ```
@@ -188,7 +188,9 @@ Fix the rules before touching data, so no later result can be accused of being t
 
   ADR 0012 loads three processing months, `A202501.csv.gz` to `A202503.csv.gz` (about 107M rows), and records the file facts later steps rely on, with the commands that measured them.
 
-- [ ] **Define the offline sample.** A deterministic slice of the three months, drawn within each processing month so all three appear (for example, rows whose hashed surrogate key falls under a threshold, about 2M rows in all) becomes the DuckDB dataset and the source of CI fixtures. The rule and its output hash go in the decision log. *Expect:* the offline world is small, reproducible and derived by rule, like everything else.
+- [x] **Define the offline sample.** A deterministic slice of the three months, drawn within each processing month so all three appear (about 2M rows in all), becomes the DuckDB dataset and the source of CI fixtures. The rule and its output hash go in the decision log. *Expect:* the offline world is small, reproducible and derived by rule, like everything else.
+
+  ADR 0013 keeps a source line when the SHA-256 of its dimension fields (the staging grain) falls under 2⁶⁴ / 50. `loader/offline_sample.py` cuts the sample into `data/sample/` (gitignored) and, at 1 in 5,000, the CI fixture into `fixtures/damir/`, a subset of the sample. `loader/sample.lock` pins every output's rows and SHA-256.
 - [x] **Keep the dictionary out of the tool's reach.** It is ground truth for grading drafts, stored in `eval/reference/` only; docgap never reads it. *Expect:* a CI check that `src/` never imports from `eval/reference/`: `tests/test_dictionary_isolation.py` fails on an `eval` import or on the path spelled anywhere under `src/`.
 
 **Done when:** repo, contracts, config, protocol and decision log are on `main`, CI is green, the months of data are chosen, and the offline sample is defined.
@@ -231,7 +233,7 @@ Every object and permission is declared in code, and a test proves each role can
 
 Build a small, realistic warehouse over Open DAMIR: 56-variable monthly reimbursement files, open licence, already anonymized. The docs start deliberately incomplete, by a recorded rule.
 
-**Offline first.** Everything in this phase except the Snowflake load, the live `dbt build` and the `persist_docs` check is built on `dbt-duckdb` over the offline sample before the trial starts. On Snowflake it's then one load evening and one build evening.
+**Offline first.** Everything in this phase except the Snowflake load, the live `dbt build` and the `persist_docs` check is built on `dbt-duckdb` over the offline sample before the trial starts. On Snowflake it's then one load evening and one build evening. The sample files keep the source's header and line format, so the DDL and the header check read them unchanged; the DuckDB load checks each one against `loader/sample.lock` first (ADR 0013).
 
 - [ ] **Write a pinned, checksummed loader.** `loader/sources.lock` lists each file's name, size and SHA-256, not its URL: download links carry a session token, so a pinned URL rots. The loader then:
   - resolves the token at download time
@@ -259,7 +261,7 @@ Create real agent traffic against the warehouse, grade it without a model, and f
 
 **Offline first.** The questions, grader, agent loop and pilot all run on DuckDB before the trial. Gold SQL is written in Snowflake SQL and transpiled to DuckDB with sqlglot, and the transpile is tested. In offline mode, the agent's `describe()` reads descriptions from the dbt manifest. On Snowflake, the phase is then the gold results, one baseline evening and the snapshot.
 
-- [ ] **Write 40 questions with gold SQL.** `eval/questions.yml` holds, per question: `id`, English text, `gold_sql`, `ordered` flag, category. Categories: optical, dental, pharmacy spend; by region, age bracket, provider type; month over month by processing month (`FLX_ANN_MOI`); care month versus processing month. Question text names the month it means in plain words ("reimbursed in", "care delivered in"), and a care-month total summed across processing months names January 2025 only, the one care month near complete in the loaded data: summed that way, February and March look like a drop that is only processing lag (ADR 0012). The columns each question needs are derived by running `resolve` on the gold SQL, not listed by hand. Each gold result is deterministic, with at most 200 rows and 5 columns, so the protocol's grader can match it. Budget 2–4 evenings: gold SQL over coded French columns is slow to get right. *Expect:* questions a business user would ask, answerable only from `MARTS`.
+- [ ] **Write 40 questions with gold SQL.** `eval/questions.yml` holds, per question: `id`, English text, `gold_sql`, `ordered` flag, category. Categories: optical, dental, pharmacy spend; by region, age bracket, provider type; month over month by processing month (`FLX_ANN_MOI`); care month versus processing month. Question text names the month it means in plain words ("reimbursed in", "care delivered in"), and a care-month total summed across processing months names January 2025 only, the one care month near complete in the loaded data: summed that way, February and March look like a drop that is only processing lag (ADR 0012). The columns each question needs are derived by running `resolve` on the gold SQL, not listed by hand. Each gold result is deterministic, with at most 200 rows and 5 columns, so the protocol's grader can match it. Before the trial, each gold query is also run on DuckDB over the three full months to check those rules: the offline sample keeps 1 row in 50 and drops rare codes, so a grouping that fits in 200 rows on it, or a top N without ties there, can break on the full data (ADR 0013). Budget 2–4 evenings: gold SQL over coded French columns is slow to get right. *Expect:* questions a business user would ask, answerable only from `MARTS`.
 - [ ] **Offline pilot: can docs move the number at all?** This is a go/no-go check, run before the trial with a few dollars of API spend.
   - Write 12 pilot questions, excluded from the 40, under the same month rules.
   - Run the agent on them on DuckDB, 3 repetitions each, in four configurations: {Haiku 4.5, Opus 5.5} × {no column docs, every column documented}.
