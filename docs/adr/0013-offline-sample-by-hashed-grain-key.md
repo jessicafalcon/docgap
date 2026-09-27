@@ -93,8 +93,9 @@ gzip -dc open_damir/A202501.csv.gz |
   and a changed source, rule or output fails before a file appears.
 - Good, because the sample keeps the source's format. The Phase 2 DDL and header
   check read it as they read the full files.
-- Good, because CI checks real rows: every fixture line passes the rule, and every
-  fixture file matches the lock.
+- Good, because CI checks real rows: every fixture line passes the rule, every
+  fixture file matches the lock, and from Phase 2 CI runs `dbt build` on DuckDB
+  over the fixture.
 - Bad, because the offline pilot and every gold result before the trial see 1 row in
   50 and fewer distinct codes. A grouping that fits in 200 rows on the sample can
   exceed it on the full data, and a top N can tie or reorder. Each gold query is

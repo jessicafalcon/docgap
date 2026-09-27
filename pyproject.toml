@@ -37,6 +37,8 @@ strict = true
 
 [tool.ruff]
 line-length = 100
+# Accepted decision records are never rewritten, and ruff would format their code blocks.
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "PT", "PTH", "DTZ", "S"]

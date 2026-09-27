@@ -239,6 +239,10 @@ Update after every PR and merge, in the same change. A new session resumes from 
     2,141,851 rows in `data/sample/`, gitignored. The 1-in-5,000 subset,
     21,245 rows, is committed in `fixtures/damir/`. `loader/offline_sample.py`
     cuts both, and `loader/sample.lock` pins them. Gold queries are also checked
-    on the full three months in DuckDB before the trial (owed by Phase 3).
-- **Next step:** PR 10 in review, the last PR of Phase 0; after its merge, Phase 1
-  planning (the PR split goes through `devils-advocate`).
+    on the full three months in DuckDB before the trial (owed by Phase 3), and CI
+    runs `dbt build` on DuckDB over the fixture (owed by Phase 2). ADR 0014: the
+    agent writes Snowflake SQL offline too, transpiled by sqlglot, and DuckDB
+    builds into `ANALYTICS.STAGING` and `ANALYTICS.MARTS`.
+- **Next step:** PR 10 in review, the last PR of Phase 0. After its merge, Phase 4
+  (the deterministic core on hand-made fixtures), per the brief's timeline: its PR
+  split goes through `devils-advocate`. Phase 1 waits for the offline pilot.
