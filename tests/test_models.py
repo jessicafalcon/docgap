@@ -86,7 +86,7 @@ def _environment(**overrides: Any) -> Environment:
 
 def _setup(**overrides: Any) -> RunSetup:
     fields: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "config": {"rank": HASH, "snapshot": HASH},
         "environment": _environment(),
         "call_sites": {
@@ -139,8 +139,11 @@ def _query_record(**overrides: Any) -> QueryRecord:
         "start_time": T0,
         "role": "AGENT_READER",
         "actor": Actor.AGENT,
+        "run_id": "20260926T180000Z-abcdef12",
         "qid": "q01",
         "repetition": 2,
+        "database_name": "ANALYTICS",
+        "schema_name": "MARTS",
         "succeeded": False,
         "normalized_sql": SQL,
         "fingerprint": hashlib.sha256(SQL.encode()).hexdigest(),
@@ -283,11 +286,17 @@ def test_qid_cannot_break_a_tag_or_a_path(qid: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "overrides", [{"repetition": None}, {"qid": None}], ids=["no-repetition", "no-qid"]
+    "overrides",
+    [{"repetition": None}, {"qid": None}, {"run_id": None}, {"qid": None, "repetition": None}],
+    ids=["no-repetition", "no-qid", "no-run-id", "run-id-only"],
 )
-def test_query_record_takes_qid_and_repetition_together(overrides: dict[str, Any]) -> None:
-    with pytest.raises(ValidationError, match="both or neither"):
+def test_query_record_takes_the_tag_fields_together(overrides: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="all or none"):
         _query_record(**overrides)
+
+
+def test_untagged_query_record_has_no_tag_fields() -> None:
+    assert _query_record(run_id=None, qid=None, repetition=None).qid is None
 
 
 def _usage(**overrides: Any) -> ColumnUsage:
@@ -531,5 +540,5 @@ def test_canonical_hash_is_pinned() -> None:
     # Every run hash depends on the canonical bytes. A change to the serialization or
     # to the example shows here and must be deliberate.
     assert _manifest().canonical_sha256() == (
-        "ad4dba7b7a9662a420dd590ffdecf994b534ab0680bc6a002c5b890f5e40b0f8"
+        "e6a18d886c6aa2f45b04908ba0092d015a3e65b39179ab8ad0bdefc852c61e3c"
     )

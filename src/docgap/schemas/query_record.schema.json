@@ -16,6 +16,18 @@
     "actor": {
       "$ref": "#/$defs/Actor"
     },
+    "database_name": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Z_][A-Z0-9_$]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Database Name"
+    },
     "fingerprint": {
       "pattern": "^[0-9a-f]{64}$",
       "title": "Fingerprint",
@@ -60,6 +72,30 @@
       "title": "Role",
       "type": "string"
     },
+    "run_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Run Id"
+    },
+    "schema_name": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Z_][A-Z0-9_$]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Schema Name"
+    },
     "start_time": {
       "format": "date-time",
       "title": "Start Time",
@@ -75,8 +111,11 @@
     "start_time",
     "role",
     "actor",
+    "run_id",
     "qid",
     "repetition",
+    "database_name",
+    "schema_name",
     "succeeded",
     "normalized_sql",
     "fingerprint"

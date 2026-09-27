@@ -80,9 +80,10 @@ def _require_utc(value: datetime) -> datetime:
 Fqn = Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*(\.[A-Z_][A-Z0-9_$]*){3}$")]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 GitSha = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{40}$")]
-# An unquoted Snowflake role name, uppercased as Snowflake stores it. The actor map
-# in config is matched against `QueryRecord.role`, so both use this one type.
-RoleName = Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*$")]
+# An unquoted Snowflake identifier, uppercased as Snowflake stores it.
+Identifier = Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_$]*$")]
+# The actor map in config is matched against `QueryRecord.role`, so both use this type.
+RoleName = Identifier
 # Question and run IDs appear in query tags (`agent:<run_id>:<qid>:<rep>`), paths
 # and branch names, so they hold no colon, slash or leading dot.
 Qid = RunId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
@@ -214,9 +215,15 @@ class QueryRecord(_Contract):
     start_time: UtcDatetime
     role: RoleName
     actor: Actor
-    # From the tag `agent:<run_id>:<qid>:<rep>`; both are None for untagged traffic.
+    # From the tag `agent:<run_id>:<qid>:<rep>`, all None for untagged traffic. The
+    # run ID keeps two agent runs of one question and repetition apart (ADR 0015).
+    run_id: RunId | None
     qid: Qid | None
     repetition: PositiveInt | None
+    # The session's database and schema at compilation: `resolve` qualifies an
+    # unqualified table name with them.
+    database_name: Identifier | None
+    schema_name: Identifier | None
     succeeded: bool
     normalized_sql: NonEmptyStr
     fingerprint: Sha256
@@ -225,8 +232,8 @@ class QueryRecord(_Contract):
     def _fingerprint_is_hash_of_sql(self) -> Self:
         if hashlib.sha256(self.normalized_sql.encode()).hexdigest() != self.fingerprint:
             raise ValueError("fingerprint must be the SHA-256 of normalized_sql")
-        if (self.qid is None) != (self.repetition is None):
-            raise ValueError("qid and repetition come from one tag: both or neither")
+        if len({self.run_id is None, self.qid is None, self.repetition is None}) != 1:
+            raise ValueError("run_id, qid and repetition come from one tag: all or none")
         return self
 
 
@@ -463,7 +470,7 @@ class RunSetup(_Contract):
     """What a run is set up with: arms and resumed stages must match it exactly."""
 
     # Bump on any change to a contract's shape, and regenerate the committed schemas.
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     config: dict[Key, Sha256]
     environment: Environment
     call_sites: dict[Key, CallSite]
