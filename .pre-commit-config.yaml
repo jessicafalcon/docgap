@@ -15,9 +15,9 @@ repos:
         args: ["--maxkb=5000", "--enforce-all"]
       - id: check-merge-conflict
       - id: check-toml
-        # `loader/sources.lock` is TOML, but its name doesn't get the toml file type.
+        # The `loader/*.lock` files are TOML, but their names don't get the toml file type.
         types: [text]
-        files: (\.toml|^loader/sources\.lock)$
+        files: (\.toml|^loader/(sources|sample)\.lock)$
       - id: check-yaml
       - id: end-of-file-fixer
       - id: trailing-whitespace

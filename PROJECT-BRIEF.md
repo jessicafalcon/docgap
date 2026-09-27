@@ -71,7 +71,7 @@ Five tools are core (Python, Snowflake, dbt, Terraform, Airflow), each with one 
 | system-one-adapter on Anthropic | The two typed judgments: failure attribution (Choice) and draft support (Noul) | A drop-in for the `system_one` API in typesafe-sdk, backed by Claude. The typed questions and response types are the SDK's own, so moving to the hosted client changes only client setup |
 | Anthropic API: Opus 5.5 (drafter, judgments); agent model chosen by the pilot | The description drafter, the two typed judgments, and the test agent that writes SQL | One provider keeps prompts and caching consistent. The low-volume calls whose quality is the product use the strongest model; the agent is the experiment's subject, so it's chosen for how clearly it shows the effect of docs |
 | Airflow (local, Docker Compose) | One weekly DAG: snapshot, analyze, open pull request | A scheduler most data teams already run; the DAG only calls the CLI, so logic stays testable outside Airflow |
-| GitHub Actions + `gh` | CI (lint, offline tests on fixtures, `dbt parse`, `terraform validate`) and opening pull requests | Where the team already reviews changes |
+| GitHub Actions + `gh` | CI (lint, offline tests on fixtures, `dbt parse`, `dbt build` on DuckDB over the DAMIR fixture, `terraform validate`) and opening pull requests | Where the team already reviews changes |
 | pytest, ruff, pyright | Tests, lint, types | Standard; CI must be green before anything is published |
 
 **Left out on purpose:**
@@ -96,7 +96,7 @@ The top row is a normal dbt-on-Snowflake setup. The bottom row is docgap; it rea
 docgap/
   infra/terraform/          # roles, grants, warehouses, service users
   warehouse/dbt/            # dbt project over Open DAMIR (models, YAML docs, tests)
-  loader/                   # download + checksum + PUT/COPY into RAW
+  loader/                   # download + checksum + PUT/COPY into RAW; offline sample
   eval/questions.yml        # pre-registered questions + gold SQL + split
   eval/agent/               # test agent (2 tools: list/describe, run_sql)
   src/docgap/
@@ -108,7 +108,7 @@ docgap/
     llm/                    # adapter client, prompts, cache, timeouts
     patch.py                # ruamel.yaml edits -> PR
     report.py               # report.md + run_manifest.json
-  fixtures/                 # frozen snapshot, manifest, cached responses
+  fixtures/                 # DAMIR fixture, frozen snapshot, manifest, cached responses
   orchestration/airflow/    # one DAG calling the CLI
   .github/workflows/        # CI
 ```
@@ -188,7 +188,9 @@ Fix the rules before touching data, so no later result can be accused of being t
 
   ADR 0012 loads three processing months, `A202501.csv.gz` to `A202503.csv.gz` (about 107M rows), and records the file facts later steps rely on, with the commands that measured them.
 
-- [ ] **Define the offline sample.** A deterministic slice of the three months, drawn within each processing month so all three appear (for example, rows whose hashed surrogate key falls under a threshold, about 2M rows in all) becomes the DuckDB dataset and the source of CI fixtures. The rule and its output hash go in the decision log. *Expect:* the offline world is small, reproducible and derived by rule, like everything else.
+- [x] **Define the offline sample.** A deterministic slice of the three months, drawn within each processing month so all three appear (about 2M rows in all), becomes the DuckDB dataset and the source of CI fixtures. The rule and its output hash go in the decision log. *Expect:* the offline world is small, reproducible and derived by rule, like everything else.
+
+  ADR 0013 keeps a source line when the SHA-256 of its dimension fields (the staging grain) falls under 2⁶⁴ // 50 (floor division). `loader/offline_sample.py` cuts the sample into `data/sample/` (gitignored) and, at 1 in 5,000, the CI fixture into `fixtures/damir/`, a subset of the sample. `loader/sample.lock` pins every output's rows and SHA-256.
 - [x] **Keep the dictionary out of the tool's reach.** It is ground truth for grading drafts, stored in `eval/reference/` only; docgap never reads it. *Expect:* a CI check that `src/` never imports from `eval/reference/`: `tests/test_dictionary_isolation.py` fails on an `eval` import or on the path spelled anywhere under `src/`.
 
 **Done when:** repo, contracts, config, protocol and decision log are on `main`, CI is green, the months of data are chosen, and the offline sample is defined.
@@ -231,13 +233,14 @@ Every object and permission is declared in code, and a test proves each role can
 
 Build a small, realistic warehouse over Open DAMIR: 56-variable monthly reimbursement files, open licence, already anonymized. The docs start deliberately incomplete, by a recorded rule.
 
-**Offline first.** Everything in this phase except the Snowflake load, the live `dbt build` and the `persist_docs` check is built on `dbt-duckdb` over the offline sample before the trial starts. On Snowflake it's then one load evening and one build evening.
+**Offline first.** Everything in this phase except the Snowflake load, the live `dbt build` and the `persist_docs` check is built on `dbt-duckdb` over the offline sample before the trial starts. On Snowflake it's then one load evening and one build evening. The sample files keep the source's header and line format, so the DDL and the header check read them unchanged (ADR 0013). The DuckDB profile builds into `ANALYTICS.STAGING` and `ANALYTICS.MARTS`, the names Snowflake uses, so column FQNs, the manifest and `resolve` are the same in both worlds (ADR 0014).
 
 - [ ] **Write a pinned, checksummed loader.** `loader/sources.lock` lists each file's name, size and SHA-256, not its URL: download links carry a session token, so a pinned URL rots. The loader then:
-  - resolves the token at download time
+  - resolves the token at download time and downloads into `data/open_damir/` (gitignored), where `loader/offline_sample.py` reads
   - rejects any response that isn't gzip, since an expired token returns an HTML page
-  - verifies the checksum and aborts on mismatch
+  - verifies the checksum and aborts on mismatch, as `loader/offline_sample.py` already does for the files it reads
   - PUTs the file to an internal stage and runs `COPY INTO RAW.DAMIR.PRESTATIONS`, with an explicit file format (delimiter, encoding and header checked on the first file) and `ON_ERROR = ABORT_STATEMENT`
+  - offline, loads `data/sample/` into DuckDB in place of the PUT and `COPY`, after checking each file against `loader/sample.lock`; for the full-data gold check in Phase 3 it loads the three source files the same way, after the `sources.lock` check
 
   Budget a full evening for the load: about 2.85 GB to download and upload, and about 107M rows. The three files load in parallel: one `COPY` statement, one load operation per file.
 
@@ -245,7 +248,7 @@ Build a small, realistic warehouse over Open DAMIR: 56-variable monthly reimburs
 - [ ] **Type every raw column explicitly.** All 56 columns get declared types in the `RAW` DDL, plus one declared trailing filler column for the final `;`, asserted empty in staging. Nothing is inferred. The loader compares each file's header with the DDL before `COPY`. *Expect:* a schema change in a future file fails loudly instead of silently becoming `VARCHAR`, and the trailing delimiter doesn't abort the first load.
 - [ ] **Turn code lists into seeds.** A deterministic script converts the dictionary's code-to-label tables (benefit type, provider specialty, region, age bracket) into dbt seeds. Labels become lookup tables in the warehouse; the definitions of the columns themselves stay in `eval/reference/`. The code lists are in the descriptor's `MOD OPEN DAMIR` sheet. *Expect:* seed CSVs regenerate byte-identically from the `.xlsx`.
 - [ ] **Staging model.** `stg_damir__prestations` casts types, trims, and keeps source column codes: many real warehouses do, and it's what makes documentation matter. Check the grain: if dimension combinations repeat, aggregate measures by all dimensions here. `SOI_ANN` and `SOI_MOI` stay codes, never cast to a date: 48,275 rows carry `0000`/`00` or `0001`/`01` (ADR 0012). *Expect:* one row per unique dimension combination, with a surrogate key tested `unique` + `not_null`.
-- [ ] **Marts with enforced contracts.** `fct_reimbursements`, 4 dimensions from seeds, and `agg_monthly_spend_by_category`, roughly 60–80 mart columns in total. `ETB_DCS_MCO` stays out of the marts: the dictionary has no entry for it, so no draft for it could be graded (ADR 0012). The fact keeps `FLX_ANN_MOI`, `SOI_ANN` and `SOI_MOI`, and `agg_monthly_spend_by_category` groups by processing month, the month a trend is read in. Contracts are enforced, with `not_null`/`unique` on keys, `relationships` fact → dims, and `accepted_values` from seeds. *Expect:* `dbt build` fails if any contract or test breaks.
+- [ ] **Marts with enforced contracts.** `fct_reimbursements`, 4 dimensions from seeds, and `agg_monthly_spend_by_category`, roughly 60–80 mart columns in total. `ETB_DCS_MCO` stays out of the marts: the dictionary has no entry for it, so no draft for it could be graded (ADR 0012). The fact keeps `FLX_ANN_MOI`, `SOI_ANN` and `SOI_MOI`, and `agg_monthly_spend_by_category` groups by processing month, the month a trend is read in. Contracts are enforced, with `not_null`/`unique` on keys, `relationships` fact → dims, and `accepted_values` from seeds. CI runs `dbt build` on DuckDB over `fixtures/damir/` on every pull request, so contracts and tests run on real rows (ADR 0013). *Expect:* `dbt build` fails if any contract or test breaks.
 - [ ] **Metadata on every mart column.** `meta.owner` on models; `meta.sensitivity` on columns (demographic columns `restricted`). `docgap lint` enforces both. *Expect:* lint is green; removing one tag turns CI red.
 - [ ] **Set the baseline docs by a recorded rule.** All models get descriptions. Column descriptions exist for a subset chosen by seeded random sampling (50% of mart columns, seed in config), written from the dictionary in your own words. The chosen list is frozen in `warehouse/baseline_docs.lock`. *Expect:* a neutral, reproducible "before" state that nobody can call rigged.
 - [ ] **Persist docs and verify the agent sees them.** `persist_docs: {relation: true, columns: true}`. A check connects as `SVC_AGENT` and reads `information_schema.columns.comment`. Mixed-case column names only persist with `quote: true`; the uppercase DAMIR codes avoid this, and the check catches it if not. *Expect:* comments visible to the agent match the YAML exactly.
@@ -257,12 +260,12 @@ Build a small, realistic warehouse over Open DAMIR: 56-variable monthly reimburs
 
 Create real agent traffic against the warehouse, grade it without a model, and freeze the evidence. This phase produces the "before" number.
 
-**Offline first.** The questions, grader, agent loop and pilot all run on DuckDB before the trial. Gold SQL is written in Snowflake SQL and transpiled to DuckDB with sqlglot, and the transpile is tested. In offline mode, the agent's `describe()` reads descriptions from the dbt manifest. On Snowflake, the phase is then the gold results, one baseline evening and the snapshot.
+**Offline first.** The questions, grader, agent loop and pilot all run on DuckDB before the trial. Gold SQL and the agent's SQL are Snowflake SQL in both worlds: offline, the harness transpiles each query to DuckDB with sqlglot before running it, and the transpile of every gold query is tested. An agent query sqlglot can't transpile returns an error to the agent like a failed statement; a final answer that can't be transpiled fails the run with a transpile reason, counted apart in the pilot's report (ADR 0014). In offline mode, the agent's `describe()` reads descriptions from the dbt manifest. On Snowflake, the phase is then the gold results, one baseline evening and the snapshot.
 
-- [ ] **Write 40 questions with gold SQL.** `eval/questions.yml` holds, per question: `id`, English text, `gold_sql`, `ordered` flag, category. Categories: optical, dental, pharmacy spend; by region, age bracket, provider type; month over month by processing month (`FLX_ANN_MOI`); care month versus processing month. Question text names the month it means in plain words ("reimbursed in", "care delivered in"), and a care-month total summed across processing months names January 2025 only, the one care month near complete in the loaded data: summed that way, February and March look like a drop that is only processing lag (ADR 0012). The columns each question needs are derived by running `resolve` on the gold SQL, not listed by hand. Each gold result is deterministic, with at most 200 rows and 5 columns, so the protocol's grader can match it. Budget 2–4 evenings: gold SQL over coded French columns is slow to get right. *Expect:* questions a business user would ask, answerable only from `MARTS`.
+- [ ] **Write 40 questions with gold SQL.** `eval/questions.yml` holds, per question: `id`, English text, `gold_sql`, `ordered` flag, category. Categories: optical, dental, pharmacy spend; by region, age bracket, provider type; month over month by processing month (`FLX_ANN_MOI`); care month versus processing month. Question text names the month it means in plain words ("reimbursed in", "care delivered in"), and a care-month total summed across processing months names January 2025 only, the one care month near complete in the loaded data: summed that way, February and March look like a drop that is only processing lag (ADR 0012). The columns each question needs are derived by running `resolve` on the gold SQL, not listed by hand. Each gold result is deterministic, with at most 200 rows and 5 columns, so the protocol's grader can match it. Before the trial, each gold query is also run on DuckDB over the three full months to check those rules: the offline sample keeps 1 row in 50 and drops rare codes, so a grouping that fits in 200 rows on it, or a top N without ties there, can break on the full data (ADR 0013). Budget 2–4 evenings: gold SQL over coded French columns is slow to get right. *Expect:* questions a business user would ask, answerable only from `MARTS`.
 - [ ] **Offline pilot: can docs move the number at all?** This is a go/no-go check, run before the trial with a few dollars of API spend.
   - Write 12 pilot questions, excluded from the 40, under the same month rules.
-  - Run the agent on them on DuckDB, 3 repetitions each, in four configurations: {Haiku 4.5, Opus 5.5} × {no column docs, every column documented}.
+  - Run the agent on them on DuckDB, 3 repetitions each, in four configurations: {Haiku 4.5, Opus 5.5} × {no column docs, every column documented}. This step writes the every-column docs from the dictionary, the same text the ceiling arm uses.
   - **Choose the agent model:** the one with the largest gap between no docs and full docs, provided its full-docs accuracy falls between 50% and 90% and the gap is at least 15 points; on an equal gap, Haiku 4.5. A frontier model can read coded columns from names and values, or recall the public dataset from training, which narrows the gap docgap is meant to close. Too weak a model fails for reasons docs can't fix, which adds noise. The pilot measures both effects instead of guessing.
   - Record the four accuracies and the choice in `docs/adr/`. The model not chosen is reported under limits, not run as a full arm.
   - Adjust difficulty only now.
@@ -296,7 +299,7 @@ Create real agent traffic against the warehouse, grade it without a model, and f
 
 The part a data team would actually adopt: from query history and a dbt manifest to a ranked list, with no model involved. It can be built on hand-made fixtures before the trial starts.
 
-- [ ] **`snapshot`: one code path, two sources.** Read from Snowflake (`--live`) or from a fixture (`--offline`); after loading, the code is identical. Parse with sqlglot (`dialect="snowflake"`), replace every literal with a placeholder, and fingerprint as SHA-256 of the normalized SQL. Unparseable queries are counted with a reason, never dropped silently. As the first stage to write Parquet, it declares its dtypes from the `QueryRecord` contract, and every later Parquet writer does the same from its own contract. *Expect:* raw query text never reaches disk; the report shows the parse rate.
+- [ ] **`snapshot`: one code path, two sources.** Read from Snowflake (`--live`) or from a fixture (`--offline`); after loading, the code is identical. Parse with sqlglot (`dialect="snowflake"`), replace every literal with a placeholder, and fingerprint as SHA-256 of the normalized SQL. Unparseable queries are counted with a reason, never dropped silently. As the first stage to write Parquet, it declares its dtypes from the `QueryRecord` contract, and every later Parquet writer does the same from its own contract. Decide here whether `QueryRecord` keeps the query tag's `run_id`: without it, `ColumnUsage.runs` would merge two agent runs of the same question and repetition if one window held both, such as a restarted baseline. *Expect:* raw query text never reaches disk; the report shows the parse rate.
 - [ ] **`resolve`: queries to columns.** Build a sqlglot schema from the manifest (relation → columns → types), `qualify` each query (expands `*`, resolves aliases and CTEs), then collect every `Column` node as `DATABASE.SCHEMA.TABLE.COLUMN` with its clause (select, where, join, group by). Columns outside dbt relations are reported as "unmanaged". *Expect:* validated against 10 hand-checked gold queries. With `ACCESS_HISTORY`, report the agreement rate on successful queries (target ≥ 95%).
 - [ ] **`usage`: per-column counts.** Per column: executions, distinct fingerprints, distinct questions and distinct agent runs (question × repetition, the denominator of *r*), split by actor class from the role mapping in config. In the evaluation, the counts that feed `rank` include discovery `qid`s only; a test feeds in a holdout-tagged query and asserts that no ranking input changes. *Expect:* `column_usage.parquet`, one row per column, sorted by FQN.
 - [ ] **`coverage`: the headline governance metric.** Plain coverage = documented columns ÷ all mart columns. Usage-weighted coverage = executions on documented columns ÷ all executions. *Expect:* two numbers side by side. The gap between them is the story ("72% documented, but only 41% of what agents query").
@@ -410,6 +413,7 @@ Show how a team would run docgap unattended: weekly in Airflow, guarded by CI. T
 - [ ] **CI on every pull request** (GitHub Actions):
   - ruff, pyright, pytest (offline, cache-only models)
   - `dbt parse` with dummy credentials, then `docgap lint`
+  - `dbt build` on DuckDB over `fixtures/damir/`
   - `terraform fmt -check` + `validate`, gitleaks
   - determinism check: run `analyze --offline` twice and compare output hashes
 
@@ -427,6 +431,8 @@ The repo is read, not run, so the README must deliver the result in 30 seconds a
   - the generated results block: holdout accuracy for the Phase 6 session's baseline, random-N, top-N (and ceiling), the top-N minus random-N interval, usage-weighted coverage before → after, and columns documented
   - the pull-request screenshot
   - a three-command offline quickstart (`uv sync`, `docgap analyze --offline`, `docgap report`)
+
+  The README's `>>>` blocks run under pytest: `pyproject.toml` adds `--doctest-glob="README.md"` with it, as the docgap-tests skill states.
 
   *Expect:* a reviewer gets the point without scrolling.
 - [ ] **"Run it on your warehouse."** The config values needed (account, role, manifest path, role-to-actor mapping) and a reusable Terraform module `infra/terraform/modules/docgap_auditor` that creates only the read-only role and user. Include the access-matrix output. *Expect:* the adoption cost is visibly small and safe.
@@ -490,7 +496,7 @@ About 12–16 evenings fall inside the trial. At 4 evenings a week, that's rough
 | Agent queries scan about 107M fact rows on XS | Timeouts in every arm add noise the docs can't fix; the offline pilot can't show it | Gold queries timed when materialized; one over 20 s moves `WH_AGENT` and `WH_AUDIT` to S before the tag (ADR 0012) |
 | A question reads as either care month or processing month | It fails in every arm, the ceiling included | Question text names the month; trends by processing month only; care-month questions on January 2025 only (ADR 0012) |
 | Download links carry a session token | The lock file rots; an HTML page fails the checksum | Lock name, size and SHA-256; resolve the token at download; reject non-gzip responses |
-| Source grain has no natural key | Tests fail | Aggregate by all dimensions in staging; surrogate key tested (no duplicates seen in a 2M-row sample) |
+| Source grain has no natural key | Tests fail | Aggregate by all dimensions in staging; surrogate key tested (no duplicates in the first 2M rows of each file, ADR 0012, nor in the 2.14M-row offline sample, ADR 0013) |
 | Small n | Noisy result; a real difference under about 20 points is more likely missed than detected | Detectable effect stated in the protocol before any run (ADR 0008); 3 repetitions, holdout headline, paired bootstrap interval, flips table |
 | sqlglot misses some queries | Usage undercounted | Parse and resolve rates in every report; `ACCESS_HISTORY` cross-check on successful queries |
 | Model-written probabilities cluster | Bands don't separate drafts; *r* collapses to "columns in failed queries" | Treat as ordinal; confusion-pair cross-check; blind labels and per-band accuracy; fall back to two bands |

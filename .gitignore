@@ -21,5 +21,6 @@ terraform.tfstate*
 # Pipeline outputs (fixtures/ is committed; runs/ is regenerated)
 runs/
 
-# Downloaded source files (about 1 GB per month; tracked by loader/sources.lock)
+# Downloaded source files (about 1 GB per month; tracked by loader/sources.lock) and the
+# offline sample cut from them (tracked by loader/sample.lock)
 data/

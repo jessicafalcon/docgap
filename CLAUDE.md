@@ -13,9 +13,9 @@ src/docgap/        the tool: deterministic core + llm/ (the only model edge) + c
 eval/              questions + gold SQL, test agent, reference dictionary (never read by src/)
 warehouse/dbt/     dbt project over Open DAMIR (Snowflake and DuckDB profiles)
 infra/             bootstrap.sql (ACCOUNTADMIN, once) + terraform/
-loader/            download, checksum, stage, COPY
+loader/            download, checksum, stage, COPY; offline sample
 orchestration/     one Airflow DAG calling the CLI
-fixtures/          frozen snapshot, manifest, profiles, model cache (offline mode)
+fixtures/          DAMIR fixture, frozen snapshot, manifest, profiles, model cache (offline mode)
 tests/             unit, golden, determinism, integrity, fault injection
 docs/              EVAL_PROTOCOL.md, adr/, RESULTS.md (generated)
 .claude/           settings, hooks/, skills/, agents/
@@ -44,6 +44,7 @@ the file is the current standard, and memory of it may be stale.
 | Moment | Invoke | Then |
 |---|---|---|
 | **Fresh clone** | `uv sync`, `uv run pre-commit install` (the pre-commit and commit-msg hooks); gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
+| **Offline data** needed (DuckDB work) and `data/sample/` is missing | `uv run python loader/offline_sample.py`, with the sources in `data/open_damir/` | It checks sources and outputs against the locks; `--update-lock` only under an ADR that supersedes 0013 |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -194,8 +195,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
   now allows squash merges only, with the PR title as the commit title.
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
   #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5), #7 `feat/config`
-  (PR 6), #8 `docs/eval-protocol` (PR 7), #9 `docs/data-study` (PRs 8–9).
-- **Open PRs:** `docs/three-months` (follow-up to #9).
+  (PR 6), #8 `docs/eval-protocol` (PR 7), #9 `docs/data-study` (PRs 8–9),
+  #10 `docs/three-months` (follow-up to #9).
+- **Open PRs:** `feat/offline-sample` (PR 10).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -227,13 +229,20 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `eval` or names `eval/reference/`; the descriptor is stored in
     `eval/reference/`; `loader/sources.lock` pins `A202501.csv.gz`. ADR 0011 loads
     that one month and records the measured file facts with their commands.
-  - **Follow-up to #9:** `docs/three-months` (open). ADR 0012 supersedes 0011:
+  - **Follow-up to #9:** ~~`docs/three-months`~~ (#10). ADR 0012 supersedes 0011:
     three processing months, `A202501`–`A202503` (about 107M rows), all pinned
     in `loader/sources.lock`. Trends are read by processing month, questions
     name their month in words, and a gold query over 20 s on XS moves `WH_AGENT`
     and `WH_AUDIT` to S before the tag.
-  - **PR 10:** `feat/offline-sample`. Sampling by hashed dimension key, tests, ADR
-    with the output hash.
-- **Next step:** `docs/three-months` in review; then PR 10 `feat/offline-sample`
-  (sampled within each processing month), the last PR of Phase 0 (whole-repo
-  audit at its gate).
+  - **PR 10:** `feat/offline-sample` (open). ADR 0013 keeps a source line when the
+    SHA-256 of its grain key (fields 1–16, 30–56) falls under 2⁶⁴ // 50:
+    2,141,851 rows in `data/sample/`, gitignored. The 1-in-5,000 subset,
+    21,245 rows, is committed in `fixtures/damir/`. `loader/offline_sample.py`
+    cuts both, and `loader/sample.lock` pins them. Gold queries are also checked
+    on the full three months in DuckDB before the trial (owed by Phase 3), and CI
+    runs `dbt build` on DuckDB over the fixture (owed by Phase 2). ADR 0014: the
+    agent writes Snowflake SQL offline too, transpiled by sqlglot, and DuckDB
+    builds into `ANALYTICS.STAGING` and `ANALYTICS.MARTS`.
+- **Next step:** PR 10 in review, the last PR of Phase 0. After its merge, Phase 4
+  (the deterministic core on hand-made fixtures), per the brief's timeline: its PR
+  split goes through `devils-advocate`. Phase 1 waits for the offline pilot.

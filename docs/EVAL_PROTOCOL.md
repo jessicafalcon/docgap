@@ -187,9 +187,12 @@ the tag (`CLAUDE.md` → "After `preregistered`"):
 
 ## The agent model
 
-The pilot runs the 12 pilot questions, 3 repetitions each, on DuckDB, in four
-configurations: {Haiku 4.5, Opus 5.5} × {no column docs, every column documented
-from the dictionary}. For each model, the gap is full-docs accuracy minus
+The pilot runs the 12 pilot questions, 3 repetitions each, on DuckDB over the
+offline sample pinned by `loader/sample.lock` (ADR 0013), in four configurations:
+{Haiku 4.5, Opus 5.5} × {no column docs, every column documented from the
+dictionary}. The agent writes Snowflake SQL, as in the trial, and the harness
+transpiles it to DuckDB (ADR 0014). A final answer that can't be transpiled is a
+failed run, and the pilot reports how many there were. For each model, the gap is full-docs accuracy minus
 no-docs accuracy.
 
 1. **Eligible:** full-docs accuracy between 50% and 90% inclusive, and a gap of
