@@ -187,62 +187,19 @@ updated, open risks, next step.
 
 Update after every PR and merge, in the same change. A new session resumes from here.
 
-- **Phase:** 0 (foundations and pre-registration), in progress.
+- **Phase:** 0 is done (#1–#11): its "Done when" holds and the phase-exit audit
+  found no blockers. Phase 4 (the deterministic core on hand-made fixtures) is in
+  progress; Phase 1 waits for the offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, private until the `preregistered`
-  tag, then public (ADR 0004). No branch protection until then (not available on
-  this private repo).
-- **Merged:** #1 `build/tooling-and-ci`, as a merge commit: a one-off. The repo
-  now allows squash merges only, with the PR title as the commit title.
-  #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
-  #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5), #7 `feat/config`
-  (PR 6), #8 `docs/eval-protocol` (PR 7), #9 `docs/data-study` (PRs 8–9),
-  #10 `docs/three-months` (follow-up to #9).
-- **Open PRs:** `feat/offline-sample` (PR 10).
-- **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
-  gate runs):
-  - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
-    and ~~`docs/lean-gate`~~ (#3).
-  - **PRs 2–3:** ~~`fix/hooks`~~ (#4). The determinism guard flags listings and
-    `.sample()` on any receiver, plus `os.getcwd()` and `Path.cwd()`, with tests
-    for every rule; the private-terms guard covers staged files, commit messages,
-    `-F` and `--body-file` files, `git -C`; the review agents' allowlist runs from
-    settings, requires `uv run --frozen` and blocks file-writing flags.
-  - **PR 4:** ~~`docs/decision-log`~~ (#5). ADR template with Status and Superseded-by;
-    first records, including repo visibility (private until the `preregistered`
-    tag, then public) and hooks that must always run living in `.claude/settings.json` (an untrusted
-    folder skips agent frontmatter hooks without a message).
-  - **PR 5:** ~~`feat/contracts`~~ (#6). `models.py`, one committed schema per contract;
-    `RunManifest` splits a canonical part from an operational part; the run's
-    setup (environment, config sections, call sites) has its own hash, used for
-    arm parity and resume (ADR 0006).
-  - **PR 6:** ~~`feat/config`~~ (#7). `docgap.toml` loaded by `config.py`: no defaults,
-    no key outside a section, one hash per section into `RunSetup.config`. Runs
-    compare by the setup hash, and the run ID is the as-of timestamp plus its
-    first 8 hex digits (ADR 0007).
-  - **PR 7:** ~~`docs/eval-protocol`~~ (#8). `docs/EVAL_PROTOCOL.md`; ADR 0008
-    keeps the 25/15 split and states the detectable effect (about 28 points at
-    80%); ADR 0009 re-runs the baseline with the arms, fixes what picks arm
-    content at the tag, and keys the agent's cache on the repetition; ADR 0010
-    closes the baseline-docs and owner-edits decisions. The tag moves after the
-    gold results, inside the trial.
-  - **PRs 8–9:** ~~`docs/data-study`~~ (#9). A test fails CI if `src/` imports
-    `eval` or names `eval/reference/`; the descriptor is stored in
-    `eval/reference/`; `loader/sources.lock` pins `A202501.csv.gz`. ADR 0011 loads
-    that one month and records the measured file facts with their commands.
-  - **Follow-up to #9:** ~~`docs/three-months`~~ (#10). ADR 0012 supersedes 0011:
-    three processing months, `A202501`–`A202503` (about 107M rows), all pinned
-    in `loader/sources.lock`. Trends are read by processing month, questions
-    name their month in words, and a gold query over 20 s on XS moves `WH_AGENT`
-    and `WH_AUDIT` to S before the tag.
-  - **PR 10:** `feat/offline-sample` (open). ADR 0013 keeps a source line when the
-    SHA-256 of its grain key (fields 1–16, 30–56) falls under 2⁶⁴ // 50:
-    2,141,851 rows in `data/sample/`, gitignored. The 1-in-5,000 subset,
-    21,245 rows, is committed in `fixtures/damir/`. `loader/offline_sample.py`
-    cuts both, and `loader/sample.lock` pins them. Gold queries are also checked
-    on the full three months in DuckDB before the trial (owed by Phase 3), and CI
-    runs `dbt build` on DuckDB over the fixture (owed by Phase 2). ADR 0014: the
-    agent writes Snowflake SQL offline too, transpiled by sqlglot, and DuckDB
-    builds into `ANALYTICS.STAGING` and `ANALYTICS.MARTS`.
-- **Next step:** PR 10 in review, the last PR of Phase 0. After its merge, Phase 4
-  (the deterministic core on hand-made fixtures), per the brief's timeline: its PR
-  split goes through `devils-advocate`. Phase 1 waits for the offline pilot.
+  tag, then public (ADR 0004). Squash merges only, with the PR title as the commit
+  title. No branch protection until then (not available on this private repo).
+- **Open PRs:** `feat/snapshot` (Phase 4, PR 1).
+- **Phase 4 PR order** (approved after `devils-advocate`):
+  - **PR 1:** `feat/snapshot`. Contract, Parquet writer and the offline
+    `snapshot` stage; the live source is owed by Phase 3's snapshot step.
+  - **PR 2:** `feat/resolve-usage`. `manifest.py`, `resolve`, `usage` with the
+    ranking scope.
+  - **PR 3:** `feat/analyze`. `coverage`, `rank`, `cli.py`, the run manifest, the
+    report and the end-to-end golden files; the last PR of the phase, so it also
+    gets the whole-repo audit.
+- **Next step:** finish PR 1 and run the pre-PR gate.
