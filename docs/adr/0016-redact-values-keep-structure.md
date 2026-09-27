@@ -51,3 +51,6 @@ sqlglot keeps the text of a statement it can't parse in a `Command` node.
   interval), and a sqlglot upgrade re-runs it.
 - Bad, because an interval's unit and a format string (`TO_CHAR(d, ?)`) are lost
   from the text. Neither names a column.
+- Bad, because a replay holds only the kept rows: a dropped query has no redacted
+  form. The live stage's counts are frozen beside the export, and the report cites
+  them for the baseline's parse rate (brief, Phase 3 "Snapshot query history").

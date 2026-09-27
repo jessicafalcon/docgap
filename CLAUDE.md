@@ -193,13 +193,19 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Repo:** `jessicafalcon/docgap` on GitHub, private until the `preregistered`
   tag, then public (ADR 0004). Squash merges only, with the PR title as the commit
   title. No branch protection until then (not available on this private repo).
-- **Open PRs:** `feat/snapshot` (Phase 4, PR 1).
+- **Open PRs:** `feat/snapshot` (Phase 4, PR 1), in review.
 - **Phase 4 PR order** (approved after `devils-advocate`):
-  - **PR 1:** `feat/snapshot`. Contract, Parquet writer and the offline
-    `snapshot` stage; the live source is owed by Phase 3's snapshot step.
-  - **PR 2:** `feat/resolve-usage`. `manifest.py`, `resolve`, `usage` with the
+  - **PR 1:** `feat/snapshot` (open). `QueryRecord` keeps the tag's `run_id` and
+    the session's database and schema, and ranking reads one agent run
+    (ADR 0015). `artifacts.py` writes Parquet with dtypes from the contract.
+    `snapshot` redacts every value but keeps ordinals and type parameters, and
+    drops a query whose normalization isn't stable (ADR 0016). The live source is
+    owed by Phase 3's snapshot step.
+  - **PR 2:** `feat/resolve-usage`. `manifest.py`, `resolve` (its choices, and
+    their ADR, are listed in the brief's `resolve` step), `usage` with the
     ranking scope.
-  - **PR 3:** `feat/analyze`. `coverage`, `rank`, `cli.py`, the run manifest, the
-    report and the end-to-end golden files; the last PR of the phase, so it also
-    gets the whole-repo audit.
-- **Next step:** finish PR 1 and run the pre-PR gate.
+  - **PR 3:** `feat/analyze`. `coverage`, `rank` (score by `Decimal.ln()`),
+    `cli.py`, the run manifest with the snapshot gates, the report and the
+    end-to-end golden files; the last PR of the phase, so it also gets the
+    whole-repo audit.
+- **Next step:** PR 1 in review. After its merge, PR 2 from an up-to-date `main`.
