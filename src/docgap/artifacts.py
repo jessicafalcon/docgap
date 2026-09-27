@@ -93,6 +93,12 @@ def write_rows[M: BaseModel](rows: Sequence[M], model: type[M], path: Path) -> s
             sink.flush()
             os.fsync(sink.fileno())
         tmp.replace(path)
+        # Sync the directory too, so the rename itself survives a power loss.
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     finally:
         tmp.unlink(missing_ok=True)
     return rows_sha256(rows)

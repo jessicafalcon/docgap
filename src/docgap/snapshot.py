@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
@@ -60,8 +61,12 @@ _VALUE_NODES = (
     exp.UnicodeString,
     exp.Interval,
 )
-_IN_LIST_VALUES = (*_VALUE_NODES, exp.Placeholder)
 _UTC = TypeAdapter[datetime](UtcDatetime)
+
+# sqlglot logs the first 100 characters of a statement it can't fully parse, before
+# the statement can be dropped, and an unconfigured logger prints that to stderr.
+# Raw query text must not reach any output, so its one logger stays silent.
+logging.getLogger("sqlglot").disabled = True
 
 
 class DropReason(StrEnum):
@@ -77,12 +82,17 @@ class DropReason(StrEnum):
 
 
 class HistoryRow(BaseModel):
-    """One row of query history as exported, before redaction: it is never written to disk.
+    """One row of query history as exported.
 
-    Field names are the `QUERY_HISTORY` columns, uppercased in the export.
+    Raw text is never written to disk in this shape; a frozen export stores it with
+    `query_text` already normalized. Field names are the `QUERY_HISTORY` columns,
+    uppercased in the export.
     """
 
-    model_config = CONTRACT_CONFIG | ConfigDict(alias_generator=str.upper)
+    # A validation error would otherwise quote the offending value, query text included.
+    model_config = CONTRACT_CONFIG | ConfigDict(
+        alias_generator=str.upper, hide_input_in_errors=True
+    )
 
     query_id: NonEmptyStr
     query_text: NonEmptyStr
@@ -117,18 +127,21 @@ def _keeps_its_literal(node: Expression) -> bool:
 def _redact(node: Expression) -> Expression:
     if isinstance(node, _VALUE_NODES) and not _keeps_its_literal(node):
         return exp.Placeholder()
-    # One placeholder for a list of values, so the list's length doesn't split fingerprints.
+    # One placeholder for a list that reads no column (`IN (1, -2, DATE '2025-01-01')`),
+    # so the list's length doesn't split fingerprints.
     values = node.expressions if isinstance(node, exp.In) else []
-    if values and all(isinstance(value, _IN_LIST_VALUES) for value in values):
+    if values and not any(value.find(exp.Column, exp.Query) for value in values):
         node.set("expressions", [exp.Placeholder()])
     return node
 
 
 def _normalize_once(sql: str) -> str:
     try:
-        statements = sqlglot.parse(sql, dialect=_DIALECT)
+        parsed = sqlglot.parse(sql, dialect=_DIALECT)
     except (ParseError, TokenError):
         raise _Dropped(DropReason.PARSE_ERROR) from None
+    # A comment after a final `;` parses as a statement of its own.
+    statements = [s for s in parsed if s is not None and not isinstance(s, exp.Semicolon)]
     if len(statements) != 1:
         raise _Dropped(DropReason.MULTIPLE_STATEMENTS)
     tree = statements[0]
@@ -143,7 +156,11 @@ def _normalize_once(sql: str) -> str:
 
 def _normalize(sql: str) -> str:
     normalized = _normalize_once(sql)
-    if _normalize_once(normalized) != normalized:
+    try:
+        stable = _normalize_once(normalized) == normalized
+    except _Dropped:
+        stable = False
+    if not stable:
         raise _Dropped(DropReason.UNSTABLE_NORMALIZATION)
     return normalized
 

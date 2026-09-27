@@ -6,7 +6,10 @@ reach disk all contain `SENTINEL`.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -15,6 +18,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+import docgap.snapshot as snapshot_module
 from docgap.artifacts import canonical_lines, read_rows
 from docgap.config import ActorsConfig, SnapshotConfig
 from docgap.models import Actor, QueryRecord, StageRecord
@@ -78,6 +82,8 @@ def test_snapshot_matches_golden(tmp_path: Path, update_golden: bool) -> None:
         (GOLDEN / "counts.json").write_text(counts)
     assert lines == (GOLDEN / "query_snapshot.jsonl").read_bytes()
     assert counts == (GOLDEN / "counts.json").read_text()
+    assert stage.inputs == {"history": hashlib.sha256(HISTORY.read_bytes()).hexdigest()}
+    assert stage.outputs == {"query_snapshot": hashlib.sha256(lines).hexdigest()}
 
 
 def test_every_row_read_is_kept_or_counted() -> None:
@@ -126,6 +132,9 @@ def test_two_agent_runs_in_one_window_stay_apart() -> None:
             "SELECT A FROM T WHERE D > CURRENT_DATE - ?",
         ),
         ("select a from t where b in (1, 2, 3)", "SELECT A FROM T WHERE B IN (?)"),
+        ("select a from t where b in (-1, date '2025-01-01')", "SELECT A FROM T WHERE B IN (?)"),
+        ("select a from t where b in (c, 1)", "SELECT A FROM T WHERE B IN (C, ?)"),
+        ("select a from t; -- done", "SELECT A FROM T"),
         (
             "select a from t where b in (select c from u)",
             "SELECT A FROM T WHERE B IN (SELECT C FROM U)",
@@ -142,6 +151,9 @@ def test_two_agent_runs_in_one_window_stay_apart() -> None:
         "type-params-kept",
         "interval",
         "in-list-collapsed",
+        "in-list-of-expressions-collapsed",
+        "in-list-reading-a-column-kept",
+        "trailing-semicolon-and-comment",
         "in-subquery",
         "raw-and-hex-strings",
         "comments",
@@ -168,6 +180,41 @@ def test_a_redacted_snapshot_normalizes_to_itself() -> None:
     records, _ = _snapshot(load_history(HISTORY.read_bytes()))
     assert records
     assert all(normalize(record.normalized_sql) == record.normalized_sql for record in records)
+
+
+def test_sqlglot_never_logs_query_text(
+    caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # sqlglot falls back to a `Command` for these, and would log their text first.
+    caplog.set_level(logging.DEBUG)
+    for sql in ("grant role SENTINEL to user x", "call SENTINEL_proc()"):
+        with pytest.raises(ValueError, match="not_a_query"):
+            normalize(sql)
+    assert "SENTINEL" not in caplog.text + capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "second_pass",
+    [
+        lambda normalize_once, sql: normalize_once(sql) + " -- changed",
+        lambda normalize_once, sql: normalize_once("select from where"),
+    ],
+    ids=["changes", "fails-to-parse"],
+)
+def test_an_unstable_normalization_is_counted(
+    monkeypatch: pytest.MonkeyPatch, second_pass: Callable[[Callable[[str], str], str], str]
+) -> None:
+    first_pass = snapshot_module._normalize_once
+    calls: list[str] = []
+
+    def flaky(sql: str) -> str:
+        calls.append(sql)
+        return first_pass(sql) if len(calls) == 1 else second_pass(first_pass, sql)
+
+    monkeypatch.setattr(snapshot_module, "_normalize_once", flaky)
+    records, counts = _snapshot([_row()])
+    assert records == []
+    assert counts["dropped.unstable_normalization"] == 1
 
 
 def test_the_fingerprint_ignores_values_and_identifier_case() -> None:
@@ -284,8 +331,9 @@ def test_as_of_must_be_utc() -> None:
 def test_bad_history_line_fails_with_line_and_column(change: dict[str, Any], column: str) -> None:
     good = _row().model_dump(mode="json", by_alias=True)
     export = f"{json.dumps(good)}\n{json.dumps(good | change)}\n".encode()
-    with pytest.raises(ValueError, match=rf"line 2:[\s\S]*{column}"):
+    with pytest.raises(ValueError, match=rf"line 2:[\s\S]*{column}") as error:
         load_history(export)
+    assert "input_value" not in str(error.value)
 
 
 def test_missing_column_fails() -> None:
