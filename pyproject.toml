@@ -27,9 +27,9 @@ build-backend = "uv_build"
 required-version = "==0.12.5"
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "src", ".claude/hooks"]
-# The hooks are scripts, not a package; tests import them by module name.
-pythonpath = [".claude/hooks"]
+testpaths = ["tests", "src", ".claude/hooks", "loader"]
+# The hooks and the loader are scripts, not a package; tests import them by module name.
+pythonpath = [".claude/hooks", "loader"]
 # Tests are offline: any socket other than a Unix one fails the test that opens it
 # (docgap-tests). A test that needs a local fake server opts in with a marker.
 addopts = ["--doctest-modules", "--disable-socket", "--allow-unix-socket"]
@@ -50,6 +50,6 @@ max-line-length = 120
 "tests/**" = ["S101"]
 
 [tool.pyright]
-include = ["src", "tests", ".claude/hooks"]
+include = ["src", "tests", ".claude/hooks", "loader"]
 strict = ["src"]
-extraPaths = [".claude/hooks"]
+extraPaths = [".claude/hooks", "loader"]

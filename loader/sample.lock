@@ -1,0 +1,38 @@
+# Offline sample and CI fixture cut by loader/offline_sample.py (ADR 0013), in TOML.
+# `sha256` is over the uncompressed file bytes. Rewritten only by `--update-lock`.
+
+[[files]]
+name = "data/sample/A202501.csv"
+rows = 734309
+bytes = 118650217
+sha256 = "7cb0b74a67e3a76c0236f82cb9de2fdc3912ca215ef1979fd62c13d295283164"
+
+[[files]]
+name = "fixtures/damir/A202501.csv"
+rows = 7215
+bytes = 1167461
+sha256 = "1d39bfa28184f4ff207c8f351371db067dc8003ee11aa0a2482eb24a83d4e63e"
+
+[[files]]
+name = "data/sample/A202502.csv"
+rows = 691878
+bytes = 112024405
+sha256 = "9083ef69baa72dbe46d3d0c7d1567f072281da5e1c72a0abdea7872b0549ff68"
+
+[[files]]
+name = "fixtures/damir/A202502.csv"
+rows = 6929
+bytes = 1122743
+sha256 = "db7f809e56d59cb3e1f62e725ac57ed05d438316a88a99b30f0c9251513d2428"
+
+[[files]]
+name = "data/sample/A202503.csv"
+rows = 715664
+bytes = 115832991
+sha256 = "d5d938d2ee690c7df4d04a64b7a815d3bbd118ebce8723ac3902456dabb48787"
+
+[[files]]
+name = "fixtures/damir/A202503.csv"
+rows = 7101
+bytes = 1150227
+sha256 = "60d535ce80b2271fcc94fcd10450173271a9928cd23a7d1175b9c1e5bceb7e03"
