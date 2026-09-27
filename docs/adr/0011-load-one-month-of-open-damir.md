@@ -1,8 +1,8 @@
 # 0011. Load one month of Open DAMIR, `A202501.csv.gz`
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-09-26
-- **Superseded by:** none
+- **Superseded by:** [0012](0012-load-three-processing-months-of-open-damir.md)
 
 ## Context and Problem Statement
 

@@ -1,4 +1,4 @@
-# Open DAMIR monthly files the loader fetches (ADR 0011), in TOML. No URL: download
+# Open DAMIR monthly files the loader fetches (ADR 0012), in TOML. No URL: download
 # links carry a session token, so the loader resolves a fresh one from the yearly file
 # list and checks each file's size and SHA-256 here before anything reads it.
 
@@ -6,3 +6,13 @@
 name = "A202501.csv.gz"
 bytes = 973594858
 sha256 = "3d28be961014f9bd846e41302e7ce6fff625bf2ccccf1148a51403e9a72efe0f"
+
+[[files]]
+name = "A202502.csv.gz"
+bytes = 923432287
+sha256 = "1a1f4d44253a8834c758d9e5bbf0b6e537e1baadddce48151a6c85a6d63bd8de"
+
+[[files]]
+name = "A202503.csv.gz"
+bytes = 952744750
+sha256 = "efad34d0f6329390649fedbb21d5491ef05b53ab598fc16371d62034be438686"
