@@ -65,7 +65,7 @@ Five tools are core (Python, Snowflake, dbt, Terraform, Airflow), each with one 
 | Terraform (`snowflakedb/snowflake` provider) | Databases, warehouses, roles, service users, grants, incl. the `SNOWFLAKE` database roles | Least privilege as reviewable code; `terraform plan` is the governance diff |
 | dbt Core + dbt-snowflake | Models over Open DAMIR, YAML docs, `meta` (owner, sensitivity), tests, model contracts, `persist_docs` | One source of truth for metadata; the manifest is docgap's schema |
 | DuckDB + dbt-duckdb | The same dbt project over a recorded sample, for building and piloting before the trial | Most of the work happens without the trial clock running; gold SQL is written for Snowflake and transpiled with sqlglot |
-| Python 3.12 + uv | The docgap CLI (typer), typed models (pydantic), Parquet I/O (pyarrow/polars) | Locked dependencies = reproducible installs |
+| Python 3.12 + uv | The docgap CLI (typer), typed models (pydantic), Parquet I/O (pyarrow) | Locked dependencies = reproducible installs |
 | sqlglot (dialect `snowflake`) | Parse and qualify queries, strip literals, fingerprint, extract column references | Deterministic, no warehouse round-trip, testable offline |
 | ruamel.yaml | Write descriptions into dbt YAML without reordering or losing comments | Minimal, readable pull-request diffs |
 | system-one-adapter on Anthropic | The two typed judgments: failure attribution (Choice) and draft support (Noul) | A drop-in for the `system_one` API in typesafe-sdk, backed by Claude. The typed questions and response types are the SDK's own, so moving to the hosted client changes only client setup |
@@ -286,7 +286,9 @@ Create real agent traffic against the warehouse, grade it without a model, and f
 
   Output: pass/fail plus a reason code (`error`, `timeout`, `shape_mismatch`, `row_count_mismatch`, `value_mismatch`). *Expect:* unit tests cover every rule and reason code.
 - [ ] **Run the baseline.** 40 questions × 3 repetitions = 120 runs, only after the tag's GitHub release exists. Report accuracy for discovery and holdout separately, with per-question pass rates. Its discovery traffic is what the ranking reads; the arms are compared with a baseline re-run in the Phase 6 session, under their setup. *Expect:* `grades.parquet` under the baseline's run ID, and a summary in the run report.
-- [ ] **Snapshot query history.** Wait at least 45 minutes (the `QUERY_HISTORY` latency), then export the run window filtered by role and tag. Keep the `qid` from each query tag so ranking can use discovery queries only. Redact (Phase 4 code) and save as `fixtures/query_snapshot_baseline.parquet` with its hash.
+- [ ] **Snapshot query history.** Wait at least 45 minutes (the `QUERY_HISTORY` latency), then export the run window filtered by role and by the baseline's tag prefix. The `run_id`, `qid` and repetition come from each query tag, so ranking can use the baseline run's discovery queries only. Redact (Phase 4 code) and save the redacted export as `fixtures/query_snapshot_baseline.jsonl` with its hash: its text is already normalized, and normalizing is stable, so `--offline` replays it through the same code (ADR 0016).
+
+  The live source lands here, the first step with a warehouse: a `QUERY_HISTORY` query with bound parameters that yields the same `HistoryRow`s as the offline JSON Lines source. It converts `START_TIME` (`TIMESTAMP_LTZ`) to UTC, reads an empty `QUERY_TAG` as no tag, and checks in code that the window ends before `as_of` − 45 minutes.
 
   If `ACCESS_HISTORY` is used as a cross-check, wait at least 3 hours: that's its latency. Compare on successful queries only, since `ACCESS_HISTORY` excludes failed ones.
 
@@ -299,9 +301,22 @@ Create real agent traffic against the warehouse, grade it without a model, and f
 
 The part a data team would actually adopt: from query history and a dbt manifest to a ranked list, with no model involved. It can be built on hand-made fixtures before the trial starts.
 
-- [ ] **`snapshot`: one code path, two sources.** Read from Snowflake (`--live`) or from a fixture (`--offline`); after loading, the code is identical. Parse with sqlglot (`dialect="snowflake"`), replace every literal with a placeholder, and fingerprint as SHA-256 of the normalized SQL. Unparseable queries are counted with a reason, never dropped silently. As the first stage to write Parquet, it declares its dtypes from the `QueryRecord` contract, and every later Parquet writer does the same from its own contract. Decide here whether `QueryRecord` keeps the query tag's `run_id`: without it, `ColumnUsage.runs` would merge two agent runs of the same question and repetition if one window held both, such as a restarted baseline. *Expect:* raw query text never reaches disk; the report shows the parse rate.
-- [ ] **`resolve`: queries to columns.** Build a sqlglot schema from the manifest (relation → columns → types), `qualify` each query (expands `*`, resolves aliases and CTEs), then collect every `Column` node as `DATABASE.SCHEMA.TABLE.COLUMN` with its clause (select, where, join, group by). Columns outside dbt relations are reported as "unmanaged". *Expect:* validated against 10 hand-checked gold queries. With `ACCESS_HISTORY`, report the agreement rate on successful queries (target ≥ 95%).
-- [ ] **`usage`: per-column counts.** Per column: executions, distinct fingerprints, distinct questions and distinct agent runs (question × repetition, the denominator of *r*), split by actor class from the role mapping in config. In the evaluation, the counts that feed `rank` include discovery `qid`s only; a test feeds in a holdout-tagged query and asserts that no ranking input changes. *Expect:* `column_usage.parquet`, one row per column, sorted by FQN.
+- [x] **`snapshot`: one code path, two sources.** A source yields `QUERY_HISTORY` rows, validated at the boundary; after loading, the code is identical. The offline source reads a JSON Lines export (`--offline`); the live one (`--live`) is owed by Phase 3's "Snapshot query history" step, the first with a warehouse.
+  - **Filter:** keep the rows in the window `[as_of − history_window_days, as_of)` from roles mapped in `[actors]`. Failed queries are kept: they still show which columns the agent reached for.
+  - **Redact:** parse with sqlglot (`dialect="snowflake"`) and replace every value with a placeholder, a list of values in `IN` with one, and an interval whole. Comments are never printed, and unquoted identifiers are uppercased. Ordinals in `GROUP BY` and `ORDER BY`, type parameters and positional parameters stay: they are structure, not values. A normalized query must normalize to itself (ADR 0016).
+  - **Fingerprint:** SHA-256 of the normalized SQL.
+  - **Count, never drop silently:** a row outside the window, from an unmapped role or with a malformed agent tag, and a query that fails to parse, holds several statements, isn't a query or normalizes unstably, each counted by reason.
+  - **Record:** `QueryRecord` keeps the tag's `run_id`, `qid` and repetition, and the session's `DATABASE_NAME` and `SCHEMA_NAME`, which `resolve` needs for unqualified table names (ADR 0015).
+
+  As the first stage to write Parquet, it declares its dtypes from the `QueryRecord` contract (`artifacts.py`), and every later Parquet writer does the same from its own contract. *Expect:* raw query text never reaches disk; the report shows the parse rate.
+- [ ] **`resolve`: queries to columns.** Build a sqlglot schema from the manifest (relation → columns → types), `qualify` each query (expands `*`, resolves aliases and CTEs), then collect every `Column` node as `DATABASE.SCHEMA.TABLE.COLUMN` with its clause (select, where, join, group by). Columns outside dbt relations are reported as "unmanaged". How sqlglot 30.20 shapes it, checked on sample queries:
+  - `qualify` runs without column validation, since validation fails the whole query on one unknown table; each column is then resolved, unmanaged (a qualified table outside the manifest) or unresolved, each counted.
+  - `pushdown_projections` runs after `qualify`, so a `SELECT *` inside a CTE or subquery counts only the columns the outer query reads. A top-level `SELECT *` counts every column, and the report shows how many such queries there were.
+  - Reads of `INFORMATION_SCHEMA` (the agent's `describe()` on Snowflake) get their own count, not "unresolved".
+  - The manifest lists only columns declared in YAML, so a mart model without an enforced contract fails the stage: an undeclared column would never be counted, covered or ranked.
+
+  *Expect:* validated against 10 hand-checked gold queries. With `ACCESS_HISTORY`, report the agreement rate on successful queries (target ≥ 95%).
+- [ ] **`usage`: per-column counts.** Per column: executions, distinct fingerprints, distinct questions and distinct agent runs (question × repetition, the denominator of *r*), split by actor class from the role mapping in config. In the evaluation, the counts that feed `rank` come from one agent run and its discovery `qid`s only, both named in a ranking-scope input: a window can hold several runs of the same questions (a restarted baseline, or the Phase 6 arms), and summing them would inflate *u* and the denominator of *r*. Tagged traffic from more than one run with no scope fails the stage (ADR 0015). A test feeds in a holdout-tagged query, and another run's query, and asserts that no ranking input changes. *Expect:* `column_usage.parquet`, one row per column, sorted by FQN.
 - [ ] **`coverage`: the headline governance metric.** Plain coverage = documented columns ÷ all mart columns. Usage-weighted coverage = executions on documented columns ÷ all executions. *Expect:* two numbers side by side. The gap between them is the story ("72% documented, but only 41% of what agents query").
 - [ ] **`rank`: explicit, stable scoring.** Only columns with no description are ranked. Score:
 
@@ -309,7 +324,7 @@ The part a data team would actually adopt: from query history and a dbt manifest
 \text{score}_c = \ln(1 + u_c) \times (1 + w \cdot r_c)
 ```
 
-Here *u* = executions, *r* = attributed failure rate (0 until Phase 5), and *w* = 1, set by the protocol, comes from config, in a `[rank]` section this step adds. The log dampens one heavy query from dominating. Sort by score descending, then by column FQN, so ties never reorder. *Expect:* `ranked_gaps.parquet` + a Markdown table.
+Here *u* = executions, *r* = attributed failure rate (0 until Phase 5), and *w* = 1, set by the protocol, comes from config, in a `[rank]` section this step adds. The log dampens one heavy query from dominating. Sort by score descending, then by column FQN, so ties never reorder. The score is rounded to a fixed number of decimals before sorting and writing, so a last-bit difference in `ln` between the macOS where golden files are made and CI's Linux can't change the bytes. *Expect:* `ranked_gaps.parquet` + a Markdown table.
 
 - [ ] **Golden-file tests.** Fixture in → exact expected outputs checked into `tests/golden/`. *Expect:* any behaviour change shows as a diff in review.
 - [ ] **Property tests for determinism.** Shuffling input rows, or running twice, must give identical output hashes (hypothesis). *Expect:* order-dependence bugs caught before they reach a ranking.
@@ -342,6 +357,8 @@ Add exactly two typed judgments and one drafter, all behind `llm/`, all replayab
 ```latex
 r_c = \frac{\sum_f P_f(\text{cause} = \text{meaning}) \cdot P_f(\text{column} = c)}{\text{runs touching } c}
 ```
+
+The failures *f* and the runs touching *c* come from the same agent run, the one in `usage`'s ranking scope: `Grade` and `Attribution` carry no run ID, so failures from one run over runs from two would halve *r* (ADR 0015).
 
 *Expect:* `rank` now uses *r*; the re-ranking shows which heavily used columns also cause wrong answers.
 
