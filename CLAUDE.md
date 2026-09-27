@@ -194,8 +194,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
   now allows squash merges only, with the PR title as the commit title.
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
   #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5), #7 `feat/config`
-  (PR 6).
-- **Open PRs:** `docs/eval-protocol` (PR 7).
+  (PR 6), #8 `docs/eval-protocol` (PR 7).
+- **Open PRs:** `docs/data-study` (PRs 8–9).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -217,17 +217,17 @@ Update after every PR and merge, in the same change. A new session resumes from 
     no key outside a section, one hash per section into `RunSetup.config`. Runs
     compare by the setup hash, and the run ID is the as-of timestamp plus its
     first 8 hex digits (ADR 0007).
-  - **PR 7:** `docs/eval-protocol` (open). `docs/EVAL_PROTOCOL.md`; ADR 0008
+  - **PR 7:** ~~`docs/eval-protocol`~~ (#8). `docs/EVAL_PROTOCOL.md`; ADR 0008
     keeps the 25/15 split and states the detectable effect (about 28 points at
     80%); ADR 0009 re-runs the baseline with the arms, fixes what picks arm
     content at the tag, and keys the agent's cache on the repetition; ADR 0010
     closes the baseline-docs and owner-edits decisions. The tag moves after the
     gold results, inside the trial.
-  - **PRs 8–9:** `docs/data-study`. First commit: CI fails if `src/` references
-    `eval/reference/`. Then measured file facts with their commands,
-    `loader/sources.lock`, the dictionary in `eval/reference/` (brief: "Study the
-    data dictionary", "Keep the dictionary out of the tool's reach"), months ADR.
+  - **PRs 8–9:** `docs/data-study` (open). A test fails CI if `src/` imports
+    `eval` or names `eval/reference/`; the descriptor is stored in
+    `eval/reference/`; `loader/sources.lock` pins `A202501.csv.gz`. ADR 0011 loads
+    that one month and records the measured file facts with their commands.
   - **PR 10:** `feat/offline-sample`. Sampling by hashed dimension key, tests, ADR
     with the output hash.
-- **Next step:** PR 7 `docs/eval-protocol` in review; then PRs 8–9
-  `docs/data-study`.
+- **Next step:** PRs 8–9 `docs/data-study` in review; then PR 10
+  `feat/offline-sample`, the last PR of Phase 0 (whole-repo audit at its gate).
