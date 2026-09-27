@@ -9,7 +9,7 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Literal
 
 import sqlglot
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
@@ -60,6 +60,8 @@ _VALUE_NODES = (
     exp.UnicodeString,
     exp.Interval,
 )
+_IN_LIST_VALUES = (*_VALUE_NODES, exp.Placeholder)
+_UTC = TypeAdapter[datetime](UtcDatetime)
 
 
 class DropReason(StrEnum):
@@ -92,12 +94,6 @@ class HistoryRow(BaseModel):
     schema_name: Identifier | None
 
 
-class _Tag(NamedTuple):
-    run_id: RunId
-    qid: Qid
-    repetition: int
-
-
 class _Dropped(Exception):
     def __init__(self, reason: DropReason) -> None:
         super().__init__(reason)
@@ -123,7 +119,7 @@ def _redact(node: Expression) -> Expression:
         return exp.Placeholder()
     # One placeholder for a list of values, so the list's length doesn't split fingerprints.
     values = node.expressions if isinstance(node, exp.In) else []
-    if values and all(isinstance(value, (*_VALUE_NODES, exp.Placeholder)) for value in values):
+    if values and all(isinstance(value, _IN_LIST_VALUES) for value in values):
         node.set("expressions", [exp.Placeholder()])
     return node
 
@@ -145,6 +141,13 @@ def _normalize_once(sql: str) -> str:
     return tree.sql(dialect=_DIALECT, comments=False)
 
 
+def _normalize(sql: str) -> str:
+    normalized = _normalize_once(sql)
+    if _normalize_once(normalized) != normalized:
+        raise _Dropped(DropReason.UNSTABLE_NORMALIZATION)
+    return normalized
+
+
 def normalize(sql: str) -> str:
     """Replace every value in a query with a placeholder and print it canonically.
 
@@ -159,43 +162,35 @@ def normalize(sql: str) -> str:
         ValueError: the query can't be normalized; the message is a `DropReason`.
     """
     try:
-        normalized = _normalize_once(sql)
-        if _normalize_once(normalized) != normalized:
-            raise _Dropped(DropReason.UNSTABLE_NORMALIZATION)
+        return _normalize(sql)
     except _Dropped as dropped:
         raise ValueError(dropped.reason.value) from None
-    return normalized
 
 
-def _parse_tag(tag: str | None) -> _Tag | None:
+def _parse_tag(tag: str | None) -> tuple[RunId, Qid, int] | tuple[None, None, None]:
     # Only agent tags carry a run; other tags and no tag are untagged traffic.
     if not tag or not tag.startswith(f"{_AGENT_TAG}:"):
-        return None
+        return None, None, None
     parts = tag.split(":")
     if len(parts) != 4 or not _REPETITION.fullmatch(parts[3]):
         raise _Dropped(DropReason.MALFORMED_TAG)
     try:
-        return _Tag(
-            _TAG_ID.validate_python(parts[1]), _TAG_ID.validate_python(parts[2]), int(parts[3])
-        )
+        return _TAG_ID.validate_python(parts[1]), _TAG_ID.validate_python(parts[2]), int(parts[3])
     except ValidationError:
         raise _Dropped(DropReason.MALFORMED_TAG) from None
 
 
 def _record(row: HistoryRow, actor: Actor) -> QueryRecord:
-    tag = _parse_tag(row.query_tag)
-    try:
-        normalized = normalize(row.query_text)
-    except ValueError as error:
-        raise _Dropped(DropReason(str(error))) from None
+    run_id, qid, repetition = _parse_tag(row.query_tag)
+    normalized = _normalize(row.query_text)
     return QueryRecord(
         query_id=row.query_id,
         start_time=row.start_time,
         role=row.role_name,
         actor=actor,
-        run_id=tag.run_id if tag else None,
-        qid=tag.qid if tag else None,
-        repetition=tag.repetition if tag else None,
+        run_id=run_id,
+        qid=qid,
+        repetition=repetition,
         database_name=row.database_name,
         schema_name=row.schema_name,
         succeeded=row.execution_status == "SUCCESS",
@@ -220,15 +215,12 @@ def snapshot(
     Raises:
         ValueError: `as_of` is not UTC, or two rows share a query ID.
     """
-    if as_of.utcoffset() != timedelta(0):
-        raise ValueError("as_of must be in UTC")
+    _UTC.validate_python(as_of)
     start = as_of - timedelta(days=window_days)
     records: list[QueryRecord] = []
     dropped: Counter[DropReason] = Counter()
     seen: set[str] = set()
-    read = 0
     for row in rows:
-        read += 1
         if row.query_id in seen:
             raise ValueError(f"query_id {row.query_id} appears twice in the history")
         seen.add(row.query_id)
@@ -243,25 +235,25 @@ def snapshot(
             dropped[drop.reason] += 1
     records.sort(key=lambda record: (record.start_time, record.query_id))
     counts = {
-        "read": read,
+        "read": len(seen),
         "kept": len(records),
         "agent_run_ids": len({record.run_id for record in records if record.run_id}),
     } | {f"dropped.{reason.value}": dropped[reason] for reason in DropReason}
     return records, counts
 
 
-def load_history(path: Path) -> list[HistoryRow]:
-    """Read a history export as JSON Lines, one `QUERY_HISTORY` row per line.
+def load_history(export: bytes) -> list[HistoryRow]:
+    """Parse a history export as JSON Lines, one `QUERY_HISTORY` row per line.
 
     Raises:
         ValueError: a line breaks the row contract; the message names the line and column.
     """
     rows: list[HistoryRow] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    for number, line in enumerate(export.decode("utf-8").splitlines(), start=1):
         try:
             rows.append(HistoryRow.model_validate_json(line))
         except ValidationError as error:
-            raise ValueError(f"{path.name} line {number}: {error}") from None
+            raise ValueError(f"history line {number}: {error}") from None
     return rows
 
 
@@ -275,8 +267,10 @@ def run_snapshot(
     out_dir: Path,
 ) -> StageRecord:
     """Snapshot an offline history export into `query_snapshot.parquet` under `out_dir`."""
+    # Read once, so the input hash covers exactly the bytes parsed.
+    export = history.read_bytes()
     records, counts = snapshot(
-        load_history(history),
+        load_history(export),
         as_of=as_of,
         window_days=config.history_window_days,
         actors=actors.root,
@@ -284,7 +278,7 @@ def run_snapshot(
     out_dir.mkdir(parents=True, exist_ok=True)
     return StageRecord(
         setup_sha256=setup_sha256,
-        inputs={"history": hashlib.sha256(history.read_bytes()).hexdigest()},
+        inputs={"history": hashlib.sha256(export).hexdigest()},
         outputs={"query_snapshot": write_rows(records, QueryRecord, out_dir / SNAPSHOT_FILE)},
         counts=counts,
         gates={},

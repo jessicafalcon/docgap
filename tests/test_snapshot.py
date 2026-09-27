@@ -17,7 +17,7 @@ from hypothesis import strategies as st
 
 from docgap.artifacts import canonical_lines, read_rows
 from docgap.config import ActorsConfig, SnapshotConfig
-from docgap.models import Actor, QueryRecord
+from docgap.models import Actor, QueryRecord, StageRecord
 from docgap.snapshot import (
     SNAPSHOT_FILE,
     DropReason,
@@ -57,15 +57,19 @@ def _row(**overrides: Any) -> HistoryRow:
 # Golden output
 
 
-def test_snapshot_matches_golden(tmp_path: Path, update_golden: bool) -> None:
-    stage = run_snapshot(
+def _run(out_dir: Path) -> StageRecord:
+    return run_snapshot(
         HISTORY,
         as_of=AS_OF,
         config=SnapshotConfig(history_window_days=7),
         actors=ActorsConfig.model_validate(ACTORS),
         setup_sha256=SETUP,
-        out_dir=tmp_path,
+        out_dir=out_dir,
     )
+
+
+def test_snapshot_matches_golden(tmp_path: Path, update_golden: bool) -> None:
+    stage = _run(tmp_path)
     lines = canonical_lines(read_rows(tmp_path / SNAPSHOT_FILE, QueryRecord))
     counts = json.dumps(stage.counts, indent=2, sort_keys=True) + "\n"
     if update_golden:
@@ -77,21 +81,15 @@ def test_snapshot_matches_golden(tmp_path: Path, update_golden: bool) -> None:
 
 
 def test_every_row_read_is_kept_or_counted() -> None:
-    records, counts = _snapshot(load_history(HISTORY))
+    rows = load_history(HISTORY.read_bytes())
+    records, counts = _snapshot(rows)
     dropped = sum(value for key, value in counts.items() if key.startswith("dropped."))
-    assert counts["read"] == len(load_history(HISTORY)) == counts["kept"] + dropped
+    assert counts["read"] == len(rows) == counts["kept"] + dropped
     assert counts["kept"] == len(records)
 
 
 def test_no_value_from_the_history_reaches_disk(tmp_path: Path) -> None:
-    run_snapshot(
-        HISTORY,
-        as_of=AS_OF,
-        config=SnapshotConfig(history_window_days=7),
-        actors=ActorsConfig.model_validate(ACTORS),
-        setup_sha256=SETUP,
-        out_dir=tmp_path,
-    )
+    _run(tmp_path)
     assert b"SENTINEL" in HISTORY.read_bytes()
     for path in tmp_path.iterdir():
         assert b"SENTINEL" not in path.read_bytes()
@@ -99,13 +97,13 @@ def test_no_value_from_the_history_reaches_disk(tmp_path: Path) -> None:
 
 
 @settings(max_examples=25, deadline=None)
-@given(st.permutations(load_history(HISTORY)))
+@given(st.permutations(load_history(HISTORY.read_bytes())))
 def test_row_order_does_not_change_the_snapshot(rows: list[HistoryRow]) -> None:
-    assert _snapshot(rows) == _snapshot(load_history(HISTORY))
+    assert _snapshot(rows) == _snapshot(load_history(HISTORY.read_bytes()))
 
 
 def test_two_agent_runs_in_one_window_stay_apart() -> None:
-    records, counts = _snapshot(load_history(HISTORY))
+    records, counts = _snapshot(load_history(HISTORY.read_bytes()))
     assert counts["agent_run_ids"] == 2
     q01_rep1 = {r.run_id for r in records if (r.qid, r.repetition) == ("q01", 1)}
     assert len(q01_rep1) == 2
@@ -167,7 +165,7 @@ def test_no_value_form_survives_redaction(value: str) -> None:
 
 
 def test_a_redacted_snapshot_normalizes_to_itself() -> None:
-    records, _ = _snapshot(load_history(HISTORY))
+    records, _ = _snapshot(load_history(HISTORY.read_bytes()))
     assert records
     assert all(normalize(record.normalized_sql) == record.normalized_sql for record in records)
 
@@ -283,20 +281,15 @@ def test_as_of_must_be_utc() -> None:
     ],
     ids=["extra-column", "missing-text", "not-utc", "unknown-status", "lowercase-context"],
 )
-def test_bad_history_line_fails_with_line_and_column(
-    tmp_path: Path, change: dict[str, Any], column: str
-) -> None:
+def test_bad_history_line_fails_with_line_and_column(change: dict[str, Any], column: str) -> None:
     good = _row().model_dump(mode="json", by_alias=True)
-    path = tmp_path / "history.jsonl"
-    path.write_text(json.dumps(good) + "\n" + json.dumps(good | change) + "\n")
+    export = f"{json.dumps(good)}\n{json.dumps(good | change)}\n".encode()
     with pytest.raises(ValueError, match=rf"line 2:[\s\S]*{column}"):
-        load_history(path)
+        load_history(export)
 
 
-def test_missing_column_fails(tmp_path: Path) -> None:
+def test_missing_column_fails() -> None:
     good = _row().model_dump(mode="json", by_alias=True)
     del good["QUERY_TAG"]
-    path = tmp_path / "history.jsonl"
-    path.write_text(json.dumps(good) + "\n")
     with pytest.raises(ValueError, match="QUERY_TAG"):
-        load_history(path)
+        load_history(json.dumps(good).encode())

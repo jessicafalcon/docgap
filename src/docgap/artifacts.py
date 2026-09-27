@@ -8,7 +8,6 @@ import os
 import types
 from collections.abc import Iterable, Sequence
 from datetime import datetime
-from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Union, get_args, get_origin
 
@@ -38,14 +37,12 @@ def _arrow_type(annotation: Any, field: str) -> tuple[pa.DataType, bool]:
     # pydantic's AwareDatetime is a marker class, not a datetime subclass.
     if annotation is AwareDatetime:
         return _TIMESTAMP, nullable
-    # Order matters: StrEnum is a str and bool is an int.
+    # Order matters: bool is an int. A StrEnum is a str.
     for python_type, arrow_type in (
-        (StrEnum, pa.string()),
         (str, pa.string()),
         (bool, pa.bool_()),
         (int, pa.int64()),
         (float, pa.float64()),
-        (datetime, _TIMESTAMP),
     ):
         if isinstance(annotation, type) and issubclass(annotation, python_type):
             return arrow_type, nullable
