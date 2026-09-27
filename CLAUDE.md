@@ -44,6 +44,7 @@ the file is the current standard, and memory of it may be stale.
 | Moment | Invoke | Then |
 |---|---|---|
 | **Fresh clone** | `uv sync`, `uv run pre-commit install` (the pre-commit and commit-msg hooks); gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
+| **Offline data** needed (DuckDB work) and `data/sample/` is missing | `uv run python loader/offline_sample.py`, with the sources in `data/open_damir/` | It checks sources and outputs against the locks; `--update-lock` only under an ADR that supersedes 0013 |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -196,7 +197,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5), #7 `feat/config`
   (PR 6), #8 `docs/eval-protocol` (PR 7), #9 `docs/data-study` (PRs 8–9),
   #10 `docs/three-months` (follow-up to #9).
-- **Open PRs:** none.
+- **Open PRs:** `feat/offline-sample` (PR 10).
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -234,7 +235,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
     name their month in words, and a gold query over 20 s on XS moves `WH_AGENT`
     and `WH_AUDIT` to S before the tag.
   - **PR 10:** `feat/offline-sample` (open). ADR 0013 keeps a source line when the
-    SHA-256 of its grain key (fields 1–16, 30–56) falls under 2⁶⁴ / 50:
+    SHA-256 of its grain key (fields 1–16, 30–56) falls under 2⁶⁴ // 50:
     2,141,851 rows in `data/sample/`, gitignored. The 1-in-5,000 subset,
     21,245 rows, is committed in `fixtures/damir/`. `loader/offline_sample.py`
     cuts both, and `loader/sample.lock` pins them. Gold queries are also checked

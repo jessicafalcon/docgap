@@ -16,7 +16,7 @@ source files. What rule cuts both, and what gets committed?
 ## Considered Options
 
 1. **Hash of the grain key under a threshold.** Keep a line when the SHA-256 of its
-   dimension fields, the staging grain, falls under 2⁶⁴ / 50.
+   dimension fields, the staging grain, falls under 2⁶⁴ // 50.
 2. **Hash of the whole line.** The same, with measures in the key.
 3. **Whole groups of one dimension**, such as a few regions.
 4. **The first N lines of each file.**
@@ -28,9 +28,8 @@ Chosen option: **option 1**, because a line's pick depends only on its dimension
 fields. Lines that repeat a dimension combination are kept or dropped together, so
 staging's aggregate over the sample is exact for every combination the sample holds.
 Option 2 would split repeated combinations. Option 3 empties every question about a
-dropped region. Option 4 takes the order the file happens to be written in. Option 5
-adds a dependency, and its repeatability depends on the DuckDB version and thread
-count.
+dropped region. Option 4 takes the order the file happens to be written in. Option 5's
+repeatability depends on the DuckDB version and thread count.
 
 The rule, in `loader/offline_sample.py`:
 
@@ -64,23 +63,36 @@ this hash. The sample hashes below were cut on 2026-09-27 in 2 min 55 s. Deletin
 | `fixtures/damir/A202503.csv` | 7,101 | 1,150,227 | `60d535ce80b2271fcc94fcd10450173271a9928cd23a7d1175b9c1e5bceb7e03` |
 
 In all: 2,141,851 sample rows (2.00% of 107,232,480) and 21,245 fixture rows. Measured
-on the outputs:
+with the commands below:
 
 - **No repeated grain key** in the sample, the same as in the first 2M rows of each file.
 - **Spend.** `FLT_PAI_MNT` × 50 over each file's total is 1.00, 0.98 and 1.09 for
   January to March: the spend is heavy-tailed, and a few large cells move it.
 - **Placeholder care dates** (`SOI_ANN` `0000` or `0001`): 298 to 338 sample rows per
   month, but only 1 to 4 per fixture month.
-- **Rare codes are dropped.** In the first 5M rows of January, the sample keeps 550
-  of 812 `PRS_NAT` codes and 9 of 19 `SOI_ANN` years.
+- **Rare codes are dropped.** Of January's 886 `PRS_NAT` codes and 25 `SOI_ANN`
+  years, the sample keeps 707 and 14, and the fixture 334 and 6.
+
+```sh
+cd data
+for f in sample/A2025*.csv ../fixtures/damir/A2025*.csv; do
+  LC_ALL=C awk -F';' -v f=$f 'NR > 1 { n++; s += $27; if ($30 == "0000" || $30 == "0001") ph++ }
+    END { printf "%s rows %d spend %.0f placeholder %d\n", f, n, s, ph + 0 }' $f
+  tail -n +2 $f | cut -d';' -f1-16,30-56 | LC_ALL=C sort | uniq -d | wc -l
+done
+for f in sample/A202501.csv ../fixtures/damir/A202501.csv; do
+  LC_ALL=C awk -F';' -v f=$f 'NR > 1 { p[$40]; y[$30] } END { print f, length(p), length(y) }' $f
+done
+gzip -dc open_damir/A202501.csv.gz |
+  LC_ALL=C awk -F';' 'NR > 1 { p[$40]; y[$30] } END { print "source", length(p), length(y) }'
+```
 
 ### Consequences
 
 - Good, because the offline world is re-cut to the same bytes from the pinned files,
   and a changed source, rule or output fails before a file appears.
 - Good, because the sample keeps the source's format. The Phase 2 DDL and header
-  check read it as they read the full files, and the rule can be recomputed in SQL
-  over `RAW` to find the same lines.
+  check read it as they read the full files.
 - Good, because CI checks real rows: every fixture line passes the rule, and every
   fixture file matches the lock.
 - Bad, because the offline pilot and every gold result before the trial see 1 row in

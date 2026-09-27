@@ -7,6 +7,7 @@ import hashlib
 import tomllib
 from pathlib import Path
 
+import offline_sample
 import pytest
 from offline_sample import (
     FIXTURE_ONE_IN,
@@ -34,6 +35,12 @@ REAL = [
         b"01;10;0;0;1;11;9;41;0;1976;2;100;0;31;53;24;6;0;1;99;0;0;1;2;1;Z;\n",
         "0000ee23fe1f9c67",
         (True, True),
+    ),
+    (
+        b"202501;53;20;53;1;1;2;121;9999;99;99;99;9999;9;99;0;30;4;4;0;93;93;93;30;4;4;93;0;93;2024;"
+        b"11;30;0;0;1;36;9;10;0;1911;2;100;0;31;53;21;5;0;1;99;0;99;0;9;1;Z;\n",
+        "028b87f70269bea8",
+        (True, False),
     ),
     (
         b"202501;32;70;99;0;1;1;121;9999;99;99;99;9999;9;99;0;23.21;22;22;0;696.3;696.3;696.3;"
@@ -140,6 +147,16 @@ def test_a_source_off_its_checksum_fails_before_writing(tmp_path: Path) -> None:
     assert not out.exists()
 
 
+def test_a_stale_output_is_cut_again_from_the_checked_source(tmp_path: Path) -> None:
+    source = _gz(tmp_path / "A.csv.gz", [_line(i) for i in range(200)])
+    expected = cut(source, tmp_path / "expected.csv", 2, None)
+    out = tmp_path / "A.csv"
+    out.write_bytes(b"stale")
+
+    assert refresh(source, digest_file(source), out, 2, expected) == expected
+    assert out.read_bytes() == (tmp_path / "expected.csv").read_bytes()
+
+
 def test_an_output_matching_the_lock_is_not_cut_again(tmp_path: Path) -> None:
     out = tmp_path / "A.csv"
     out.write_bytes(HEADER)
@@ -167,3 +184,46 @@ def test_committed_fixture_matches_the_lock_and_the_rule(name: str) -> None:
     assert all(keeps(line, FIXTURE_ONE_IN) for line in lines)
     # One processing month per file: every month of the source appears.
     assert {line.split(b";", 1)[0] for line in lines} == {month}
+
+
+@pytest.fixture
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A repo with one pinned source month, cut at 1 in 2 and 1 in 4 to keep it small."""
+    source = _gz(tmp_path / "A202501.csv.gz", [_line(i) for i in range(200)])
+    size, sha = digest_file(source)
+    lock = tmp_path / "sources.lock"
+    lock.write_text(f'[[files]]\nname = "A202501.csv.gz"\nbytes = {size}\nsha256 = "{sha}"\n')
+    for name, value in {
+        "ROOT": tmp_path,
+        "SOURCES_LOCK": lock,
+        "SAMPLE_LOCK": tmp_path / "sample.lock",
+        "SOURCE_DIR": tmp_path,
+        "SAMPLE_DIR": tmp_path / "sample",
+        "FIXTURE_DIR": tmp_path / "fixture",
+        "SAMPLE_ONE_IN": 2,
+        "FIXTURE_ONE_IN": 4,
+    }.items():
+        monkeypatch.setattr(offline_sample, name, value)
+    return tmp_path
+
+
+def test_update_lock_pins_what_a_check_run_then_accepts(repo: Path) -> None:
+    offline_sample.main(["--update-lock"])
+    locked = read_lock(repo / "sample.lock")
+
+    assert list(locked) == ["sample/A202501.csv", "fixture/A202501.csv"]
+    assert locked["sample/A202501.csv"] == Facts(
+        locked["sample/A202501.csv"].rows, *digest_file(repo / "sample" / "A202501.csv")
+    )
+    assert 0 < locked["fixture/A202501.csv"].rows < locked["sample/A202501.csv"].rows
+    offline_sample.main([])  # every output matches the lock
+    assert not list(repo.rglob("*.tmp-*"))
+
+
+def test_an_output_missing_from_the_lock_fails(repo: Path) -> None:
+    offline_sample.main(["--update-lock"])
+    lock = repo / "sample.lock"
+    lock.write_text(lock.read_text().split('\n\n[[files]]\nname = "fixture/')[0] + "\n")
+
+    with pytest.raises(ValueError, match=r"fixture/A202501\.csv: not in sample\.lock"):
+        offline_sample.main([])
