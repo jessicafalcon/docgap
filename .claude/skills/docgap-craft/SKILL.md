@@ -82,6 +82,10 @@ class ColumnRef(BaseModel):
 
 ## Polars and Parquet
 
+- Stages work on lists of contracts in plain Python and write Parquet with
+  pyarrow through `artifacts.py`, which takes each column's dtype from the
+  contract. Inputs are small (about 1,000 queries per run), so Polars isn't a
+  dependency; the rules below apply once a stage needs frame operations.
 - Never mutate an input frame. Transforms are `frame -> frame`.
 - Prefer lazy (`scan_parquet` → `collect`) and vectorized expressions over row loops.
 - **Sort before every write** by a total key (e.g. `fqn`, then `fingerprint`), so

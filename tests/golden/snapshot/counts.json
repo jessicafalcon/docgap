@@ -1,0 +1,12 @@
+{
+  "agent_run_ids": 2,
+  "dropped.malformed_tag": 1,
+  "dropped.multiple_statements": 1,
+  "dropped.not_a_query": 1,
+  "dropped.outside_window": 2,
+  "dropped.parse_error": 1,
+  "dropped.unmapped_role": 1,
+  "dropped.unstable_normalization": 0,
+  "kept": 9,
+  "read": 16
+}

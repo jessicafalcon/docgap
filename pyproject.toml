@@ -5,12 +5,16 @@ description = "Rank undocumented warehouse columns by usage and failure, then dr
 license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "pyarrow>=25.0.1",
     "pydantic>=2.13.5",
+    "sqlglot>=30.20.0",
 ]
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.168.2",
     "pre-commit>=4.6.2",
+    "pyarrow-stubs>=20.0.0.20260819",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "pytest-socket>=0.8.1",

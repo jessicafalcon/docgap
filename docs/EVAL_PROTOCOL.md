@@ -121,10 +121,12 @@ random-N comparison to run, and that is reported as the finding.
    description, sorted by score descending, then by column FQN. The rank weight
    is *w* = 1, so a column whose attributed failure rate is 1 scores twice its
    usage term.
-2. **Ranking inputs come from discovery questions only.** Usage counts only
-   queries tagged with a discovery `qid`, and failure attribution runs only on
-   discovery failures. A test feeds in a holdout-tagged query and fails if any
-   ranking input changes.
+2. **Ranking inputs come from discovery questions of one agent run only.** Usage
+   counts only queries tagged with the Phase 3 baseline's run ID and a discovery
+   `qid`, and failure attribution runs only on that run's discovery failures, so
+   *u* and *r* read the same runs as the grades. Tagged traffic from more than one
+   run with no scope fails the stage (ADR 0015). A test feeds in a holdout-tagged
+   query, and another run's query, and fails if any ranking input changes.
 3. **The random-N pool** is every mart column undocumented in the baseline docs,
    whether or not a question touches it, because the claim compares docgap
    with documenting undocumented columns without it. Each column's FQN is
