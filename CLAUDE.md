@@ -194,8 +194,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
   now allows squash merges only, with the PR title as the commit title.
   #2 `docs/pr-template`, #3 `docs/lean-gate`, #4 `fix/hooks` (PRs 2–3),
   #5 `docs/decision-log` (PR 4), #6 `feat/contracts` (PR 5), #7 `feat/config`
-  (PR 6), #8 `docs/eval-protocol` (PR 7), #9 `docs/data-study` (PRs 8–9).
-- **Open PRs:** `docs/three-months` (follow-up to #9).
+  (PR 6), #8 `docs/eval-protocol` (PR 7), #9 `docs/data-study` (PRs 8–9),
+  #10 `docs/three-months` (follow-up to #9).
+- **Open PRs:** none.
 - **Phase 0 PR order** (approved; PRs 2–3 and 8–9 merged into one each to cut
   gate runs):
   - **PR 1:** ~~`build/tooling-and-ci`~~ (#1), then ~~`docs/pr-template`~~ (#2)
@@ -227,13 +228,12 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `eval` or names `eval/reference/`; the descriptor is stored in
     `eval/reference/`; `loader/sources.lock` pins `A202501.csv.gz`. ADR 0011 loads
     that one month and records the measured file facts with their commands.
-  - **Follow-up to #9:** `docs/three-months` (open). ADR 0012 supersedes 0011:
+  - **Follow-up to #9:** ~~`docs/three-months`~~ (#10). ADR 0012 supersedes 0011:
     three processing months, `A202501`–`A202503` (about 107M rows), all pinned
     in `loader/sources.lock`. Trends are read by processing month, questions
     name their month in words, and a gold query over 20 s on XS moves `WH_AGENT`
     and `WH_AUDIT` to S before the tag.
   - **PR 10:** `feat/offline-sample`. Sampling by hashed dimension key, tests, ADR
     with the output hash.
-- **Next step:** `docs/three-months` in review; then PR 10 `feat/offline-sample`
-  (sampled within each processing month), the last PR of Phase 0 (whole-repo
-  audit at its gate).
+- **Next step:** PR 10 `feat/offline-sample` (sampled within each processing
+  month), the last PR of Phase 0 (whole-repo audit at its gate).
