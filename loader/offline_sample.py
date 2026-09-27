@@ -20,7 +20,7 @@ import tomllib
 from pathlib import Path
 from typing import NamedTuple
 
-__all__ = ["Facts", "cut", "digest_file", "grain_key", "keeps", "main"]
+__all__ = ["Facts", "cut", "digest_file", "grain_key", "keeps", "main", "read_lock", "refresh"]
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES_LOCK = ROOT / "loader" / "sources.lock"
@@ -106,9 +106,10 @@ def cut(source: Path, out: Path, one_in: int, pinned: Facts | None) -> Facts:
     return facts
 
 
-def _refresh(
+def refresh(
     source: Path, source_pin: tuple[int, str], out: Path, one_in: int, pinned: Facts | None
 ) -> Facts:
+    """Cut `out` from `source` after checking the source's size and SHA-256 against `source_pin`."""
     # An output that already matches the lock is not cut again, so a re-run after
     # a crash redoes only the files it didn't finish.
     if pinned is not None and out.exists() and digest_file(out) == pinned[1:]:
@@ -118,7 +119,8 @@ def _refresh(
     return cut(source, out, one_in, pinned)
 
 
-def _read_lock(path: Path) -> dict[str, Facts]:
+def read_lock(path: Path) -> dict[str, Facts]:
+    """Return the facts `sample.lock` pins, by the output's repo-relative path."""
     files = tomllib.loads(path.read_text(encoding="utf-8"))["files"]
     return {f["name"]: Facts(f["rows"], f["bytes"], f["sha256"]) for f in files}
 
@@ -132,8 +134,14 @@ def _write_lock(facts: dict[str, Facts]) -> None:
         lines += ["", "[[files]]", f'name = "{name}"', f"rows = {f.rows}", f"bytes = {f.bytes}"]
         lines.append(f'sha256 = "{f.sha256}"')
     tmp = SAMPLE_LOCK.with_name(f"{SAMPLE_LOCK.name}.tmp-{os.getpid()}")
-    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    tmp.replace(SAMPLE_LOCK)
+    try:
+        with tmp.open("w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        tmp.replace(SAMPLE_LOCK)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -148,29 +156,23 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
     sources = tomllib.loads(SOURCES_LOCK.read_text(encoding="utf-8"))["files"]
-    locked = {} if args.update_lock else _read_lock(SAMPLE_LOCK)
+    locked = {} if args.update_lock else read_lock(SAMPLE_LOCK)
     SAMPLE_DIR.mkdir(parents=True, exist_ok=True)
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
-
-    def pinned(out: Path) -> Facts | None:
-        name = out.relative_to(ROOT).as_posix()
-        if args.update_lock:
-            return None
-        if name not in locked:
-            raise ValueError(f"{name}: not in {SAMPLE_LOCK.name}; run with --update-lock")
-        return locked[name]
-
     facts: dict[str, Facts] = {}
+
+    def step(source: Path, source_pin: tuple[int, str], out: Path, one_in: int) -> Facts:
+        name = out.relative_to(ROOT).as_posix()
+        if not args.update_lock and name not in locked:
+            raise ValueError(f"{name}: not in {SAMPLE_LOCK.name}; run with --update-lock")
+        facts[name] = refresh(source, source_pin, out, one_in, locked.get(name))
+        return facts[name]
+
     for source in sources:
         month = source["name"].removesuffix(".gz")
-        sample, fixture = SAMPLE_DIR / month, FIXTURE_DIR / month
-        source_pin = (source["bytes"], source["sha256"])
-        got = _refresh(
-            SOURCE_DIR / source["name"], source_pin, sample, SAMPLE_ONE_IN, pinned(sample)
-        )
-        facts[sample.relative_to(ROOT).as_posix()] = got
-        got = _refresh(sample, got[1:], fixture, FIXTURE_ONE_IN, pinned(fixture))
-        facts[fixture.relative_to(ROOT).as_posix()] = got
+        pin = (source["bytes"], source["sha256"])
+        sample = step(SOURCE_DIR / source["name"], pin, SAMPLE_DIR / month, SAMPLE_ONE_IN)
+        step(SAMPLE_DIR / month, sample[1:], FIXTURE_DIR / month, FIXTURE_ONE_IN)
     for name, f in facts.items():
         print(f"{name}: {f.rows} rows, {f.bytes} bytes, sha256 {f.sha256}")
     if args.update_lock:

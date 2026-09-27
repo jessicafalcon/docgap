@@ -9,41 +9,44 @@ from pathlib import Path
 
 import pytest
 from offline_sample import (
-    FIXTURE_DIR,
     FIXTURE_ONE_IN,
     ROOT,
     SAMPLE_LOCK,
     SAMPLE_ONE_IN,
     SOURCES_LOCK,
     Facts,
-    _refresh,
     cut,
     digest_file,
     grain_key,
     keeps,
+    read_lock,
+    refresh,
 )
 
 HEADER = b"FLX_ANN_MOI;" + b";".join(b"V%d" % i for i in range(2, 57)) + b";\n"
 
-# Real lines of A202501.csv.gz with the first 8 bytes of their key's SHA-256. The
-# fixture line is kept at 1 in 5,000; the other two aren't kept at 1 in 50. They pin
-# the rule itself: the fields in the key, the hash, and how its bytes are read.
+# Real lines of A202501.csv.gz, the first 8 bytes of their key's SHA-256, and whether
+# the sample (1 in 50) and the fixture (1 in 5,000) keep them. They pin the rule
+# itself: the fields in the key, the hash, and how its bytes are read.
 REAL = [
     (
         b"202501;99;20;93;0;1;2;121;9999;99;99;11;2205;9;99;0;5;5;5;0;0;0;-5;5;5;5;0;0;-5;2025;"
         b"01;10;0;0;1;11;9;41;0;1976;2;100;0;31;53;24;6;0;1;99;0;0;1;2;1;Z;\n",
         "0000ee23fe1f9c67",
+        (True, True),
     ),
     (
         b"202501;32;70;99;0;1;1;121;9999;99;99;99;9999;9;99;0;23.21;22;22;0;696.3;696.3;696.3;"
         b"23.21;22;22;696.3;0;696.3;2025;01;10;0;0;1;35;9;42;0;3134;2;100;0;31;32;27;8;0;1;32;"
         b"27;8;0;1;1;Z;\n",
         "0590e277b721d679",
+        (False, False),
     ),
     (
         b"202501;99;60;99;1;1;2;121;9999;99;99;32;1102;9;99;0;3;3;3;0;33.75;0;5.1;0;0;0;0;0;0;"
         b"2025;01;10;0;2;7;36;9;62;1;1848;2;20;5;31;32;24;6;0;1;99;0;0;9;2;0;Z;\n",
         "1fc1214320861290",
+        (False, False),
     ),
 ]
 
@@ -60,12 +63,10 @@ def _gz(path: Path, lines: list[bytes]) -> Path:
     return path
 
 
-@pytest.mark.parametrize(("line", "prefix"), REAL, ids=[prefix for _, prefix in REAL])
-def test_rule_is_pinned_on_real_lines(line: bytes, prefix: str) -> None:
-    digest = hashlib.sha256(grain_key(line)).digest()
-    assert digest[:8].hex() == prefix
-    for one_in in (SAMPLE_ONE_IN, FIXTURE_ONE_IN):
-        assert keeps(line, one_in) is (int(prefix, 16) < 2**64 // one_in)
+@pytest.mark.parametrize(("line", "prefix", "kept"), REAL, ids=[r[1] for r in REAL])
+def test_rule_is_pinned_on_real_lines(line: bytes, prefix: str, kept: tuple[bool, bool]) -> None:
+    assert hashlib.sha256(grain_key(line)).digest()[:8].hex() == prefix
+    assert (keeps(line, SAMPLE_ONE_IN), keeps(line, FIXTURE_ONE_IN)) == kept
 
 
 def test_measures_never_change_the_pick() -> None:
@@ -134,7 +135,7 @@ def test_a_source_off_its_checksum_fails_before_writing(tmp_path: Path) -> None:
     out = tmp_path / "A.csv"
 
     with pytest.raises(ValueError, match=r"A\.csv\.gz: expected"):
-        _refresh(source, (1, "0" * 64), out, 2, None)
+        refresh(source, (1, "0" * 64), out, 2, None)
 
     assert not out.exists()
 
@@ -145,29 +146,23 @@ def test_an_output_matching_the_lock_is_not_cut_again(tmp_path: Path) -> None:
     pinned = Facts(0, *digest_file(out))
 
     # The source doesn't exist: reaching it would raise.
-    assert _refresh(tmp_path / "missing.csv.gz", (0, ""), out, 2, pinned) == pinned
-
-
-def _lock() -> dict[str, Facts]:
-    files = tomllib.loads(SAMPLE_LOCK.read_text(encoding="utf-8"))["files"]
-    return {f["name"]: Facts(f["rows"], f["bytes"], f["sha256"]) for f in files}
+    assert refresh(tmp_path / "missing.csv.gz", (0, ""), out, 2, pinned) == pinned
 
 
 def test_lock_pins_a_sample_and_a_fixture_file_per_source() -> None:
     sources = tomllib.loads(SOURCES_LOCK.read_text(encoding="utf-8"))["files"]
     months = [s["name"].removesuffix(".gz") for s in sources]
     expected = [f"{d}/{m}" for m in months for d in ("data/sample", "fixtures/damir")]
-    assert list(_lock()) == expected
+    assert list(read_lock(SAMPLE_LOCK)) == expected
 
 
-@pytest.mark.parametrize("name", [n for n in _lock() if n.startswith("fixtures/")])
+@pytest.mark.parametrize("name", [n for n in read_lock(SAMPLE_LOCK) if n.startswith("fixtures/")])
 def test_committed_fixture_matches_the_lock_and_the_rule(name: str) -> None:
     path = ROOT / name
-    assert path.parent == FIXTURE_DIR
     header, *lines = path.read_bytes().splitlines(keepends=True)
     month = path.stem.removeprefix("A").encode()
 
-    assert Facts(len(lines), *digest_file(path)) == _lock()[name]
+    assert Facts(len(lines), *digest_file(path)) == read_lock(SAMPLE_LOCK)[name]
     assert header.startswith(b"FLX_ANN_MOI;ORG_CLE_REG;")
     assert all(keeps(line, FIXTURE_ONE_IN) for line in lines)
     # One processing month per file: every month of the source appears.

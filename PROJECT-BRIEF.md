@@ -238,7 +238,7 @@ Build a small, realistic warehouse over Open DAMIR: 56-variable monthly reimburs
 - [ ] **Write a pinned, checksummed loader.** `loader/sources.lock` lists each file's name, size and SHA-256, not its URL: download links carry a session token, so a pinned URL rots. The loader then:
   - resolves the token at download time
   - rejects any response that isn't gzip, since an expired token returns an HTML page
-  - verifies the checksum and aborts on mismatch
+  - verifies the checksum and aborts on mismatch, as `loader/offline_sample.py` already does for the files it reads
   - PUTs the file to an internal stage and runs `COPY INTO RAW.DAMIR.PRESTATIONS`, with an explicit file format (delimiter, encoding and header checked on the first file) and `ON_ERROR = ABORT_STATEMENT`
 
   Budget a full evening for the load: about 2.85 GB to download and upload, and about 107M rows. The three files load in parallel: one `COPY` statement, one load operation per file.
