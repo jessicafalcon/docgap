@@ -1,0 +1,15 @@
+{
+  "coverage": {},
+  "rank": {
+    "ranked_gaps": "968dfe2db550c8eb4c6c73d84105a16359d8e9bb5cc645de32aae9504d3b4f42"
+  },
+  "resolve": {
+    "column_refs": "810343066e06262ff62cecd662b46d21af080e376955d2fba0bf01af700ca586"
+  },
+  "snapshot": {
+    "query_snapshot": "d8f65af603e7ef868de6189f0c00609b1cc0e27ab355881489401e161b04892c"
+  },
+  "usage": {
+    "column_usage": "f5d8e862c3b26beddcc7f97f3a68306d7d99576827c297282ae242c7d56bcc6f"
+  }
+}

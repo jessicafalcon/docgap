@@ -5,10 +5,15 @@ description = "Rank undocumented warehouse columns by usage and failure, then dr
 license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "packaging>=26.3",
     "pyarrow>=25.0.1",
     "pydantic>=2.13.5",
     "sqlglot>=30.20.0",
+    "typer>=0.27.2",
 ]
+
+[project.scripts]
+docgap = "docgap.cli:app"
 
 [dependency-groups]
 dev = [

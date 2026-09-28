@@ -6,10 +6,10 @@ import hashlib
 import json
 import os
 import types
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Union, get_args, get_origin
+from typing import Annotated, Any, BinaryIO, Union, get_args, get_origin
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -17,7 +17,14 @@ from pydantic import AwareDatetime, BaseModel
 
 from docgap.models import canonical_json
 
-__all__ = ["arrow_schema", "canonical_lines", "read_rows", "rows_sha256", "write_rows"]
+__all__ = [
+    "arrow_schema",
+    "canonical_lines",
+    "read_rows",
+    "rows_sha256",
+    "write_atomic",
+    "write_rows",
+]
 
 # Every timestamp in a contract is UTC (models._require_utc); microseconds match
 # Python's datetime, so a round trip loses nothing.
@@ -79,17 +86,15 @@ def rows_sha256(rows: Iterable[BaseModel]) -> str:
     return hashlib.sha256(canonical_lines(rows)).hexdigest()
 
 
-def write_rows[M: BaseModel](rows: Sequence[M], model: type[M], path: Path) -> str:
-    """Write rows to Parquet atomically, in the order given, and return their hash.
+def write_atomic(path: Path, write: Callable[[BinaryIO], object]) -> None:
+    """Write a file whole or not at all: beside its final path, synced, then renamed over it.
 
-    The caller sorts by a total key first. The file appears whole or not at all:
-    it is written beside its final path, synced, then renamed over it.
+    A killed write leaves only a `*.tmp-<pid>` file, which a resumed run clears.
     """
-    table = pa.Table.from_pylist([row.model_dump() for row in rows], schema=arrow_schema(model))
     tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
     try:
         with tmp.open("wb") as sink:
-            pq.write_table(table, sink)  # pyright: ignore[reportUnknownMemberType]
+            write(sink)
             sink.flush()
             os.fsync(sink.fileno())
         tmp.replace(path)
@@ -101,6 +106,15 @@ def write_rows[M: BaseModel](rows: Sequence[M], model: type[M], path: Path) -> s
             os.close(directory)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def write_rows[M: BaseModel](rows: Sequence[M], model: type[M], path: Path) -> str:
+    """Write rows to Parquet atomically, in the order given, and return their hash.
+
+    The caller sorts by a total key first.
+    """
+    table = pa.Table.from_pylist([row.model_dump() for row in rows], schema=arrow_schema(model))
+    write_atomic(path, lambda sink: pq.write_table(table, sink))  # pyright: ignore[reportUnknownMemberType, reportUnknownLambdaType]
     return rows_sha256(rows)
 
 
