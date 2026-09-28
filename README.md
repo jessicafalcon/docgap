@@ -7,7 +7,7 @@ drafts the missing descriptions and opens one pull request for the column
 owners to review.
 
 **Status: in progress, no results yet.** The foundations and the evaluation
-protocol are on `main`, and the deterministic core is being built on offline
+protocol are on `main`, and the deterministic core runs offline on hand-made
 fixtures. No ranking has been evaluated. This README gains a results block,
 generated from run files, when the experiment has run.
 
@@ -38,15 +38,26 @@ baseline run and witnessed by a GitHub release on it
 
 ## Try it
 
-There is no CLI yet; what runs today is the test suite. It needs
-[uv](https://docs.astral.sh/uv/) 0.12.5 exactly, which `pyproject.toml` pins.
+It needs [uv](https://docs.astral.sh/uv/) 0.12.5 exactly, which
+`pyproject.toml` pins. The analysis runs offline on the hand-made fixtures:
 
 ```sh
 uv sync
-uv run pytest
+uv run docgap analyze --offline \
+  --history fixtures/query_history/basic.jsonl \
+  --manifest fixtures/manifest/minimal.json \
+  --scope fixtures/ranking_scope/basic.json \
+  --as-of 2026-09-21T00:00:00Z
 ```
 
-The tests run offline: opening a network socket fails.
+It writes `runs/<run_id>/`: `report.md` with both coverage numbers and the
+ranked gaps, `rank/ranked_gaps.parquet`, and `run_manifest.json`. Run it again
+and every stage is skipped, since its record still holds. The tests run offline
+too; opening a network socket fails:
+
+```sh
+uv run pytest
+```
 
 ## How it works
 
@@ -62,8 +73,9 @@ A deterministic pipeline, with the model calls at the edges:
 3. **Attribute.** In the evaluation, grade each agent answer against the gold
    result with no model involved. For each discovery failure of the ranked run,
    ask a typed question: why did it fail, and which column?
-4. **Rank.** Score each undocumented column by usage and attributed failure
-   rate. Ties break by fully qualified column name, so a re-run never reorders.
+4. **Rank.** Measure coverage two ways, by columns and by executions, then
+   score every undocumented column by usage and attributed failure rate. Ties
+   break by fully qualified column name, so a re-run never reorders.
 5. **Draft and propose.** Draft a description from aggregate-only evidence,
    score its support, sort drafts into confidence bands, and open a pull request
    against the dbt YAML.
@@ -74,7 +86,7 @@ and input, so a run replays offline.
 
 ## Stack
 
-Python 3.12 (uv, pydantic, pyarrow, sqlglot), dbt on Snowflake with DuckDB for
+Python 3.12 (uv, typer, pydantic, pyarrow, sqlglot), dbt on Snowflake with DuckDB for
 offline work, Terraform for roles and grants, Airflow for the weekly run, and
 the Anthropic API for the agent, drafter and judgments.
 

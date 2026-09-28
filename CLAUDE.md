@@ -188,21 +188,24 @@ updated, open risks, next step.
 Update after every PR and merge, in the same change. A new session resumes from here.
 
 - **Phase:** 0 is done (#1–#11): its "Done when" holds and the phase-exit audit
-  found no blockers. Phase 4 (the deterministic core on hand-made fixtures) is in
-  progress; Phase 1 waits for the offline pilot, per the brief's timeline.
+  found no blockers. Phase 4 (the deterministic core on hand-made fixtures) has
+  every step ticked, and its last PR is in review with the phase-exit audit;
+  Phase 1 waits for the offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/analyze`, Phase 4 PR 3, in progress.
+- **Open PRs:** `feat/analyze`, Phase 4 PR 3, in review.
 - **Phase 4 PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/snapshot`, merged (#12).
   - **PR 2:** `feat/resolve-usage`, merged (#14). `manifest.py`, `resolve` (ADR
     0018, `schema_version` 3), `usage` with the ranking scope (ADR 0019, which
     supersedes 0015: any agent-tagged traffic needs a scope).
-  - **PR 3:** `feat/analyze`, in progress. `coverage`, `rank` (score by
-    `Decimal.ln()`), `cli.py`, the run manifest with the snapshot gates, the
-    report and the end-to-end golden files; the last PR of the phase, so it also
-    gets the whole-repo audit.
-- **Next step:** build PR 3, `feat/analyze`, then run the pre-PR gate with the
-  whole-repo audit.
+  - **PR 3:** `feat/analyze`, in review. `coverage`, `rank` over every
+    undocumented mart column (ADR 0020, score by `Decimal.ln()`), `cli.py`,
+    `pipeline.py` (run manifest, snapshot gates, resume, lock), the report and
+    the end-to-end golden files; the last PR of the phase, so it also gets the
+    whole-repo audit.
+- **Next step:** after PR 3 merges, Phase 2 on DuckDB (the offline sample), the
+  next row of the brief's timeline, from an up-to-date `main`, starting with
+  `devils-advocate` on its PR split.

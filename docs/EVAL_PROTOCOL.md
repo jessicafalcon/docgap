@@ -120,7 +120,9 @@ random-N comparison to run, and that is reported as the finding.
 1. **Top-N** is the first N rows of docgap's ranking: only columns with no
    description, sorted by score descending, then by column FQN. The rank weight
    is *w* = 1, so a column whose attributed failure rate is 1 scores twice its
-   usage term.
+   usage term. The ranking holds every mart column undocumented in the baseline
+   docs; one no counted query touched scores 0, so if fewer than N columns were
+   touched, top-N ends with untouched columns in FQN order (ADR 0020).
 2. **Ranking inputs come from discovery questions of one agent run only.** Usage
    counts only queries tagged with the Phase 3 baseline's run ID and a discovery
    `qid`, and failure attribution runs only on that run's discovery failures, so
@@ -223,6 +225,8 @@ promise a detectable headline.
   session's baseline.
 - The needed columns shared by discovery and holdout, and the overlap of top-N
   and random-N.
+- How many top-N columns have no usage, and the columns tied on score at rank N,
+  whose order the FQN decides.
 - Grade reason codes per arm, and infrastructure failures per arm.
 - The Phase 3 baseline next to the session's baseline.
 - Every deviation from this protocol, with its decision record.
