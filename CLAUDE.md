@@ -15,7 +15,8 @@ warehouse/dbt/     dbt project over Open DAMIR (Snowflake and DuckDB profiles)
 infra/             bootstrap.sql (ACCOUNTADMIN, once) + terraform/
 loader/            download, checksum, stage, COPY; offline sample
 orchestration/     one Airflow DAG calling the CLI
-fixtures/          DAMIR fixture, frozen snapshot, manifest, profiles, model cache (offline mode)
+fixtures/          DAMIR fixture, query history, manifest, ranking scope, profiles, model cache (offline mode)
+runs/              one folder per `docgap analyze` run (gitignored, regenerated)
 tests/             unit, golden, determinism, integrity, fault injection
 docs/              EVAL_PROTOCOL.md, adr/, RESULTS.md (generated)
 .claude/           settings, hooks/, skills/, agents/
@@ -161,7 +162,7 @@ code is lost to the next session, and the review agents treat it as a finding.
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, seeds,
   `[actors]`, `[manifest]`, and the model and prompt version at the attribution,
-  drafter and gate call sites) never change. A change to the usage, rank or evidence code
+  drafter and gate call sites) never change. A change to the snapshot, manifest, resolve, usage, rank or evidence code
   that changes its golden outputs, and any other `EVAL_PROTOCOL.md` change,
   needs an ADR with a justification, and the results report the deviation.
   Other files point here rather than restating the list.

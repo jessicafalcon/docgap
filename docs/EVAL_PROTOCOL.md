@@ -234,7 +234,7 @@ promise a detectable headline.
 ## Witnessing the tag
 
 Git sets tag and commit dates from the committer's clock, so they prove nothing
-on their own (ADR 0004). The repo is public before the tag (ADR 0017), and the
+on their own (ADRs 0004 and 0017). The repo is public before the tag (ADR 0017), and the
 tag comes after the gold results are materialized, so a gold query that breaks
 the rules above is fixed before it. The order is:
 

@@ -46,7 +46,8 @@ def run_rank(usage: Path, attributions: Path, config: RankConfig, *, out_dir: Pa
 - **Inputs are explicit.** `as_of`, seeds, thresholds and paths are parameters.
   Only `cli.py` reads the clock and the environment, and passes values in.
 - **One artifact per stage** under `runs/<run_id>/<stage>/`, written atomically
-  (docgap-resilience), with its hash recorded in the run manifest.
+  (docgap-resilience), with its hash recorded in the run manifest. A stage whose
+  output is only counts (`coverage`) writes none: its record is its output.
 - **The CLI is thin.** typer commands parse arguments, build config, call the
   stage. No logic in the CLI or in the DAG.
 

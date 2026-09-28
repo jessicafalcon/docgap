@@ -24,7 +24,7 @@ The test is pre-registered in [`docs/EVAL_PROTOCOL.md`](docs/EVAL_PROTOCOL.md):
   French health-insurance spending data whose columns are coded (`PRS_PAI_MNT`,
   `BEN_CMU_TOP`). A seed splits them into discovery (25) and holdout (15).
 - **Ranking inputs:** only discovery questions feed the ranking, and a test
-  will enforce it.
+  enforces it.
 - **Arms:** a baseline with half the columns documented; the baseline plus
   drafts for docgap's top N columns; and the baseline plus drafts, from the same
   drafter and gate, for N random undocumented columns.
