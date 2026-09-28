@@ -74,8 +74,8 @@ class Stage:
     inputs: Mapping[str, str]
     # Input key to the (stage, output key) of an earlier stage's output it reads.
     upstream: Mapping[str, tuple[str, str]]
-    # Output key to a function hashing that output as found in the stage directory.
-    outputs: Mapping[str, Callable[[Path], str]]
+    # Output key to its file in the stage directory and the contract of its rows.
+    outputs: Mapping[str, tuple[str, type[BaseModel]]]
     run: Callable[[Path], StageRecord]
 
 
@@ -83,7 +83,10 @@ def _outputs_hold(stage: Stage, record: StageRecord, directory: Path) -> bool:
     if set(record.outputs) != set(stage.outputs):
         return False
     try:
-        return all(stage.outputs[key](directory) == sha for key, sha in record.outputs.items())
+        return all(
+            rows_sha256(read_rows(directory / file, model)) == record.outputs[key]
+            for key, (file, model) in stage.outputs.items()
+        )
     # A missing or unreadable output: the stage runs again.
     except (OSError, ValueError):
         return False
@@ -95,7 +98,7 @@ def run_stages(
     run_dir: Path,
     setup: RunSetup,
     as_of: datetime,
-    run_id: str,
+    name: str,
     git_sha: str | None,
     now: Callable[[], datetime],
 ) -> RunManifest:
@@ -129,7 +132,7 @@ def run_stages(
         manifest = RunManifest(
             canonical=RunCanonical(setup=setup, as_of=as_of, stages=dict(records)),
             operational=RunOperational(
-                run_id=run_id,
+                run_id=name,
                 git_sha=git_sha,
                 stages=dict(runs),
                 cache_hits=0,
@@ -141,6 +144,11 @@ def run_stages(
         text = manifest.model_dump_json(indent=2) + "\n"
         write_atomic(path, lambda sink: sink.write(text.encode()))
         return manifest
+
+    def mark(stage: str, status: StageStatus, started: datetime) -> RunManifest:
+        finished = None if status is StageStatus.RUNNING else now()
+        runs[stage] = StageRun(status=status, started_at=started, finished_at=finished, retries=0)
+        return save()
 
     run_dir.mkdir(parents=True, exist_ok=True)
     manifest = save()
@@ -158,16 +166,10 @@ def run_stages(
             and _outputs_hold(stage, old, directory)
         ):
             records[stage.name] = old
-            runs[stage.name] = StageRun(
-                status=StageStatus.SKIPPED, started_at=started, finished_at=now(), retries=0
-            )
-            manifest = save()
+            manifest = mark(stage.name, StageStatus.SKIPPED, started)
             continue
         shutil.rmtree(directory, ignore_errors=True)
-        runs[stage.name] = StageRun(
-            status=StageStatus.RUNNING, started_at=started, finished_at=None, retries=0
-        )
-        save()
+        mark(stage.name, StageStatus.RUNNING, started)
         try:
             record = stage.run(directory)
             if record.inputs != expected:
@@ -176,25 +178,15 @@ def run_stages(
                     "an input file changed during the run"
                 )
         except BaseException:
-            runs[stage.name] = StageRun(
-                status=StageStatus.FAILED, started_at=started, finished_at=now(), retries=0
-            )
-            save()
+            mark(stage.name, StageStatus.FAILED, started)
             raise
         records[stage.name] = record
-        runs[stage.name] = StageRun(
-            status=StageStatus.SUCCEEDED, started_at=started, finished_at=now(), retries=0
-        )
-        manifest = save()
+        manifest = mark(stage.name, StageStatus.SUCCEEDED, started)
     return manifest
 
 
 def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _rows_at(file: str, model: type[BaseModel]) -> Callable[[Path], str]:
-    return lambda directory: rows_sha256(read_rows(directory / file, model))
 
 
 def analyze_stages(
@@ -217,7 +209,7 @@ def analyze_stages(
             name="snapshot",
             inputs={"history": _file_sha256(history)},
             upstream={},
-            outputs={"query_snapshot": _rows_at(SNAPSHOT_FILE, QueryRecord)},
+            outputs={"query_snapshot": (SNAPSHOT_FILE, QueryRecord)},
             run=lambda out: run_snapshot(
                 history,
                 as_of=as_of,
@@ -231,7 +223,7 @@ def analyze_stages(
             name="resolve",
             inputs={"manifest": manifest_sha256},
             upstream={"query_snapshot": ("snapshot", "query_snapshot")},
-            outputs={"column_refs": _rows_at(COLUMN_REFS_FILE, ColumnRef)},
+            outputs={"column_refs": (COLUMN_REFS_FILE, ColumnRef)},
             run=lambda out: run_resolve(
                 snapshot, manifest, config=config.manifest, setup_sha256=setup_sha256, out_dir=out
             ),
@@ -243,7 +235,7 @@ def analyze_stages(
                 "column_refs": ("resolve", "column_refs"),
                 "query_snapshot": ("snapshot", "query_snapshot"),
             },
-            outputs={"column_usage": _rows_at(COLUMN_USAGE_FILE, ColumnUsage)},
+            outputs={"column_usage": (COLUMN_USAGE_FILE, ColumnUsage)},
             run=lambda out: run_usage(
                 snapshot, refs, scope=scope, setup_sha256=setup_sha256, out_dir=out
             ),
@@ -261,7 +253,7 @@ def analyze_stages(
             name="rank",
             inputs={"manifest": manifest_sha256},
             upstream={"column_usage": ("usage", "column_usage")},
-            outputs={"ranked_gaps": _rows_at(RANKED_GAPS_FILE, RankedGap)},
+            outputs={"ranked_gaps": (RANKED_GAPS_FILE, RankedGap)},
             run=lambda out: run_rank(
                 usage,
                 manifest,
@@ -282,13 +274,15 @@ def analyze(
     config: DocgapConfig,
     as_of: datetime,
     setup: RunSetup,
-    runs: Path,
+    run_dir: Path,
     git_sha: str | None,
     now: Callable[[], datetime],
 ) -> RunManifest:
-    """Run the offline analysis into `runs/<run_id>/`, then write `report.md` from its canonical record."""
-    name = run_id(as_of, setup)
-    run_dir = runs / name
+    """Run the offline analysis into `run_dir`, then write `report.md` from its canonical record.
+
+    Notes:
+        `run_dir` is named by `run_id(as_of, setup)`; the name is the run ID.
+    """
     stages = analyze_stages(
         history=history,
         manifest=manifest,
@@ -303,7 +297,7 @@ def analyze(
         run_dir=run_dir,
         setup=setup,
         as_of=as_of,
-        run_id=name,
+        name=run_dir.name,
         git_sha=git_sha,
         now=now,
     )

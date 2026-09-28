@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Iterable
 from pathlib import Path
 
 from docgap.artifacts import read_rows, rows_sha256
 from docgap.config import ManifestConfig
-from docgap.manifest import Marts, load_marts
+from docgap.manifest import Marts, read_marts
 from docgap.models import ColumnUsage, StageRecord
 from docgap.usage import executions
 
@@ -43,15 +42,11 @@ def run_coverage(
     The stage writes no artifact: its counts in the run manifest are its output.
     """
     rows = read_rows(column_usage, ColumnUsage)
-    # Read once, so the input hash covers exactly the bytes parsed.
-    manifest_bytes = manifest.read_bytes()
+    marts, manifest_sha256 = read_marts(manifest, config)
     return StageRecord(
         setup_sha256=setup_sha256,
-        inputs={
-            "column_usage": rows_sha256(rows),
-            "manifest": hashlib.sha256(manifest_bytes).hexdigest(),
-        },
+        inputs={"column_usage": rows_sha256(rows), "manifest": manifest_sha256},
         outputs={},
-        counts=coverage(load_marts(manifest_bytes, config), rows),
+        counts=coverage(marts, rows),
         gates={},
     )

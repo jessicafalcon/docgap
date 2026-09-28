@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from docgap.config import ManifestConfig
 from docgap.models import Identifier
 
-__all__ = ["DBT_SCHEMA_VERSION", "Marts", "load_marts"]
+__all__ = ["DBT_SCHEMA_VERSION", "Marts", "load_marts", "read_marts"]
 
 # The manifest shape this reader was written against. Another version fails
 # loading instead of being read under a guessed shape.
@@ -63,6 +65,10 @@ class _Manifest(_Read):
     nodes: dict[str, _Node]
 
 
+def _fqn(database: str, schema: str, table: str, column: str) -> str:
+    return f"{database}.{schema}.{table}.{column}"
+
+
 @dataclass(frozen=True)
 class Marts:
     """The mart relations: table name to column name to dbt data type, uppercased.
@@ -79,7 +85,7 @@ class Marts:
     def fqns(self) -> list[str]:
         """Every mart column as `DATABASE.SCHEMA.TABLE.COLUMN`, sorted."""
         return sorted(
-            f"{self.database}.{self.schema}.{table}.{column}"
+            _fqn(self.database, self.schema, table, column)
             for table, columns in self.tables.items()
             for column in columns
         )
@@ -155,10 +161,20 @@ def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:
         if table in tables:
             raise ValueError(f"{node.unique_id}: a second relation named {table}")
         tables[table], described = _mart_columns(node)
-        prefix = f"{config.mart_database}.{config.mart_schema}.{table}"
-        documented.update(f"{prefix}.{column}" for column in described)
+        documented.update(
+            _fqn(config.mart_database, config.mart_schema, table, column) for column in described
+        )
     if not tables:
         raise ValueError(
             f"dbt manifest: no relation in {config.mart_database}.{config.mart_schema}"
         )
     return Marts(config.mart_database, config.mart_schema, tables, frozenset(documented))
+
+
+def read_marts(path: Path, config: ManifestConfig) -> tuple[Marts, str]:
+    """Read a dbt manifest file into the marts, with the SHA-256 of the bytes parsed.
+
+    The file is read once, so the hash a stage records covers exactly what it parsed.
+    """
+    manifest = path.read_bytes()
+    return load_marts(manifest, config), hashlib.sha256(manifest).hexdigest()

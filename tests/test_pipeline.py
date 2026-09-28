@@ -36,7 +36,7 @@ def _analyze(runs: Path) -> RunManifest:
         config=CONFIG,
         as_of=AS_OF,
         setup=RUN_SETUP,
-        runs=runs,
+        run_dir=runs / RUN_ID,
         git_sha=None,
         now=_now,
     )
@@ -122,7 +122,7 @@ def test_a_stage_that_read_other_inputs_fails(tmp_path: Path) -> None:
             run_dir=tmp_path,
             setup=RUN_SETUP,
             as_of=AS_OF,
-            run_id=RUN_ID,
+            name=RUN_ID,
             git_sha=None,
             now=_now,
         )

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Iterable
 from decimal import ROUND_HALF_EVEN, Context, Decimal
 from pathlib import Path
 
 from docgap.artifacts import read_rows, rows_sha256, write_rows
 from docgap.config import ManifestConfig, RankConfig
-from docgap.manifest import Marts, load_marts
+from docgap.manifest import Marts, read_marts
 from docgap.models import ColumnUsage, RankedGap, StageRecord
 from docgap.usage import executions
 
@@ -72,16 +71,12 @@ def run_rank(
 ) -> StageRecord:
     """Rank the gaps from `column_usage.parquet` and the dbt manifest into `ranked_gaps.parquet`."""
     usage = read_rows(column_usage, ColumnUsage)
-    # Read once, so the input hash covers exactly the bytes parsed.
-    manifest_bytes = manifest.read_bytes()
-    rows = rank(load_marts(manifest_bytes, manifest_config), usage, w=config.w)
+    marts, manifest_sha256 = read_marts(manifest, manifest_config)
+    rows = rank(marts, usage, w=config.w)
     out_dir.mkdir(parents=True, exist_ok=True)
     return StageRecord(
         setup_sha256=setup_sha256,
-        inputs={
-            "column_usage": rows_sha256(usage),
-            "manifest": hashlib.sha256(manifest_bytes).hexdigest(),
-        },
+        inputs={"column_usage": rows_sha256(usage), "manifest": manifest_sha256},
         outputs={"ranked_gaps": write_rows(rows, RankedGap, out_dir / RANKED_GAPS_FILE)},
         counts={
             "columns.ranked": len(rows),

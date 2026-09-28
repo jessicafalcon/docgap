@@ -62,13 +62,6 @@ def test_analyze_reproduces_the_committed_ranking_and_report(
     assert list(manifest.canonical.stages) == ["snapshot", "resolve", "usage", "coverage", "rank"]
 
 
-def test_two_runs_have_equal_canonical_manifests(tmp_path: Path) -> None:
-    _, first = _analyze(tmp_path / "a")
-    _, second = _analyze(tmp_path / "b")
-    assert first.canonical == second.canonical
-    assert first.canonical_sha256() == second.canonical_sha256()
-
-
 @pytest.mark.parametrize("seed", ["0", "1"])
 def test_another_process_and_hash_seed_gives_the_same_canonical_hash(
     tmp_path: Path, seed: str

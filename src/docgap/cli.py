@@ -161,7 +161,8 @@ def analyze_command(
             environment=_environment(),
             call_sites={},
         )
-        with _lock(runs / run_id(instant, setup)):
+        run_dir = runs / run_id(instant, setup)
+        with _lock(run_dir):
             result = analyze(
                 history=history,
                 manifest=manifest,
@@ -169,7 +170,7 @@ def analyze_command(
                 config=loaded,
                 as_of=instant,
                 setup=setup,
-                runs=runs,
+                run_dir=run_dir,
                 git_sha=_git_sha(),
                 now=lambda: datetime.now(UTC),
             )
@@ -177,7 +178,6 @@ def analyze_command(
     except (OSError, ValueError) as error:
         typer.echo(f"docgap: {error}", err=True)
         raise typer.Exit(1) from None
-    run_dir = runs / result.operational.run_id
     typer.echo(f"run {result.operational.run_id}")
     typer.echo(f"canonical sha256 {result.canonical_sha256()}")
     typer.echo(f"ranking {run_dir / 'rank' / RANKED_GAPS_FILE}")
