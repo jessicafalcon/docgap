@@ -4,5 +4,6 @@
   "queries.out_of_scope.other_question": 2,
   "queries.out_of_scope.other_run": 2,
   "queries.out_of_scope.untagged": 1,
-  "queries.read": 9
+  "queries.read": 9,
+  "scope.qids_without_queries": 0
 }

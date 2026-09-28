@@ -101,3 +101,12 @@ def test_a_mart_schema_with_no_relation_fails() -> None:
     config = ManifestConfig(mart_database="ANALYTICS", mart_schema="REPORTING")
     with pytest.raises(ValueError, match=r"no relation in ANALYTICS\.REPORTING"):
         load_marts(MANIFEST.read_bytes(), config)
+
+
+def test_a_column_declared_twice_fails() -> None:
+    def twice(manifest: dict[str, Any]) -> None:
+        columns = manifest["nodes"][FCT]["columns"]
+        columns["prs_nat"] = columns["PRS_NAT"] | {"name": "prs_nat"}
+
+    with pytest.raises(ValueError, match="declared twice"):
+        _load(twice)

@@ -31,6 +31,7 @@ from docgap.models import (
     Profile,
     QueryRecord,
     RankedGap,
+    RankingScope,
     RunCanonical,
     RunManifest,
     RunOperational,
@@ -48,7 +49,7 @@ FQN = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PAI_MNT"
 SQL = "SELECT PRS_PAI_MNT FROM FCT_REIMBURSEMENTS WHERE BEN_CMU_TOP = ?"
 HASH = "0" * 64
 
-# The brief's ten contracts, each with its committed JSON Schema.
+# The brief's contracts, each with its committed JSON Schema.
 CONTRACTS: dict[str, type[BaseModel]] = {
     "column_ref": ColumnRef,
     "query_record": QueryRecord,
@@ -59,6 +60,7 @@ CONTRACTS: dict[str, type[BaseModel]] = {
     "draft": Draft,
     "gate_result": GateResult,
     "ranked_gap": RankedGap,
+    "ranking_scope": RankingScope,
     "run_manifest": RunManifest,
 }
 
@@ -194,6 +196,7 @@ EXAMPLES: list[BaseModel] = [
     ),
     GateResult(fqn=FQN, draft_sha256=HASH, p_supported=0.9, band=Band.READY, failure=None),
     RankedGap(rank=1, fqn=FQN, score=2.3, executions=9, failure_rate=0.2),
+    RankingScope(run_id="20260920T180000Z-1a2b3c4d", qids=("q01", "q03")),
     _manifest(),
 ]
 

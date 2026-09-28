@@ -130,3 +130,12 @@ def test_value_change_moves_only_its_section_hash() -> None:
     before = load_config(CONFIG).section_sha256()
     after = DocgapConfig.model_validate(raw).section_sha256()
     assert {name for name in before if before[name] != after[name]} == {"evidence"}
+
+
+@pytest.mark.parametrize("value", ["marts", "ANALYTICS.MARTS", ""])
+def test_mart_schema_must_be_an_uppercase_identifier(value: str) -> None:
+    # The marts are matched against uppercased manifest names and FQNs.
+    raw = _raw()
+    raw["manifest"]["mart_schema"] = value
+    with pytest.raises(ValidationError):
+        DocgapConfig.model_validate(raw)

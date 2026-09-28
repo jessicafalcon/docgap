@@ -160,8 +160,8 @@ code is lost to the next session, and the review agents treat it as a finding.
 - **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, seeds,
-  `[actors]`, and the model and prompt version at the attribution, drafter and
-  gate call sites) never change. A change to the usage, rank or evidence code
+  `[actors]`, `[manifest]`, and the model and prompt version at the attribution,
+  drafter and gate call sites) never change. A change to the usage, rank or evidence code
   that changes its golden outputs, and any other `EVAL_PROTOCOL.md` change,
   needs an ADR with a justification, and the results report the deviation.
   Other files point here rather than restating the list.
@@ -198,7 +198,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Phase 4 PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/snapshot`, merged (#12).
   - **PR 2:** `feat/resolve-usage`, in review. `manifest.py`, `resolve` (ADR
-    0018, `schema_version` 3), `usage` with the ranking scope.
+    0018, `schema_version` 3), `usage` with the ranking scope (ADR 0019, which
+    supersedes 0015: any agent-tagged traffic needs a scope).
   - **PR 3:** `feat/analyze`. `coverage`, `rank` (score by `Decimal.ln()`),
     `cli.py`, the run manifest with the snapshot gates, the report and the
     end-to-end golden files; the last PR of the phase, so it also gets the

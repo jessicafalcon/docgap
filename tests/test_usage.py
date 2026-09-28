@@ -13,9 +13,17 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from docgap.artifacts import read_rows, rows_sha256
-from docgap.models import Actor, Clause, ColumnRef, ColumnUsage, QueryRecord, canonical_sha256
+from docgap.models import (
+    Actor,
+    Clause,
+    ColumnRef,
+    ColumnUsage,
+    QueryRecord,
+    RankingScope,
+    canonical_sha256,
+)
 from docgap.resolve import COLUMN_REFS_FILE, resolve, run_resolve
-from docgap.usage import COLUMN_USAGE_FILE, RankingScope, run_usage, usage
+from docgap.usage import COLUMN_USAGE_FILE, run_usage, usage
 
 BASELINE = "20260920T180000Z-1a2b3c4d"
 # In the fixture, q01 and q03 play the discovery questions and q02 a holdout one.
@@ -86,20 +94,37 @@ def test_holdout_and_another_runs_queries_change_no_ranking_input() -> None:
     assert counts["queries.out_of_scope.other_run"] == 3
 
 
-def test_tagged_traffic_from_two_runs_needs_a_scope() -> None:
+@pytest.mark.parametrize("runs", [{BASELINE}, None], ids=["one_run", "two_runs"])
+def test_tagged_traffic_needs_a_scope(runs: set[str] | None) -> None:
+    # One run's traffic holds its holdout questions too (q02 here), so it needs a scope.
     records, refs = _inputs()
-    with pytest.raises(ValueError, match="2 agent runs needs a ranking scope"):
-        usage(records, refs, scope=None)
+    if runs is not None:
+        records = [record for record in records if record.run_id in runs]
+    with pytest.raises(ValueError, match="tagged agent traffic needs a ranking scope"):
+        usage(records, _refs_for(records, refs), scope=None)
 
 
-def test_without_a_scope_one_runs_traffic_counts_whole() -> None:
+def test_without_a_scope_untagged_traffic_counts_whole() -> None:
     records, refs = _inputs()
-    one_run = [record for record in records if record.run_id in (BASELINE, None)]
-    rows, counts = usage(one_run, _refs_for(one_run, refs), scope=None)
-    assert counts["queries.in_scope"] == len(one_run)
+    untagged = [record for record in records if record.run_id is None]
+    rows, counts = usage(untagged, _refs_for(untagged, refs), scope=None)
+    assert counts["queries.in_scope"] == len(untagged)
     # The untagged `SELECT *` on DIM_REGION counts as execution, but in no run.
     region = next(row for row in rows if row.fqn.endswith("DIM_REGION.REG_LIB"))
     assert (region.executions_agent, region.questions, region.runs) == (1, 0, 0)
+
+
+def test_counted_traffic_touching_no_mart_column_fails() -> None:
+    records, _ = _inputs()
+    with pytest.raises(ValueError, match="no counted query touches a mart column"):
+        usage(records, [], scope=SCOPE)
+
+
+def test_a_scope_question_with_no_query_is_counted() -> None:
+    records, refs = _inputs()
+    scope = RankingScope(run_id=BASELINE, qids=("q01", "q03", "q99"))
+    _, counts = usage(records, refs, scope=scope)
+    assert counts["scope.qids_without_queries"] == 1
 
 
 def test_a_scope_that_matches_no_query_fails() -> None:
@@ -129,30 +154,42 @@ def test_a_column_counts_once_per_query_across_clauses() -> None:
     refs = [
         ColumnRef(query_id="q", fqn=FQN, clause=clause) for clause in (Clause.SELECT, Clause.WHERE)
     ]
-    rows, _ = usage([record], refs, scope=None)
+    rows, _ = usage([record], refs, scope=SCOPE)
     assert [(row.executions_agent, row.fingerprints_agent, row.runs) for row in rows] == [(1, 1, 1)]
 
 
-def test_counts_split_by_actor_and_distinct_fingerprints() -> None:
+def test_runs_count_repetitions_and_fingerprints_count_distinct_sql() -> None:
     sql = "SELECT PRS_PAI_MNT FROM FCT_REIMBURSEMENTS"
-    records = [
-        _query("a1", sql, repetition=1),
-        _query("a2", sql, repetition=2),
-        _query("h1", sql, actor=Actor.HUMAN, run_id=None, qid=None, repetition=None),
-    ]
+    records = [_query("a1", sql, repetition=1), _query("a2", sql, repetition=2)]
     refs = [ColumnRef(query_id=r.query_id, fqn=FQN, clause=Clause.SELECT) for r in records]
-    rows, _ = usage(records, refs, scope=None)
+    rows, _ = usage(records, refs, scope=SCOPE)
     assert rows == [
         ColumnUsage(
             fqn=FQN,
             executions_agent=2,
-            executions_human=1,
+            executions_human=0,
             fingerprints_agent=1,
-            fingerprints_human=1,
+            fingerprints_human=0,
             questions=1,
             runs=2,
         )
     ]
+
+
+def test_untagged_counts_split_by_actor() -> None:
+    sql = "SELECT PRS_PAI_MNT FROM FCT_REIMBURSEMENTS"
+    untagged = {"run_id": None, "qid": None, "repetition": None}
+    records = [
+        _query("a1", sql, **untagged),
+        _query("a2", sql + " LIMIT ?", **untagged),
+        _query("h1", sql, actor=Actor.HUMAN, **untagged),
+    ]
+    refs = [ColumnRef(query_id=r.query_id, fqn=FQN, clause=Clause.SELECT) for r in records]
+    rows, _ = usage(records, refs, scope=None)
+    assert [
+        (row.executions_agent, row.executions_human, row.fingerprints_agent, row.runs)
+        for row in rows
+    ] == [(2, 1, 2, 0)]
 
 
 @settings(max_examples=25, deadline=None)

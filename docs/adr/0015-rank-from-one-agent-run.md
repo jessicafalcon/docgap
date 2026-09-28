@@ -1,8 +1,8 @@
 # 0015. Keep the run ID and session context in each query record, and rank from one agent run
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-09-28
-- **Superseded by:** none
+- **Superseded by:** [0019](0019-scope-all-tagged-agent-traffic.md)
 
 ## Context and Problem Statement
 

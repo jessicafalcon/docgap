@@ -7,5 +7,5 @@ one, a seed and a test. It carries only the fields `docgap.manifest` reads, plus
 few it ignores. The columns match the queries in `fixtures/query_history/basic.jsonl`
 and the hand-checked queries in `tests/test_resolve.py`.
 
-A manifest built by the real dbt project replaces it in Phase 2's "Freeze the
-manifest" step.
+The unit tests keep this file. Phase 2's "Freeze the manifest" step adds a test
+that reads the manifest the real dbt project builds.

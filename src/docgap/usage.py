@@ -5,50 +5,31 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Annotated
-
-from pydantic import AfterValidator, BaseModel, Field
 
 from docgap.artifacts import read_rows, rows_sha256, write_rows
 from docgap.models import (
-    CONTRACT_CONFIG,
     Actor,
     ColumnRef,
     ColumnUsage,
-    Qid,
     QueryRecord,
-    RunId,
+    RankingScope,
     StageRecord,
     canonical_sha256,
 )
 
-__all__ = ["COLUMN_USAGE_FILE", "RankingScope", "run_usage", "usage"]
+__all__ = ["COLUMN_USAGE_FILE", "run_usage", "usage"]
 
 COLUMN_USAGE_FILE = "column_usage.parquet"
-
-
-def _sorted_unique(qids: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(sorted(set(qids)))
-
-
-class RankingScope(BaseModel):
-    """The traffic the ranking reads: one agent run and its discovery questions (ADR 0015)."""
-
-    model_config = CONTRACT_CONFIG
-
-    run_id: RunId
-    # Sorted and deduplicated, so equal scopes hash the same.
-    qids: Annotated[tuple[Qid, ...], Field(min_length=1), AfterValidator(_sorted_unique)]
 
 
 def _in_scope(
     records: Sequence[QueryRecord], scope: RankingScope | None
 ) -> tuple[Sequence[QueryRecord], dict[str, int]]:
-    run_ids = sorted({record.run_id for record in records if record.run_id})
     if scope is None:
-        # Two runs of the same questions would add up: u doubles and r halves.
-        if len(run_ids) > 1:
-            raise ValueError(f"tagged traffic from {len(run_ids)} agent runs needs a ranking scope")
+        # Agent traffic holds holdout questions, and a window can hold several runs of
+        # the same questions, which would add up: u doubles and r halves (ADR 0019).
+        if any(record.run_id for record in records):
+            raise ValueError("tagged agent traffic needs a ranking scope")
         return records, {}
     kept: list[QueryRecord] = []
     other_run = other_question = untagged = 0
@@ -65,10 +46,14 @@ def _in_scope(
         raise ValueError(
             f"no query in the snapshot belongs to the ranking scope's run {scope.run_id}"
         )
+    # A scope question with no query is a sign of a wrong scope file: every agent
+    # run issues at least its final answer.
+    unmatched = set(scope.qids) - {record.qid for record in kept}
     return kept, {
         "queries.out_of_scope.other_question": other_question,
         "queries.out_of_scope.other_run": other_run,
         "queries.out_of_scope.untagged": untagged,
+        "scope.qids_without_queries": len(unmatched),
     }
 
 
@@ -78,13 +63,14 @@ def usage(
     """Count, per mart column, the in-scope queries that touch it, split by actor.
 
     With a scope, only its run's queries for its questions count; every other query
-    is counted by why it was left out. Without one, all traffic counts, and tagged
-    traffic from more than one agent run fails. A column appears once per query,
-    whatever clauses it is in. Rows cover the columns touched, sorted by FQN.
+    is counted by why it was left out. Without one, all traffic counts, and any
+    agent-tagged query fails. A column appears once per query, whatever clauses it
+    is in. Rows cover the columns touched, sorted by FQN.
 
     Raises:
-        ValueError: several agent runs and no scope, a scope that matches no query,
-            or a reference to a query that isn't in the snapshot.
+        ValueError: tagged traffic and no scope, a scope that matches no query, counted
+            traffic that touches no mart column, or a reference to a query that isn't
+            in the snapshot.
     """
     records = list(records)
     known = {record.query_id for record in records}
@@ -98,6 +84,9 @@ def usage(
             )
         if ref.query_id in by_id:
             touched[ref.fqn].add(ref.query_id)
+    # Nothing to rank: an all-zero ranking would look like a result.
+    if not touched:
+        raise ValueError("no counted query touches a mart column")
     rows: list[ColumnUsage] = []
     for fqn in sorted(touched):
         queries = [by_id[query_id] for query_id in touched[fqn]]
