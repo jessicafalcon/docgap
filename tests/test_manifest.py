@@ -31,10 +31,8 @@ def test_reads_the_mart_models_uppercased() -> None:
 
 
 def test_lowercase_column_names_are_uppercased() -> None:
-    def lowercase(manifest: dict[str, Any]) -> None:
-        manifest["nodes"][FCT]["columns"]["PRS_NAT"]["name"] = "prs_nat"
-
-    assert "PRS_NAT" in _load(lowercase).tables["FCT_REIMBURSEMENTS"]
+    marts = _load(_set(("nodes", FCT, "columns", "PRS_NAT", "name"), "prs_nat"))
+    assert "PRS_NAT" in marts.tables["FCT_REIMBURSEMENTS"]
 
 
 def _set(path: tuple[str, ...], value: object) -> Callable[[dict[str, Any]], None]:

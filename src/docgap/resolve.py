@@ -130,10 +130,12 @@ def _references(scope: Scope, marts: Marts) -> Iterator[tuple[Reference, str, Cl
             yield _unattributed(scope, marts), select.sql(dialect=_DIALECT), Clause.SELECT
 
 
-def _top_level_star(tree: exp.Expr) -> bool:
-    if isinstance(tree, exp.SetOperation):
-        return _top_level_star(tree.left) or _top_level_star(tree.right)
-    return isinstance(tree, exp.Select) and any(select.is_star for select in tree.selects)
+def _mapping(marts: Marts) -> MappingSchema:
+    # Nested as sqlglot reads a schema: database, schema, table, column to type.
+    tables = {table: dict(columns) for table, columns in marts.tables.items()}
+    return MappingSchema(
+        {marts.database: {marts.schema: tables}}, dialect=_DIALECT, normalize=False
+    )
 
 
 def resolve_query(
@@ -157,8 +159,9 @@ def resolve_query(
         sqlglot.errors.SqlglotError: sqlglot can't parse or qualify the query.
     """
     tree = sqlglot.parse_one(sql, dialect=_DIALECT)
-    star = _top_level_star(tree)
-    mapping = MappingSchema(marts.sqlglot_schema(), dialect=_DIALECT, normalize=False)
+    # Through a set operation too: `is_star` reads every branch.
+    star = tree.is_star
+    mapping = _mapping(marts)
     # Without column validation: validation fails the whole query on one unknown
     # name, and every other column in it would go uncounted.
     tree = qualify(
@@ -183,11 +186,11 @@ def resolve(records: Iterable[QueryRecord], marts: Marts) -> tuple[list[ColumnRe
     Rows are sorted by query ID, column FQN and clause. A query sqlglot can't
     qualify is counted and contributes no rows.
     """
+    records = list(records)
     rows: list[ColumnRef] = []
     references: Counter[Reference] = Counter()
-    queries = star = failed = 0
+    star = failed = 0
     for record in records:
-        queries += 1
         try:
             refs, top_level_star = resolve_query(
                 record.normalized_sql,
@@ -205,7 +208,7 @@ def resolve(records: Iterable[QueryRecord], marts: Marts) -> tuple[list[ColumnRe
                 rows.append(ColumnRef(query_id=record.query_id, fqn=name, clause=clause))
     rows.sort(key=lambda row: (row.query_id, row.fqn, row.clause))
     counts = {
-        "queries.read": queries,
+        "queries.read": len(records),
         "queries.qualify_failed": failed,
         "queries.top_level_star": star,
     } | {f"columns.{kind.value}": references[kind] for kind in Reference}

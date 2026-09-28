@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Annotated
 
@@ -42,9 +42,8 @@ class RankingScope(BaseModel):
 
 
 def _in_scope(
-    records: Iterable[QueryRecord], scope: RankingScope | None
-) -> tuple[list[QueryRecord], dict[str, int]]:
-    records = list(records)
+    records: Sequence[QueryRecord], scope: RankingScope | None
+) -> tuple[Sequence[QueryRecord], dict[str, int]]:
     run_ids = sorted({record.run_id for record in records if record.run_id})
     if scope is None:
         # Two runs of the same questions would add up: u doubles and r halves.

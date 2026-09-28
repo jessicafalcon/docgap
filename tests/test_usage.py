@@ -3,24 +3,20 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import random
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from conftest import MANIFEST, MARTS_CONFIG, SETUP, snapshot_records
+from conftest import MANIFEST, MARTS, MARTS_CONFIG, SETUP, assert_golden, snapshot_records
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from docgap.artifacts import canonical_lines, read_rows, rows_sha256
-from docgap.manifest import load_marts
+from docgap.artifacts import read_rows, rows_sha256
 from docgap.models import Actor, Clause, ColumnRef, ColumnUsage, QueryRecord, canonical_sha256
 from docgap.resolve import COLUMN_REFS_FILE, resolve, run_resolve
 from docgap.usage import COLUMN_USAGE_FILE, RankingScope, run_usage, usage
 
-GOLDEN = Path(__file__).resolve().parent / "golden" / "usage"
-MARTS = load_marts(MANIFEST.read_bytes(), MARTS_CONFIG)
 BASELINE = "20260920T180000Z-1a2b3c4d"
 # In the fixture, q01 and q03 play the discovery questions and q02 a holdout one.
 SCOPE = RankingScope(run_id=BASELINE, qids=("q03", "q01"))
@@ -59,14 +55,7 @@ def test_usage_matches_golden(snapshot_parquet: Path, tmp_path: Path, update_gol
         out_dir=tmp_path / "usage",
     )
     rows = read_rows(tmp_path / "usage" / COLUMN_USAGE_FILE, ColumnUsage)
-    lines = canonical_lines(rows)
-    counts = json.dumps(stage.counts, indent=2, sort_keys=True) + "\n"
-    if update_golden:
-        GOLDEN.mkdir(parents=True, exist_ok=True)
-        (GOLDEN / "column_usage.jsonl").write_bytes(lines)
-        (GOLDEN / "counts.json").write_text(counts)
-    assert lines == (GOLDEN / "column_usage.jsonl").read_bytes()
-    assert counts == (GOLDEN / "counts.json").read_text()
+    assert_golden("usage", "column_usage", rows, stage, update_golden)
     assert stage.outputs == {"column_usage": rows_sha256(rows)}
     assert stage.inputs["ranking_scope"] == canonical_sha256(SCOPE)
 

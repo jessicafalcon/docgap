@@ -6,26 +6,23 @@ expected reference was written by hand from the SQL before the code ran on it.
 
 from __future__ import annotations
 
-import json
 import random
 from collections import Counter
 from pathlib import Path
 
 import pytest
-from conftest import MANIFEST, MARTS_CONFIG, SETUP, snapshot_records
+from conftest import MANIFEST, MARTS, MARTS_CONFIG, SETUP, assert_golden, snapshot_records
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from sqlglot.errors import SqlglotError
 
 import docgap.resolve as resolve_module
-from docgap.artifacts import canonical_lines, read_rows, rows_sha256
-from docgap.manifest import Marts, load_marts
+from docgap.artifacts import read_rows, rows_sha256
+from docgap.manifest import Marts
 from docgap.models import Clause, ColumnRef, QueryRecord
 from docgap.resolve import COLUMN_REFS_FILE, Reference, resolve, resolve_query, run_resolve
 from docgap.snapshot import normalize
 
-GOLDEN = Path(__file__).resolve().parent / "golden" / "resolve"
-MARTS = load_marts(MANIFEST.read_bytes(), MARTS_CONFIG)
 F = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS."
 P = "ANALYTICS.MARTS.DIM_PRESTATION."
 R = "ANALYTICS.MARTS.DIM_REGION."
@@ -223,14 +220,7 @@ def test_resolve_matches_golden(
         out_dir=tmp_path / "resolve",
     )
     rows = read_rows(tmp_path / "resolve" / COLUMN_REFS_FILE, ColumnRef)
-    lines = canonical_lines(rows)
-    counts = json.dumps(stage.counts, indent=2, sort_keys=True) + "\n"
-    if update_golden:
-        GOLDEN.mkdir(parents=True, exist_ok=True)
-        (GOLDEN / "column_refs.jsonl").write_bytes(lines)
-        (GOLDEN / "counts.json").write_text(counts)
-    assert lines == (GOLDEN / "column_refs.jsonl").read_bytes()
-    assert counts == (GOLDEN / "counts.json").read_text()
+    assert_golden("resolve", "column_refs", rows, stage, update_golden)
     assert stage.outputs == {"column_refs": rows_sha256(rows)}
     # The snapshot's input hash is the hash the snapshot stage recorded as its output.
     assert stage.inputs["query_snapshot"] == rows_sha256(snapshot_records())

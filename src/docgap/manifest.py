@@ -31,12 +31,12 @@ class _Metadata(_Read):
     adapter_type: str
 
 
-class _Contract(_Read):
+class _ContractConfig(_Read):
     enforced: bool = False
 
 
 class _NodeConfig(_Read):
-    contract: _Contract = _Contract()
+    contract: _ContractConfig = _ContractConfig()
 
 
 class _Column(_Read):
@@ -68,11 +68,6 @@ class Marts:
     database: str
     schema: str
     tables: Mapping[str, Mapping[str, str]]
-
-    def sqlglot_schema(self) -> dict[str, object]:
-        """Nest the tables as sqlglot's `MappingSchema` reads them: database, schema, table."""
-        tables = {table: dict(columns) for table, columns in self.tables.items()}
-        return {self.database: {self.schema: tables}}
 
 
 def _identifier(name: str, where: str) -> str:

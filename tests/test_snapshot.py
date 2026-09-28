@@ -10,18 +10,19 @@ import hashlib
 import json
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import ACTORS, AS_OF, HISTORY, SETUP, assert_golden
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import docgap.snapshot as snapshot_module
 from docgap.artifacts import canonical_lines, read_rows
 from docgap.config import ActorsConfig, SnapshotConfig
-from docgap.models import Actor, QueryRecord, StageRecord
+from docgap.models import QueryRecord, StageRecord
 from docgap.snapshot import (
     SNAPSHOT_FILE,
     DropReason,
@@ -31,13 +32,6 @@ from docgap.snapshot import (
     run_snapshot,
     snapshot,
 )
-
-ROOT = Path(__file__).resolve().parents[1]
-HISTORY = ROOT / "fixtures" / "query_history" / "basic.jsonl"
-GOLDEN = ROOT / "tests" / "golden" / "snapshot"
-AS_OF = datetime(2026, 9, 21, tzinfo=UTC)
-ACTORS = {"AGENT_READER": Actor.AGENT}
-SETUP = "0" * 64
 
 
 def _snapshot(rows: list[HistoryRow]) -> tuple[list[QueryRecord], dict[str, int]]:
@@ -74,14 +68,9 @@ def _run(out_dir: Path) -> StageRecord:
 
 def test_snapshot_matches_golden(tmp_path: Path, update_golden: bool) -> None:
     stage = _run(tmp_path)
-    lines = canonical_lines(read_rows(tmp_path / SNAPSHOT_FILE, QueryRecord))
-    counts = json.dumps(stage.counts, indent=2, sort_keys=True) + "\n"
-    if update_golden:
-        GOLDEN.mkdir(parents=True, exist_ok=True)
-        (GOLDEN / "query_snapshot.jsonl").write_bytes(lines)
-        (GOLDEN / "counts.json").write_text(counts)
-    assert lines == (GOLDEN / "query_snapshot.jsonl").read_bytes()
-    assert counts == (GOLDEN / "counts.json").read_text()
+    rows = read_rows(tmp_path / SNAPSHOT_FILE, QueryRecord)
+    assert_golden("snapshot", "query_snapshot", rows, stage, update_golden)
+    lines = canonical_lines(rows)
     assert stage.inputs == {"history": hashlib.sha256(HISTORY.read_bytes()).hexdigest()}
     assert stage.outputs == {"query_snapshot": hashlib.sha256(lines).hexdigest()}
 

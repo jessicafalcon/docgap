@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
-from docgap.artifacts import write_rows
+from docgap.artifacts import canonical_lines, write_rows
 from docgap.config import ManifestConfig
-from docgap.models import Actor, QueryRecord
+from docgap.manifest import load_marts
+from docgap.models import Actor, QueryRecord, StageRecord
 from docgap.snapshot import SNAPSHOT_FILE, load_history, snapshot
 
 
@@ -36,6 +40,8 @@ MANIFEST = FIXTURES / "manifest" / "minimal.json"
 AS_OF = datetime(2026, 9, 21, tzinfo=UTC)
 ACTORS = {"AGENT_READER": Actor.AGENT}
 MARTS_CONFIG = ManifestConfig(mart_database="ANALYTICS", mart_schema="MARTS")
+MARTS = load_marts(MANIFEST.read_bytes(), MARTS_CONFIG)
+GOLDEN = Path(__file__).resolve().parent / "golden"
 SETUP = "0" * 64
 
 
@@ -53,3 +59,18 @@ def snapshot_parquet(tmp_path: Path) -> Path:
     path.parent.mkdir()
     write_rows(snapshot_records(), QueryRecord, path)
     return path
+
+
+def assert_golden(
+    stage: str, artifact: str, rows: Sequence[BaseModel], record: StageRecord, update: bool
+) -> None:
+    """Compare a stage's rows and counts with `tests/golden/<stage>/`, or rewrite them on `--update-golden`."""
+    directory = GOLDEN / stage
+    lines = canonical_lines(rows)
+    counts = json.dumps(record.counts, indent=2, sort_keys=True) + "\n"
+    if update:
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f"{artifact}.jsonl").write_bytes(lines)
+        (directory / "counts.json").write_text(counts)
+    assert lines == (directory / f"{artifact}.jsonl").read_bytes()
+    assert counts == (directory / "counts.json").read_text()
