@@ -44,7 +44,7 @@ def _without(raw: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
 def test_committed_config_feeds_the_run_setup() -> None:
     config = load_config(CONFIG)
     setup = RunSetup(
-        schema_version=2,
+        schema_version=3,
         config=config.section_sha256(),
         environment=Environment(python="3.12.8", packages=(), code_sha256=HASH),
         call_sites={},

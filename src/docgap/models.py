@@ -238,12 +238,14 @@ class QueryRecord(_Contract):
 
 
 class ColumnRef(_Contract):
-    """One column a query touches, as `resolve` qualified it against the dbt manifest."""
+    """One mart column a query touches, as `resolve` qualified it against the dbt manifest.
+
+    Only mart columns get a row; a reference to anything else is counted (ADR 0018).
+    """
 
     query_id: NonEmptyStr
     fqn: Fqn
     clause: Clause
-    managed: bool
 
 
 class ColumnUsage(_Contract):
@@ -470,7 +472,7 @@ class RunSetup(_Contract):
     """What a run is set up with: arms and resumed stages must match it exactly."""
 
     # Bump on any change to a contract's shape, and regenerate the committed schemas.
-    schema_version: Literal[2]
+    schema_version: Literal[3]
     config: dict[Key, Sha256]
     environment: Environment
     call_sites: dict[Key, CallSite]

@@ -86,7 +86,7 @@ def _environment(**overrides: Any) -> Environment:
 
 def _setup(**overrides: Any) -> RunSetup:
     fields: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "config": {"rank": HASH, "snapshot": HASH},
         "environment": _environment(),
         "call_sites": {
@@ -165,7 +165,7 @@ def _packet(**overrides: Any) -> EvidencePacket:
 
 
 EXAMPLES: list[BaseModel] = [
-    ColumnRef(query_id="01b2", fqn=FQN, clause=Clause.WHERE, managed=True),
+    ColumnRef(query_id="01b2", fqn=FQN, clause=Clause.WHERE),
     _query_record(),
     ColumnUsage(
         fqn=FQN,
@@ -244,7 +244,7 @@ def test_no_schema_without_a_contract() -> None:
 )
 def test_fqn_rejects_anything_but_four_uppercase_parts(fqn: str) -> None:
     with pytest.raises(ValidationError, match="fqn"):
-        ColumnRef(query_id="01b2", fqn=fqn, clause=Clause.SELECT, managed=True)
+        ColumnRef(query_id="01b2", fqn=fqn, clause=Clause.SELECT)
 
 
 def test_query_record_rejects_a_fingerprint_of_other_sql() -> None:
@@ -540,5 +540,5 @@ def test_canonical_hash_is_pinned() -> None:
     # Every run hash depends on the canonical bytes. A change to the serialization or
     # to the example shows here and must be deliberate.
     assert _manifest().canonical_sha256() == (
-        "e6a18d886c6aa2f45b04908ba0092d015a3e65b39179ab8ad0bdefc852c61e3c"
+        "66cc5f9aa316d142168f668cd9aa2f14836e69ca1508a114651435ee1b1a81ef"
     )
