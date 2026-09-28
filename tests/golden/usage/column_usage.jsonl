@@ -1,0 +1,4 @@
+{"executions_agent":1,"executions_human":0,"fingerprints_agent":1,"fingerprints_human":0,"fqn":"ANALYTICS.MARTS.FCT_REIMBURSEMENTS.BEN_SEX_COD","questions":1,"runs":1}
+{"executions_agent":1,"executions_human":0,"fingerprints_agent":1,"fingerprints_human":0,"fqn":"ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLX_ANN_MOI","questions":1,"runs":1}
+{"executions_agent":1,"executions_human":0,"fingerprints_agent":1,"fingerprints_human":0,"fqn":"ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_NAT","questions":1,"runs":1}
+{"executions_agent":3,"executions_human":0,"fingerprints_agent":3,"fingerprints_human":0,"fqn":"ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PAI_MNT","questions":2,"runs":3}

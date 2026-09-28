@@ -1,0 +1,8 @@
+{
+  "columns": 4,
+  "queries.in_scope": 4,
+  "queries.out_of_scope.other_question": 2,
+  "queries.out_of_scope.other_run": 2,
+  "queries.out_of_scope.untagged": 1,
+  "queries.read": 9
+}
