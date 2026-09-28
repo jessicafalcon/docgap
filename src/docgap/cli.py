@@ -170,7 +170,7 @@ def analyze_command(
         _fail(error)
     try:
         setup = RunSetup(
-            schema_version=3,
+            schema_version=4,
             config=loaded.section_sha256(),
             environment=_environment(),
             call_sites={},

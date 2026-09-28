@@ -117,7 +117,9 @@ def test_a_crossed_gate_fails_the_run_and_is_recorded(tmp_path: Path) -> None:
     (run_dir,) = (tmp_path / "runs").iterdir()
     manifest = RunManifest.model_validate_json((run_dir / MANIFEST_FILE).read_bytes())
     assert manifest.canonical.stages == {}
-    assert manifest.operational.stages["snapshot"].status is StageStatus.FAILED
+    snapshot = manifest.operational.stages["snapshot"]
+    assert snapshot.status is StageStatus.FAILED
+    assert snapshot.error == "ValueError: snapshot gates crossed: rows_kept 9 < 100"
     # A failed run releases its lock.
     assert not (run_dir / ".lock").exists()
 

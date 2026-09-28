@@ -16,7 +16,7 @@ from docgap.rank import RANKED_GAPS_FILE
 
 CONFIG = load_config(Path(__file__).resolve().parents[1] / "docgap.toml")
 RUN_SETUP = RunSetup(
-    schema_version=3,
+    schema_version=4,
     config=CONFIG.section_sha256(),
     environment=Environment(python="3.12.8", packages=(), code_sha256=SETUP),
     call_sites={},
@@ -82,6 +82,7 @@ def test_a_crash_mid_stage_leaves_no_record_and_the_rerun_clears_its_directory(
     manifest = RunManifest.model_validate_json((tmp_path / RUN_ID / MANIFEST_FILE).read_bytes())
     assert "rank" not in manifest.canonical.stages
     assert manifest.operational.stages["rank"].status is StageStatus.FAILED
+    assert manifest.operational.stages["rank"].error == "KeyboardInterrupt"
 
     # A killed manifest write leaves its temporary file in the run directory.
     (tmp_path / RUN_ID / f"{MANIFEST_FILE}.tmp-123").write_bytes(b"{")

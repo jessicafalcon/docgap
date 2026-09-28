@@ -164,6 +164,7 @@ the tag (`CLAUDE.md` → "After `preregistered`"):
 - the gate bands, 0.8 and 0.5 (`[gate]`)
 - *k* = 11 (`[evidence]`)
 - the role-to-actor mapping (`[actors]`)
+- the history window the ranking reads (`[snapshot] history_window_days`)
 - the mart database and schema whose columns can be ranked or drawn (`[manifest]`)
 - the model at the `attribution`, `drafter` and `gate` call sites
   (`[call_sites]`) and their prompt versions (in `llm/`), both recorded in the

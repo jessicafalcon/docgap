@@ -59,8 +59,9 @@ per-item isolation boundary, and it must record the item and the exception type.
   budget, and a **per-run spend and call budget** from config. Crossing the budget
   stops new calls and routes the remaining items to the human band, recorded.
 - **Downloads and GitHub:** connect and read timeouts, bounded retries.
-- **Airflow:** `execution_timeout` per task, `retries` only on `snapshot` and
-  `open_pr` (the steps with transient external failures),
+- **Airflow:** `execution_timeout` per task, `retries` only on `analyze` (its
+  snapshot reads the warehouse) and `open_pr` (the steps with transient external
+  failures),
   `retry_exponential_backoff=True`, `max_active_runs=1`.
 
 ## Isolate items, not stages
@@ -112,8 +113,7 @@ covers manual CLI runs alongside it.
 - `docgap report` surfaces failures first: a run with recorded failures says so at
   the top, not in an appendix. Structured logs and per-item failures arrive with
   the first stage that has items to fail, Phase 5's `llm/` (the brief owes both
-  there); until then a failed stage shows as its status in the manifest and its
-  message on stderr.
+  there); until then a failed stage shows as its status and error in the manifest.
 
 ## Tests for failure paths
 

@@ -56,10 +56,10 @@ def run_id(as_of: datetime, setup: RunSetup) -> str:
 
     >>> from datetime import UTC
     >>> from docgap.models import Environment
-    >>> setup = RunSetup(schema_version=3, config={}, call_sites={},
+    >>> setup = RunSetup(schema_version=4, config={}, call_sites={},
     ...     environment=Environment(python="3.12.8", packages=(), code_sha256="0" * 64))
     >>> run_id(datetime(2026, 9, 21, tzinfo=UTC), setup)
-    '20260921T000000Z-0bcf6e2b'
+    '20260921T000000Z-a8a0ecfe'
     """
     _UTC.validate_python(as_of)
     if as_of.microsecond:
@@ -148,9 +148,13 @@ def run_stages(
         write_atomic(path, lambda sink: sink.write(text.encode()))
         return manifest
 
-    def mark(stage: str, status: StageStatus, started: datetime) -> RunManifest:
+    def mark(
+        stage: str, status: StageStatus, started: datetime, error: str | None = None
+    ) -> RunManifest:
         finished = None if status is StageStatus.RUNNING else now()
-        runs[stage] = StageRun(status=status, started_at=started, finished_at=finished, retries=0)
+        runs[stage] = StageRun(
+            status=status, started_at=started, finished_at=finished, retries=0, error=error
+        )
         return save()
 
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -183,8 +187,11 @@ def run_stages(
                     f"{stage.name}: read inputs {record.inputs}, expected {expected}; "
                     "an input file changed during the run"
                 )
-        except BaseException:
-            mark(stage.name, StageStatus.FAILED, started)
+        except BaseException as error:
+            kind = type(error).__name__
+            mark(
+                stage.name, StageStatus.FAILED, started, f"{kind}: {error}" if str(error) else kind
+            )
             raise
         records[stage.name] = record
         manifest = mark(stage.name, StageStatus.SUCCEEDED, started)

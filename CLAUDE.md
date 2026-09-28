@@ -157,13 +157,15 @@ code is lost to the next session, and the review agents treat it as a finding.
   brief it affects (as the current design, not as a change), and remove it from
   "Open decisions".
 - **A threshold, key or command changes:** update every record that states it.
-- **A new skill, agent, hook or command:** add it here, with when to invoke it.
+- **A new skill, agent, hook or slash command:** add it here, with when to invoke
+  it. A `docgap` command is product behaviour, and the README documents it.
 - **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, seeds,
-  `[actors]`, `[manifest]`, and the model and prompt version at the attribution,
-  drafter and gate call sites) never change. A change to the snapshot, manifest, resolve, usage, rank or evidence code
-  that changes its golden outputs, and any other `EVAL_PROTOCOL.md` change,
+  `[actors]`, `[manifest]`, the history window, and the model and prompt version
+  at the attribution, drafter and gate call sites) never change. A change to the
+  snapshot, manifest, resolve, usage, rank or evidence code that changes its
+  golden outputs, and any other `EVAL_PROTOCOL.md` change,
   needs an ADR with a justification, and the results report the deviation.
   Other files point here rather than restating the list.
 - **Code and a record disagree** and it's unclear which is right: ask me. Never
@@ -204,7 +206,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
     supersedes 0015: any agent-tagged traffic needs a scope).
   - **PR 3:** `feat/analyze`, in review. `coverage`, `rank` over every
     undocumented mart column (ADR 0020, score by `Decimal.ln()`), `cli.py`,
-    `pipeline.py` (run manifest, snapshot gates, resume, lock), the report and
+    `pipeline.py` (run manifest, snapshot gates, resume, lock; a failed stage's
+    error in the manifest, `schema_version` 4), the report and
     the end-to-end golden files; the last PR of the phase, so it also gets the
     whole-repo audit.
 - **Next step:** after PR 3 merges, Phase 2 on DuckDB (the offline sample), the

@@ -227,7 +227,7 @@
           "$ref": "#/$defs/Environment"
         },
         "schema_version": {
-          "const": 3,
+          "const": 4,
           "title": "Schema Version",
           "type": "integer"
         }
@@ -302,8 +302,20 @@
     },
     "StageRun": {
       "additionalProperties": false,
-      "description": "How one stage ran this time: status, timing, retries.",
+      "description": "How one stage ran this time: status, timing, retries, and why it failed.",
       "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
         "finished_at": {
           "anyOf": [
             {
@@ -334,7 +346,8 @@
         "status",
         "started_at",
         "finished_at",
-        "retries"
+        "retries",
+        "error"
       ],
       "title": "StageRun",
       "type": "object"
