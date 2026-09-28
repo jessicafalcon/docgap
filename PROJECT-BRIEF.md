@@ -23,10 +23,10 @@ Sep 25, 2026 · @Jessica
 
 The tool is a deterministic pipeline with three narrow model calls at the edges. Every step has one input, one output and one owner.
 
-1. **Snapshot the evidence.** Export query history for a fixed window, filtered by role and query tag. Replace literals with placeholders, fingerprint each query, and freeze the result as a hashed Parquet file.
+1. **Snapshot the evidence.** Export query history for a fixed window, filtered by role and query tag. Replace values with placeholders, fingerprint each query, and freeze the result as a hashed Parquet file.
 2. **Resolve columns.** Parse each query with sqlglot against the schema taken from the dbt manifest. Output: fully qualified column references. Queries that can't be resolved are counted and reported, never guessed.
 3. **Grade and attribute** (evaluation set only). Compare the agent's result set to the gold query's result, with no model involved. Only failures go to a typed question: *why did it fail, and which column?*
-4. **Rank.** Score = usage × failure weight × doc status, with the weights in config. Ties are broken by column name, so the order never changes between runs.
+4. **Rank.** Score = usage × failure weight × doc status, with the weights in config. Ties are broken by column FQN, so the order never changes between runs.
 5. **Draft, gate, propose.** Build an evidence packet per column (name, type, lineage SQL, aggregate profile). Draft a description, score its support with a yes/no confidence question, sort drafts into bands, write a YAML patch, and open a pull request.
 
 ### Design principles
@@ -42,7 +42,7 @@ The tool is a deterministic pipeline with three narrow model calls at the edges.
 
 - Read-only by construction: the tool's Snowflake role can't write, and changes reach the warehouse only through a reviewed pull request and dbt.
 - Least privilege, defined in Terraform: one role per job (load, transform, agent, audit). `ACCOUNTADMIN` appears only in the one-time `bootstrap.sql`, for the few objects only it can create.
-- Minimal exposure to the model: query literals are stripped before storage, and profiles are aggregates only. Values carried by fewer than *k* fact rows are suppressed, numeric min and max are clipped to the *k*-th value, and columns tagged sensitive get no sample values at all.
+- Minimal exposure to the model: query values are replaced by placeholders before storage, and profiles are aggregates only. Values carried by fewer than *k* fact rows are suppressed, numeric min and max are clipped to the *k*-th value, and columns tagged sensitive get no sample values at all.
 - An audit trail per run: input hashes, the environment that ran (Python, runtime dependencies, docgap's code), git SHA, model versions, prompt hashes, thresholds and output hash in `run_manifest.json`.
 
 **Coherence**
@@ -66,7 +66,7 @@ Five tools are core (Python, Snowflake, dbt, Terraform, Airflow), each with one 
 | dbt Core + dbt-snowflake | Models over Open DAMIR, YAML docs, `meta` (owner, sensitivity), tests, model contracts, `persist_docs` | One source of truth for metadata; the manifest is docgap's schema |
 | DuckDB + dbt-duckdb | The same dbt project over a recorded sample, for building and piloting before the trial | Most of the work happens without the trial clock running; gold SQL is written for Snowflake and transpiled with sqlglot |
 | Python 3.12 + uv | The docgap CLI (typer), typed models (pydantic), Parquet I/O (pyarrow) | Locked dependencies = reproducible installs |
-| sqlglot (dialect `snowflake`) | Parse and qualify queries, strip literals, fingerprint, extract column references | Deterministic, no warehouse round-trip, testable offline |
+| sqlglot (dialect `snowflake`) | Parse and qualify queries, redact values, fingerprint, extract column references | Deterministic, no warehouse round-trip, testable offline |
 | ruamel.yaml | Write descriptions into dbt YAML without reordering or losing comments | Minimal, readable pull-request diffs |
 | system-one-adapter on Anthropic | The two typed judgments: failure attribution (Choice) and draft support (Noul) | A drop-in for the `system_one` API in typesafe-sdk, backed by Claude. The typed questions and response types are the SDK's own, so moving to the hosted client changes only client setup |
 | Anthropic API: Opus 5.5 (drafter, judgments); agent model chosen by the pilot | The description drafter, the two typed judgments, and the test agent that writes SQL | One provider keeps prompts and caching consistent. The low-volume calls whose quality is the product use the strongest model; the agent is the experiment's subject, so it's chosen for how clearly it shows the effect of docs |
@@ -152,7 +152,7 @@ Every mart column carries `meta.owner` and `meta.sensitivity` (`public` | `inter
 | Drafter | Column name and type, table description, compiled lineage SQL, aggregate profile | Raw rows; sample values of `restricted` columns; any value carried by fewer than *k* = 11 fact rows |
 | Draft gate | The draft and the same evidence packet | Anything the drafter didn't see |
 
-**Redaction before storage.** Query text is normalized by sqlglot (literals become placeholders) before it touches disk, and raw text is never persisted. Snowflake's `query_parameterized_hash` serves as a cross-check on the fingerprints.
+**Redaction before storage.** Query text is normalized by sqlglot (values become placeholders) before it touches disk, and raw text is never persisted. Snowflake's `query_parameterized_hash` serves as a cross-check on the fingerprints.
 
 **Audit record per run.** `run_manifest.json` has a canonical part and an operational part (ADR 0006). The canonical part holds the as-of date, input hashes (snapshot, manifest, config per section), the environment (Python version, installed runtime dependencies, a hash of docgap's code), model IDs and prompt versions per call site, and per stage the output hashes, counts and gate values with their thresholds. The operational part holds run ID, git SHA, stage status and timings, cache hit rate and spend. The environment, config section hashes and call sites form the run's setup, whose hash arms are compared by and which each stage record carries. Two runs with equal inputs must have equal canonical parts; CI checks this, and the pull request cites the canonical hash.
 
@@ -160,7 +160,7 @@ Every mart column carries `meta.owner` and `meta.sensitivity` (`public` | `inter
 
 Fix the rules before touching data, so no later result can be accused of being tuned. No Snowflake needed yet.
 
-- [x] **Create the repo.** Repo `docgap`, private until the `preregistered` tag, then public, MIT license, `uv init`, Python pinned in `.python-version`, ruff + pyright + pytest config, pre-commit with ruff and gitleaks. *Expect:* `uv run pytest` passes, with one smoke test pinning that sockets and DNS are blocked; CI is green.
+- [x] **Create the repo.** Repo `docgap`, public before the `preregistered` tag (ADR 0017), MIT license, `uv init`, Python pinned in `.python-version`, ruff + pyright + pytest config, pre-commit with ruff and gitleaks. *Expect:* `uv run pytest` passes, with one smoke test pinning that sockets and DNS are blocked; CI is green.
 - [x] **Write the data contracts first.** Pydantic models in `src/docgap/models.py`: `ColumnRef`, `QueryRecord`, `ColumnUsage`, `Grade`, `Attribution`, `EvidencePacket`, `Draft`, `GateResult`, `RankedGap`, `RunManifest`. Each has one JSON Schema committed in `src/docgap/schemas/`, and a test fails when it drifts from the model. Parquet artifacts declare their dtypes from the same models when the first stage writes them. *Expect:* every later stage imports these types, so stage boundaries can't drift.
 - [x] **Create one config file.** `docgap.toml`, loaded by `src/docgap/config.py`: history window, role-to-actor mapping (agent/human), *k* = 11, band thresholds, model IDs and sampling settings per call site, the agent tool's timeout and row cap, and the split, random-arm and baseline-docs seeds. Every key sits in a section and has no default in code; each later step adds the keys it reads, in a section named for what reads them (ADR 0007). *Expect:* one hash per section goes into the run's setup; no magic numbers in code.
 - [x] **Start a decision log.** `docs/adr/`, one numbered record per choice, copied from `docs/adr/template.md`: status, context, options considered, the outcome and its consequences. A later record supersedes an earlier one; accepted records are never rewritten. The first records cover the Snowflake edition and trial timing, why sqlglot, why *k* = 11, repo visibility, and where guard hooks are registered; the months of data have theirs from "Study the data dictionary" (ADR 0012). *Expect:* reviewers see the reasoning, and later changes are explicit.
@@ -181,7 +181,7 @@ Fix the rules before touching data, so no later result can be accused of being t
   - **The agent model**: chosen by the pilot rule in Phase 3 and fixed at the tag, with the choice and the pilot numbers in its own decision record.
   - **A kill criterion**: if neither candidate agent model is eligible in the offline pilot (Phase 3), meaning full-docs accuracy between 50% and 90% and full docs beating no docs by at least 15 points, change the setup (harder questions, more coded columns) before tagging. If nothing fixes it, report that as the finding.
   - **What gets reported regardless of outcome**, including when random-N matches top-N.
-  - **How the tag is witnessed**: the tag comes after the gold results are materialized, and a GitHub release on it is published when the repo goes public, before the baseline runs; its `published_at` is set by GitHub, not the committer.
+  - **How the tag is witnessed**: the tag comes after the gold results are materialized, and a GitHub release on it is published before the baseline runs; its `published_at` is set by GitHub, not the committer.
 
   *Expect:* committed before any agent run.
 - [x] **Study the data dictionary.** Download the Open DAMIR variable descriptor (an `.xlsx` workbook) and the monthly file list, and choose how many months to load. *Expect:* a decision entry with file names, sizes and SHA-256 checksums.
@@ -272,7 +272,7 @@ Create real agent traffic against the warehouse, grade it without a model, and f
 
   *Expect:* for the chosen model, accuracy with no docs far from 0% and 100%, and a gap to full docs large enough to pass the kill criterion in the protocol. If the gap is small for both models, the experiment can't show anything, and it's better to know before the trial starts.
 - [ ] **Materialize gold results.** Run each gold query once as `DOCGAP_AUDITOR` (tagged `gold:<qid>`, excluded from traffic) and store the results as Parquet with hashes. Record each gold query's elapsed time, run with `USE_CACHED_RESULT = FALSE`: `WH_AUDIT` is XS like `WH_AGENT`, so it stands in for the agent's warehouse. Store the times next to the gold results' hashes. If any takes over 20 s, move `WH_AGENT` and `WH_AUDIT` from XS to S before the tag: agent timeouts would add noise to every arm, and a bigger warehouse changes nothing the agent sees, so the pilot stands. This is an engineering check, not a protocol rule (ADR 0012). *Expect:* grading runs offline from then on.
-- [ ] **Fix N, split and tag the pre-registration.** Assign the 25 discovery / 15 holdout split by hashing question IDs with the config seed, and report how many columns the two sets share. Run `resolve` on the discovery gold SQL, count the undocumented columns it touches, and fix N by the protocol's rule. Once the gold results are materialized and every gold query meets the protocol's rules, commit questions, gold SQL, split, N, arms, protocol and the pilot's agent model as `[call_sites.agent]` in `docgap.toml`. Run gitleaks over the full history and the private-terms guard over every commit message, create the git tag `preregistered`, make the repo public, and publish a GitHub release on the tag with the tagged commit's SHA in its body, all before any baseline run. *Expect:* anyone can verify nothing changed after the baseline.
+- [ ] **Fix N, split and tag the pre-registration.** Assign the 25 discovery / 15 holdout split by hashing question IDs with the config seed, and report how many columns the two sets share. Run `resolve` on the discovery gold SQL, count the undocumented columns it touches, and fix N by the protocol's rule. Once the gold results are materialized and every gold query meets the protocol's rules, commit questions, gold SQL, split, N, arms, protocol and the pilot's agent model as `[call_sites.agent]` in `docgap.toml`. Run gitleaks over the full history and the private-terms guard over every commit message, create and push the git tag `preregistered`, and publish a GitHub release on the tag with the tagged commit's SHA in its body, all before any baseline run. *Expect:* anyone can verify nothing changed after the baseline.
 - [ ] **Build the test agent.** A short tool-calling loop in `eval/agent/`:
   - `list_tables()` and `describe(table)` read `information_schema` names and comments
   - `run_sql(sql)` runs as `SVC_AGENT` with `query_tag = agent:<run_id>:<qid>:<rep>`, a 60 s statement timeout and a 200-row cap

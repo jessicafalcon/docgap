@@ -174,8 +174,8 @@ code is lost to the next session, and the review agents treat it as a finding.
   behaviour change, or related changes to the same area that land together. A phase
   is usually several PRs in step order. Start from an up-to-date `main`.
 - Branch commits are small and green; the PR title becomes the commit on `main`.
-- Confirm before force-push, history rewrite, creating the GitHub repo, or any
-  first push.
+- Confirm before force-push, history rewrite, creating the GitHub repo, changing
+  its visibility, or any first push.
 
 ## Communication
 
@@ -190,17 +190,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Phase:** 0 is done (#1–#11): its "Done when" holds and the phase-exit audit
   found no blockers. Phase 4 (the deterministic core on hand-made fixtures) is in
   progress; Phase 1 waits for the offline pilot, per the brief's timeline.
-- **Repo:** `jessicafalcon/docgap` on GitHub, private until the `preregistered`
-  tag, then public (ADR 0004). Squash merges only, with the PR title as the commit
-  title. No branch protection until then (not available on this private repo).
-- **Open PRs:** `feat/snapshot` (Phase 4, PR 1), in review.
+- **Repo:** `jessicafalcon/docgap` on GitHub, public once `docs/readme` merges
+  (ADR 0017), so every push is a publication. Squash merges only, with the PR
+  title as the commit title. No branch protection yet; Phase 7 sets it up.
+- **Open PRs:** `docs/readme`, in review: a first README that states the project
+  is in progress, and ADR 0017 (public now). After it merges, the repo goes
+  public on the user's go. Phase 8 replaces the README.
 - **Phase 4 PR order** (approved after `devils-advocate`):
-  - **PR 1:** `feat/snapshot` (open). `QueryRecord` keeps the tag's `run_id` and
-    the session's database and schema, and ranking reads one agent run
-    (ADR 0015). `artifacts.py` writes Parquet with dtypes from the contract.
-    `snapshot` redacts every value but keeps ordinals and type parameters, and
-    drops a query whose normalization isn't stable (ADR 0016). The live source is
-    owed by Phase 3's snapshot step.
+  - **PR 1:** `feat/snapshot`, merged (#12).
   - **PR 2:** `feat/resolve-usage`. `manifest.py`, `resolve` (its choices, and
     their ADR, are listed in the brief's `resolve` step), `usage` with the
     ranking scope.
@@ -208,4 +205,5 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `cli.py`, the run manifest with the snapshot gates, the report and the
     end-to-end golden files; the last PR of the phase, so it also gets the
     whole-repo audit.
-- **Next step:** PR 1 in review. After its merge, PR 2 from an up-to-date `main`.
+- **Next step:** after `docs/readme` merges, PR 2, `feat/resolve-usage`, from an
+  up-to-date `main`.
