@@ -24,6 +24,7 @@ from docgap.config import ActorsConfig, SnapshotConfig
 from docgap.models import (
     CONTRACT_CONFIG,
     Actor,
+    GateCheck,
     Identifier,
     NonEmptyStr,
     Qid,
@@ -40,6 +41,7 @@ __all__ = [
     "normalize",
     "run_snapshot",
     "snapshot",
+    "snapshot_gates",
 ]
 
 SNAPSHOT_FILE = "query_snapshot.parquet"
@@ -259,6 +261,37 @@ def snapshot(
     return records, counts
 
 
+def snapshot_gates(counts: Mapping[str, int], config: SnapshotConfig) -> dict[str, GateCheck]:
+    """Check the rows kept and the parse rate against their thresholds.
+
+    The parse rate is the share of the queries reaching the parser that sqlglot
+    normalizes: a statement that isn't a query, or holds several, parsed fine.
+
+    >>> counts = {"kept": 9, "dropped.parse_error": 1, "dropped.unstable_normalization": 0,
+    ...           "dropped.multiple_statements": 1, "dropped.not_a_query": 1}
+    >>> gates = snapshot_gates(counts, SnapshotConfig(
+    ...     history_window_days=7, min_rows_kept=1, min_parse_rate=0.9))
+    >>> round(gates["parse_rate"].value, 4), gates["parse_rate"].passed
+    (0.9167, True)
+    """
+    failed = counts["dropped.parse_error"] + counts["dropped.unstable_normalization"]
+    parsed = counts["kept"] + counts["dropped.multiple_statements"] + counts["dropped.not_a_query"]
+    # Nothing reached the parser: fail closed, like an unreadable export.
+    parse_rate = parsed / (parsed + failed) if parsed + failed else 0.0
+    return {
+        "parse_rate": GateCheck(
+            value=parse_rate,
+            threshold=config.min_parse_rate,
+            passed=parse_rate >= config.min_parse_rate,
+        ),
+        "rows_kept": GateCheck(
+            value=float(counts["kept"]),
+            threshold=float(config.min_rows_kept),
+            passed=counts["kept"] >= config.min_rows_kept,
+        ),
+    }
+
+
 def load_history(export: bytes) -> list[HistoryRow]:
     """Parse a history export as JSON Lines, one `QUERY_HISTORY` row per line.
 
@@ -283,7 +316,12 @@ def run_snapshot(
     setup_sha256: str,
     out_dir: Path,
 ) -> StageRecord:
-    """Snapshot an offline history export into `query_snapshot.parquet` under `out_dir`."""
+    """Snapshot an offline history export into `query_snapshot.parquet` under `out_dir`.
+
+    Raises:
+        ValueError: a gate is crossed; the message names it, its value and threshold.
+            Nothing is written.
+    """
     # Read once, so the input hash covers exactly the bytes parsed.
     export = history.read_bytes()
     records, counts = snapshot(
@@ -292,11 +330,19 @@ def run_snapshot(
         window_days=config.history_window_days,
         actors=actors.root,
     )
+    gates = snapshot_gates(counts, config)
+    crossed = [
+        f"{name} {gate.value:g} < {gate.threshold:g}"
+        for name, gate in gates.items()
+        if not gate.passed
+    ]
+    if crossed:
+        raise ValueError(f"snapshot gates crossed: {', '.join(crossed)}")
     out_dir.mkdir(parents=True, exist_ok=True)
     return StageRecord(
         setup_sha256=setup_sha256,
         inputs={"history": hashlib.sha256(export).hexdigest()},
         outputs={"query_snapshot": write_rows(records, QueryRecord, out_dir / SNAPSHOT_FILE)},
         counts=counts,
-        gates={},
+        gates=gates,
     )

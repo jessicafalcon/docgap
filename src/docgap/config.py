@@ -10,6 +10,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    NonNegativeFloat,
     NonNegativeInt,
     PositiveInt,
     RootModel,
@@ -36,6 +37,7 @@ __all__ = [
     "EvidenceConfig",
     "GateConfig",
     "ManifestConfig",
+    "RankConfig",
     "SeedsConfig",
     "SnapshotConfig",
     "load_config",
@@ -48,9 +50,11 @@ class _Section(BaseModel):
 
 
 class SnapshotConfig(_Section):
-    """What the snapshot exports."""
+    """What the snapshot exports, and the gates its output must pass."""
 
     history_window_days: PositiveInt
+    min_rows_kept: PositiveInt
+    min_parse_rate: Probability
 
 
 class ActorsConfig(
@@ -68,6 +72,12 @@ class ManifestConfig(_Section):
 
     mart_database: Identifier
     mart_schema: Identifier
+
+
+class RankConfig(_Section):
+    """The rank weight: how much the attributed failure rate lifts a column's score."""
+
+    w: NonNegativeFloat
 
 
 class EvidenceConfig(_Section):
@@ -116,6 +126,7 @@ class DocgapConfig(_Section):
     snapshot: SnapshotConfig
     actors: ActorsConfig
     manifest: ManifestConfig
+    rank: RankConfig
     evidence: EvidenceConfig
     gate: GateConfig
     seeds: SeedsConfig
