@@ -41,7 +41,7 @@ outputs and run manifest. In `src/docgap/` outside `llm/` and `cli.py`:
 
 - docgap never writes to the warehouse. Changes reach it only through a reviewed
   PR and dbt.
-- Query text is normalized (literals → placeholders) **before** it touches disk.
+- Query text is normalized (values → placeholders, ADR 0016) **before** it touches disk.
   If redaction fails for a query, the query is counted and dropped, never stored raw.
 - Profiles are aggregates only; values seen fewer than *k* times are suppressed;
   `restricted` columns get no values at all.

@@ -1,8 +1,8 @@
 # 0004. Keep the repo private until the `preregistered` tag, then make it public
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-09-26
-- **Superseded by:** none
+- **Superseded by:** [0017](0017-public-before-preregistration.md)
 
 ## Context and Problem Statement
 

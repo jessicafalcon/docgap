@@ -228,14 +228,15 @@ promise a detectable headline.
 ## Witnessing the tag
 
 Git sets tag and commit dates from the committer's clock, so they prove nothing
-on their own (ADR 0004). The tag comes after the gold results are materialized,
-so a gold query that breaks the rules above is fixed before it. The order is:
+on their own (ADR 0004). The repo is public before the tag (ADR 0017), and the
+tag comes after the gold results are materialized, so a gold query that breaks
+the rules above is fixed before it. The order is:
 
 1. Run gitleaks over the full history and the private-terms guard over every
    commit message.
 2. Tag the commit `preregistered`.
-3. Make the repo public, then publish a GitHub release on the tag, with the
-   tagged commit's SHA in its body. The release's `published_at` is set by
+3. Push the tag, then publish a GitHub release on it, with the tagged
+   commit's SHA in its body. The release's `published_at` is set by
    GitHub when it is published; its `created_at` is the commit's date, so it
    proves nothing
    ([GitHub REST API, releases](https://docs.github.com/en/rest/releases/releases),
