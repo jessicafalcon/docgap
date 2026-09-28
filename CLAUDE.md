@@ -197,11 +197,11 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Open PRs:** `feat/resolve-usage`, Phase 4 PR 2.
 - **Phase 4 PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/snapshot`, merged (#12).
-  - **PR 2:** `feat/resolve-usage`, in progress. `manifest.py`, `resolve` (its
-    choices, and their ADR, are listed in the brief's `resolve` step), `usage`
-    with the ranking scope.
+  - **PR 2:** `feat/resolve-usage`, in review. `manifest.py`, `resolve` (ADR
+    0018, `schema_version` 3), `usage` with the ranking scope.
   - **PR 3:** `feat/analyze`. `coverage`, `rank` (score by `Decimal.ln()`),
     `cli.py`, the run manifest with the snapshot gates, the report and the
     end-to-end golden files; the last PR of the phase, so it also gets the
     whole-repo audit.
-- **Next step:** finish PR 2, `feat/resolve-usage`, through the pre-PR gate.
+- **Next step:** after PR 2 merges, PR 3, `feat/analyze`, from an up-to-date
+  `main`.

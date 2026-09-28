@@ -12,8 +12,8 @@ from docgap.models import Identifier
 
 __all__ = ["DBT_SCHEMA_VERSION", "Marts", "load_marts"]
 
-# The manifest shape this reader was written against (dbt 1.8 to 1.10). Another
-# version fails loading instead of being read under a guessed shape.
+# The manifest shape this reader was written against. Another version fails
+# loading instead of being read under a guessed shape.
 DBT_SCHEMA_VERSION = "https://schemas.getdbt.com/dbt/manifest/v12.json"
 # ADR 0014: the same dbt project builds on DuckDB offline and on Snowflake.
 _ADAPTERS = frozenset({"duckdb", "snowflake"})
