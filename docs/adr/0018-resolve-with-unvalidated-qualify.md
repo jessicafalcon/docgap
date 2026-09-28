@@ -38,12 +38,15 @@ The details that follow from it:
 - **Unmanaged** is a relation qualified in full outside the marts, staging models
   included: the agent can't read them, so their columns are never ranked. A table
   the session context can't qualify is **unresolved**.
+- Each column counts once, in the query that holds it, however deeply nested; a
+  correlated column is qualified by the relation of the enclosing query it names.
 - A name that `qualify` ties to no source counts as unmanaged or `INFORMATION_SCHEMA`
-  when every relation in its scope is one, and unresolved otherwise (an unknown or
+  when every relation in its query is one, and unresolved otherwise (an unknown or
   ambiguous name).
-- A correlated column counts once, in the scope that owns it; a set operation's
-  `ORDER BY` names its output and counts nothing; a column read through a CTE or
-  subquery counts where the base table is read.
+- A set operation's `ORDER BY` names its output and counts nothing; a column read
+  through a CTE or subquery counts where the base table is read.
+- Only `SqlglotError` is counted per query. Any other exception from sqlglot is a
+  bug, and fails the stage so the query can become a test.
 - `ColumnRef.managed` is dropped, since every row is a mart column, and
   `RunSetup.schema_version` moves 2 → 3.
 - `[manifest] mart_database` and `mart_schema` name the marts in `docgap.toml`.
@@ -54,8 +57,10 @@ The details that follow from it:
   every reference that isn't a mart column is counted by kind in the stage record.
 - Good, because a `SELECT *` in a CTE counts only what the outer query reads, so it
   doesn't inflate every column of a wide fact table.
-- Bad, because the clause is the one in the scope reading the base table: a column
-  grouped on through a CTE counts as `select`.
+- Bad, because the clause is the one in the query reading the base table: a column
+  grouped on through a CTE counts as `select`. An ordinal or a selected column in
+  `ORDER BY` becomes an alias reference, so it counts under `select` only;
+  `order_by` holds columns sorted on without being selected.
 - Bad, because the behaviour depends on how sqlglot 30.20 qualifies. The lockfile
   pins sqlglot, and the ten hand-checked queries in `tests/test_resolve.py` fail on
   a change. They are hand-made; the check on real gold SQL is owed by Phase 3, and

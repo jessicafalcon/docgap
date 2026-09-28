@@ -80,18 +80,25 @@ def _unattributed(scope: Scope, marts: Marts) -> Reference:
     return Reference.UNRESOLVED
 
 
+def _source(column: exp.Column, scope: Scope | None) -> exp.Table | Scope | None:
+    # A correlated column names a relation of an enclosing query.
+    while scope is not None:
+        if column.table in scope.sources:
+            return scope.sources[column.table]
+        scope = scope.parent
+    return None
+
+
 def _references(scope: Scope, marts: Marts) -> Iterator[tuple[Reference, str, Clause]]:
     # A set operation's own columns name its branches' outputs, counted in each branch.
     if isinstance(scope.expression, exp.SetOperation):
         return
-    external = (
-        {id(column) for column in scope.external_columns} if not scope.is_root else set[int]()
-    )
     for column in scope.columns:
-        # A correlated reference is also listed, and counted, in the scope that owns it.
-        if id(column) in external:
+        # sqlglot also lists a subquery's columns in the scope around it. Each is
+        # counted once, in the scope whose query holds it.
+        if column.find_ancestor(exp.Query) is not scope.expression:
             continue
-        source = scope.sources.get(column.table)
+        source = _source(column, scope)
         clause = _clause(column, scope)
         if isinstance(source, Scope):
             # A CTE, derived table or table function: the columns it reads are

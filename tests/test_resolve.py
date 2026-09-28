@@ -198,12 +198,43 @@ def test_unqualified_table_takes_the_session_context() -> None:
             {Reference.UNRESOLVED: 1},
         ),
         ("select a from fct_reimbursements, other_db.x.t", {Reference.UNRESOLVED: 1}),
+        # A name sqlglot can't place is counted in the scope that holds it, however nested.
+        (
+            "with c as (select prs_nat, typo from fct_reimbursements) select prs_nat, typo from c",
+            {Reference.UNRESOLVED: 1},
+        ),
+        (
+            "select typo from fct_reimbursements union all select prs_nat from dim_prestation",
+            {Reference.UNRESOLVED: 1},
+        ),
+        (
+            "select a from (select typo as a from fct_reimbursements) as d",
+            {Reference.UNRESOLVED: 1},
+        ),
+        ("with s as (select a from other_db.x.t) select a from s", {Reference.UNMANAGED: 1}),
+        (
+            "select prs_nat from fct_reimbursements where prs_nat in (select a from other_db.x.t)",
+            {Reference.UNMANAGED: 1},
+        ),
+        # A CTE named like a mart table hides it.
+        (
+            "with fct_reimbursements as (select prs_nat from analytics.staging.stg)"
+            " select prs_nat from fct_reimbursements",
+            {Reference.UNMANAGED: 1},
+        ),
     ],
 )
 def test_references_outside_the_marts_are_counted_not_kept(sql: str, others: Others) -> None:
     resolved, counted, _ = _resolve(sql)
     assert counted == others
-    assert all(name.startswith(F) for name, _ in resolved)
+    assert all(name.startswith("ANALYTICS.MARTS.") for name, _ in resolved)
+
+
+def test_order_by_counts_a_column_the_query_does_not_select() -> None:
+    # An ordinal or a selected column in ORDER BY becomes an alias reference, so the
+    # column counts under SELECT only (ADR 0018).
+    sql = "select prs_nat from fct_reimbursements order by flx_ann_moi, 1"
+    assert _resolve(sql)[0] == {(F + "PRS_NAT", S), (F + "FLX_ANN_MOI", Clause.ORDER_BY)}
 
 
 # The stage
