@@ -62,6 +62,9 @@ def run_id(as_of: datetime, setup: RunSetup) -> str:
     '20260921T000000Z-0bcf6e2b'
     """
     _UTC.validate_python(as_of)
+    if as_of.microsecond:
+        # Two instants within one second would share a run directory.
+        raise ValueError("as_of must be a whole second")
     return f"{as_of:%Y%m%dT%H%M%SZ}-{setup.sha256()[:8]}"
 
 
@@ -151,10 +154,13 @@ def run_stages(
         return save()
 
     run_dir.mkdir(parents=True, exist_ok=True)
+    # A killed write of the manifest or the report leaves its temporary file here.
+    for tmp in sorted(run_dir.glob("*.tmp-*")):
+        tmp.unlink()
     manifest = save()
     for stage in stages:
         expected = dict(stage.inputs) | {
-            key: records[name].outputs[output] for key, (name, output) in stage.upstream.items()
+            key: records[source].outputs[output] for key, (source, output) in stage.upstream.items()
         }
         directory = run_dir / stage.name
         started = now()

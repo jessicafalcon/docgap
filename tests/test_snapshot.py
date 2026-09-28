@@ -79,6 +79,11 @@ def test_snapshot_matches_golden(tmp_path: Path, update_golden: bool) -> None:
     assert stage.outputs == {"query_snapshot": hashlib.sha256(lines).hexdigest()}
 
 
+def test_a_gate_at_its_threshold_passes(tmp_path: Path) -> None:
+    stage = _run(tmp_path, GATES.model_copy(update={"min_rows_kept": 9}))
+    assert stage.gates["rows_kept"].passed
+
+
 def test_gates_are_recorded_with_their_thresholds(tmp_path: Path) -> None:
     stage = _run(tmp_path)
     # 12 queries reach the parser and one fails to parse.

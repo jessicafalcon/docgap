@@ -13,11 +13,13 @@ import pytest
 from conftest import GOLDEN, HISTORY, MANIFEST, SCOPE_FILE
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from pydantic import ValidationError
 from typer.testing import CliRunner
 
+import docgap.cli as cli
 from docgap.artifacts import canonical_lines, read_rows
-from docgap.cli import _runtime_packages, app
-from docgap.models import RankedGap, RunManifest, StageStatus
+from docgap.cli import _code_sha256, _runtime_packages, app
+from docgap.models import GateCheck, RankedGap, RunManifest, StageStatus
 from docgap.pipeline import MANIFEST_FILE, REPORT_FILE
 from docgap.rank import RANKED_GAPS_FILE
 
@@ -116,6 +118,28 @@ def test_a_crossed_gate_fails_the_run_and_is_recorded(tmp_path: Path) -> None:
     manifest = RunManifest.model_validate_json((run_dir / MANIFEST_FILE).read_bytes())
     assert manifest.canonical.stages == {}
     assert manifest.operational.stages["snapshot"].status is StageStatus.FAILED
+    # A failed run releases its lock.
+    assert not (run_dir / ".lock").exists()
+
+
+def test_a_config_that_breaks_its_contract_fails_in_one_line(tmp_path: Path) -> None:
+    config = tmp_path / "docgap.toml"
+    config.write_text(CONFIG.read_text().replace("w = 1", "w = -1"), encoding="utf-8")
+    result = CliRunner().invoke(app, _args(tmp_path / "runs", config=config))
+    assert result.exit_code == 1
+    assert result.output.startswith("docgap: 1 validation error")
+
+
+def test_a_contract_broken_inside_the_core_keeps_its_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(**_: object) -> RunManifest:
+        GateCheck.model_validate({})
+        raise AssertionError
+
+    monkeypatch.setattr(cli, "analyze", broken)
+    result = CliRunner().invoke(app, _args(tmp_path))
+    assert isinstance(result.exception, ValidationError)
 
 
 def test_tagged_traffic_without_a_scope_fails(tmp_path: Path) -> None:
@@ -142,11 +166,25 @@ def test_only_offline_is_supported(tmp_path: Path) -> None:
     assert CliRunner().invoke(app, args).exit_code == 2
 
 
-def test_as_of_needs_an_offset(tmp_path: Path) -> None:
-    args = [*_args(tmp_path)[:-1], "--as-of=2026-09-21T00:00:00"]
+@pytest.mark.parametrize("value", ["2026-09-21T00:00:00", "2026-09-21T00:00:00.5+00:00"])
+def test_as_of_needs_whole_seconds_and_an_offset(tmp_path: Path, value: str) -> None:
+    args = [*_args(tmp_path)[:-1], f"--as-of={value}"]
     result = CliRunner().invoke(app, args)
     assert result.exit_code == 2
-    assert "UTC offset" in result.output
+    assert "needs whole seconds and a UTC offset" in result.output
+
+
+def test_code_hash_follows_the_package_files(tmp_path: Path) -> None:
+    (tmp_path / "rank.py").write_text("w = 1\n")
+    before = _code_sha256(tmp_path)
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "rank.cpython-312.pyc").write_bytes(b"compiled")
+    assert _code_sha256(tmp_path) == before
+    (tmp_path / "rank.py").write_text("w = 2\n")
+    changed = _code_sha256(tmp_path)
+    assert changed != before
+    (tmp_path / "report.py").write_text("")
+    assert _code_sha256(tmp_path) != changed
 
 
 def test_environment_holds_runtime_dependencies_only() -> None:

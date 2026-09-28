@@ -13,11 +13,12 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
+from pydantic import ValidationError
 
 import docgap
 from docgap.config import load_config
@@ -29,6 +30,7 @@ __all__ = ["app"]
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 _GIT_SHA = re.compile(r"[0-9a-f]{40}")
+_PACKAGE = Path(docgap.__file__).parent
 
 
 @app.callback()
@@ -57,9 +59,8 @@ def _runtime_packages() -> tuple[str, ...]:
     return tuple(f"{name}=={version}" for name, version in sorted(versions.items()))
 
 
-def _code_sha256() -> str:
-    """Hash docgap's own package files, by path and content."""
-    root = Path(docgap.__file__).parent
+def _code_sha256(root: Path = _PACKAGE) -> str:
+    """Hash docgap's own package files, by path and content; compiled caches are left out."""
     digest = hashlib.sha256()
     for path in sorted(root.rglob("*")):
         if path.is_file() and "__pycache__" not in path.parts:
@@ -114,13 +115,21 @@ def _lock(run_dir: Path) -> Generator[None]:
         lock.unlink(missing_ok=True)
 
 
+def _fail(error: Exception) -> NoReturn:
+    typer.echo(f"docgap: {error}", err=True)
+    raise typer.Exit(1) from None
+
+
 def _as_of(value: str | None) -> datetime:
     if value is None:
         return datetime.now(UTC).replace(microsecond=0)
     parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is None:
+    # The run ID holds the as-of to the second, so two instants within one second
+    # would share a run directory.
+    if parsed.tzinfo is None or parsed.microsecond:
         raise typer.BadParameter(
-            "needs a UTC offset, e.g. 2026-09-21T00:00:00Z", param_hint="--as-of"
+            "needs whole seconds and a UTC offset, e.g. 2026-09-21T00:00:00Z",
+            param_hint="--as-of",
         )
     return parsed.astimezone(UTC)
 
@@ -149,12 +158,17 @@ def analyze_command(
     if not offline:
         # The live Snowflake export is owed by Phase 3's snapshot step.
         raise typer.BadParameter("only --offline is supported so far", param_hint="--offline")
+    instant = _as_of(as_of)
+    # The config and scope files are inputs: a file that breaks its contract is a
+    # data error, reported in one line.
     try:
         loaded = load_config(config)
         ranking_scope = (
             None if scope is None else RankingScope.model_validate_json(scope.read_bytes())
         )
-        instant = _as_of(as_of)
+    except (OSError, ValueError) as error:
+        _fail(error)
+    try:
         setup = RunSetup(
             schema_version=3,
             config=loaded.section_sha256(),
@@ -174,10 +188,12 @@ def analyze_command(
                 git_sha=_git_sha(),
                 now=lambda: datetime.now(UTC),
             )
-    # Data errors: a crossed gate, a bad input file. A bug keeps its traceback.
+    # A contract broken inside the core is a bug, and keeps its traceback.
+    except ValidationError:
+        raise
+    # Data errors: a crossed gate, a bad history line or manifest, a wrong scope.
     except (OSError, ValueError) as error:
-        typer.echo(f"docgap: {error}", err=True)
-        raise typer.Exit(1) from None
+        _fail(error)
     typer.echo(f"run {result.operational.run_id}")
     typer.echo(f"canonical sha256 {result.canonical_sha256()}")
     typer.echo(f"ranking {run_dir / 'rank' / RANKED_GAPS_FILE}")

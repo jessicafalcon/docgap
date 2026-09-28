@@ -274,8 +274,14 @@ def snapshot_gates(counts: Mapping[str, int], config: SnapshotConfig) -> dict[st
     >>> round(gates["parse_rate"].value, 4), gates["parse_rate"].passed
     (0.9167, True)
     """
-    failed = counts["dropped.parse_error"] + counts["dropped.unstable_normalization"]
-    parsed = counts["kept"] + counts["dropped.multiple_statements"] + counts["dropped.not_a_query"]
+
+    def dropped(reason: DropReason) -> int:
+        return counts[f"dropped.{reason.value}"]
+
+    failed = dropped(DropReason.PARSE_ERROR) + dropped(DropReason.UNSTABLE_NORMALIZATION)
+    parsed = (
+        counts["kept"] + dropped(DropReason.MULTIPLE_STATEMENTS) + dropped(DropReason.NOT_A_QUERY)
+    )
     # Nothing reached the parser: fail closed, like an unreadable export.
     parse_rate = parsed / (parsed + failed) if parsed + failed else 0.0
     return {

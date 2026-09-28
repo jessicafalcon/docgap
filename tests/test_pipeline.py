@@ -83,7 +83,10 @@ def test_a_crash_mid_stage_leaves_no_record_and_the_rerun_clears_its_directory(
     assert "rank" not in manifest.canonical.stages
     assert manifest.operational.stages["rank"].status is StageStatus.FAILED
 
+    # A killed manifest write leaves its temporary file in the run directory.
+    (tmp_path / RUN_ID / f"{MANIFEST_FILE}.tmp-123").write_bytes(b"{")
     resumed = _analyze(tmp_path)
+    assert not list((tmp_path / RUN_ID).glob("*.tmp-*"))
     assert _statuses(resumed)["rank"] is StageStatus.SUCCEEDED
     assert _statuses(resumed)["usage"] is StageStatus.SKIPPED
     assert sorted(path.name for path in (tmp_path / RUN_ID / "rank").iterdir()) == [
@@ -109,6 +112,11 @@ def test_a_changed_input_reruns_the_stages_that_read_it(tmp_path: Path) -> None:
     assert statuses["usage"] is StageStatus.SUCCEEDED
     # Usage came out the same, so the stages after it still hold.
     assert statuses["rank"] is StageStatus.SKIPPED
+
+
+def test_run_id_needs_a_whole_second() -> None:
+    with pytest.raises(ValueError, match="whole second"):
+        run_id(AS_OF.replace(microsecond=1), RUN_SETUP)
 
 
 def test_a_stage_that_read_other_inputs_fails(tmp_path: Path) -> None:
