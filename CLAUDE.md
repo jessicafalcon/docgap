@@ -160,8 +160,8 @@ code is lost to the next session, and the review agents treat it as a finding.
 - **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, seeds,
-  `[actors]`, and the model and prompt version at the attribution, drafter and
-  gate call sites) never change. A change to the usage, rank or evidence code
+  `[actors]`, `[manifest]`, and the model and prompt version at the attribution,
+  drafter and gate call sites) never change. A change to the usage, rank or evidence code
   that changes its golden outputs, and any other `EVAL_PROTOCOL.md` change,
   needs an ADR with a justification, and the results report the deviation.
   Other files point here rather than restating the list.
@@ -190,20 +190,19 @@ Update after every PR and merge, in the same change. A new session resumes from 
 - **Phase:** 0 is done (#1–#11): its "Done when" holds and the phase-exit audit
   found no blockers. Phase 4 (the deterministic core on hand-made fixtures) is in
   progress; Phase 1 waits for the offline pilot, per the brief's timeline.
-- **Repo:** `jessicafalcon/docgap` on GitHub, public once `docs/readme` merges
-  (ADR 0017), so every push is a publication. Squash merges only, with the PR
-  title as the commit title. No branch protection yet; Phase 7 sets it up.
-- **Open PRs:** `docs/readme`, in review: a first README that states the project
-  is in progress, and ADR 0017 (public now). After it merges, the repo goes
-  public on the user's go. Phase 8 replaces the README.
+- **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
+  so every push is a publication. Squash merges only, with the PR title as the
+  commit title. No branch protection yet; Phase 7 sets it up. The in-progress
+  README merged in #13; Phase 8 replaces it.
+- **Open PRs:** `feat/resolve-usage`, Phase 4 PR 2.
 - **Phase 4 PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/snapshot`, merged (#12).
-  - **PR 2:** `feat/resolve-usage`. `manifest.py`, `resolve` (its choices, and
-    their ADR, are listed in the brief's `resolve` step), `usage` with the
-    ranking scope.
+  - **PR 2:** `feat/resolve-usage`, in review. `manifest.py`, `resolve` (ADR
+    0018, `schema_version` 3), `usage` with the ranking scope (ADR 0019, which
+    supersedes 0015: any agent-tagged traffic needs a scope).
   - **PR 3:** `feat/analyze`. `coverage`, `rank` (score by `Decimal.ln()`),
     `cli.py`, the run manifest with the snapshot gates, the report and the
     end-to-end golden files; the last PR of the phase, so it also gets the
     whole-repo audit.
-- **Next step:** after `docs/readme` merges, PR 2, `feat/resolve-usage`, from an
-  up-to-date `main`.
+- **Next step:** after PR 2 merges, PR 3, `feat/analyze`, from an up-to-date
+  `main`.

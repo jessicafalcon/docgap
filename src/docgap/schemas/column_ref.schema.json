@@ -16,7 +16,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "One column a query touches, as `resolve` qualified it against the dbt manifest.",
+  "description": "One mart column a query touches, as `resolve` qualified it against the dbt manifest.\n\nOnly mart columns get a row; a reference to anything else is counted (ADR 0018).",
   "properties": {
     "clause": {
       "$ref": "#/$defs/Clause"
@@ -25,10 +25,6 @@
       "pattern": "^[A-Z_][A-Z0-9_$]*(\\.[A-Z_][A-Z0-9_$]*){3}$",
       "title": "Fqn",
       "type": "string"
-    },
-    "managed": {
-      "title": "Managed",
-      "type": "boolean"
     },
     "query_id": {
       "minLength": 1,
@@ -39,8 +35,7 @@
   "required": [
     "query_id",
     "fqn",
-    "clause",
-    "managed"
+    "clause"
   ],
   "title": "ColumnRef",
   "type": "object"

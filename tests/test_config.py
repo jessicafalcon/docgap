@@ -44,7 +44,7 @@ def _without(raw: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
 def test_committed_config_feeds_the_run_setup() -> None:
     config = load_config(CONFIG)
     setup = RunSetup(
-        schema_version=2,
+        schema_version=3,
         config=config.section_sha256(),
         environment=Environment(python="3.12.8", packages=(), code_sha256=HASH),
         call_sites={},
@@ -130,3 +130,12 @@ def test_value_change_moves_only_its_section_hash() -> None:
     before = load_config(CONFIG).section_sha256()
     after = DocgapConfig.model_validate(raw).section_sha256()
     assert {name for name in before if before[name] != after[name]} == {"evidence"}
+
+
+@pytest.mark.parametrize("value", ["marts", "ANALYTICS.MARTS", ""])
+def test_mart_schema_must_be_an_uppercase_identifier(value: str) -> None:
+    # The marts are matched against uppercased manifest names and FQNs.
+    raw = _raw()
+    raw["manifest"]["mart_schema"] = value
+    with pytest.raises(ValidationError):
+        DocgapConfig.model_validate(raw)

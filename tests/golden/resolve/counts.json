@@ -1,0 +1,9 @@
+{
+  "columns.information_schema": 0,
+  "columns.resolved": 20,
+  "columns.unmanaged": 0,
+  "columns.unresolved": 8,
+  "queries.qualify_failed": 0,
+  "queries.read": 9,
+  "queries.top_level_star": 1
+}

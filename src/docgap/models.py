@@ -51,6 +51,7 @@ __all__ = [
     "Profile",
     "QueryRecord",
     "RankedGap",
+    "RankingScope",
     "RunCanonical",
     "RunManifest",
     "RunOperational",
@@ -120,6 +121,10 @@ def canonical_json(model: BaseModel) -> bytes:
 def canonical_sha256(model: BaseModel) -> str:
     """Hash a contract's canonical JSON: the one hash every manifest field uses."""
     return hashlib.sha256(canonical_json(model)).hexdigest()
+
+
+def _sorted_unique(values: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(sorted(set(values)))
 
 
 def _sums_to_one(probabilities: Iterable[float], name: str) -> None:
@@ -216,7 +221,7 @@ class QueryRecord(_Contract):
     role: RoleName
     actor: Actor
     # From the tag `agent:<run_id>:<qid>:<rep>`, all None for untagged traffic. The
-    # run ID keeps two agent runs of one question and repetition apart (ADR 0015).
+    # run ID keeps two agent runs of one question and repetition apart (ADR 0019).
     run_id: RunId | None
     qid: Qid | None
     repetition: PositiveInt | None
@@ -238,12 +243,14 @@ class QueryRecord(_Contract):
 
 
 class ColumnRef(_Contract):
-    """One column a query touches, as `resolve` qualified it against the dbt manifest."""
+    """One mart column a query touches, as `resolve` qualified it against the dbt manifest.
+
+    Only mart columns get a row; a reference to anything else is counted (ADR 0018).
+    """
 
     query_id: NonEmptyStr
     fqn: Fqn
     clause: Clause
-    managed: bool
 
 
 class ColumnUsage(_Contract):
@@ -411,6 +418,14 @@ class GateResult(_Contract):
         return self
 
 
+class RankingScope(_Contract):
+    """The traffic the ranking reads: one agent run and its discovery questions (ADR 0019)."""
+
+    run_id: RunId
+    # Sorted and deduplicated, so equal scopes hash the same.
+    qids: Annotated[tuple[Qid, ...], Field(min_length=1), AfterValidator(_sorted_unique)]
+
+
 class RankedGap(_Contract):
     """One row of `ranked_gaps.parquet`: an undocumented column and its score."""
 
@@ -470,7 +485,7 @@ class RunSetup(_Contract):
     """What a run is set up with: arms and resumed stages must match it exactly."""
 
     # Bump on any change to a contract's shape, and regenerate the committed schemas.
-    schema_version: Literal[2]
+    schema_version: Literal[3]
     config: dict[Key, Sha256]
     environment: Environment
     call_sites: dict[Key, CallSite]

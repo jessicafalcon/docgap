@@ -1,0 +1,26 @@
+{
+  "additionalProperties": false,
+  "description": "The traffic the ranking reads: one agent run and its discovery questions (ADR 0019).",
+  "properties": {
+    "qids": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Qids",
+      "type": "array"
+    },
+    "run_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "title": "Run Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "qids"
+  ],
+  "title": "RankingScope",
+  "type": "object"
+}

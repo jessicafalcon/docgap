@@ -227,7 +227,7 @@
           "$ref": "#/$defs/Environment"
         },
         "schema_version": {
-          "const": 2,
+          "const": 3,
           "title": "Schema Version",
           "type": "integer"
         }

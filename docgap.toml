@@ -13,6 +13,13 @@ history_window_days = 7
 # decision on where "people" traffic comes from is settled.
 AGENT_READER = "agent"
 
+[manifest]
+# The schema agents read (the governance table's `AGENT_READER` grant). Its dbt
+# models are the mart columns that are resolved, counted and ranked; any other
+# relation is unmanaged.
+mart_database = "ANALYTICS"
+mart_schema = "MARTS"
+
 [evidence]
 # k: a value carried by fewer fact rows is suppressed from profiles (ADR 0003).
 min_value_count = 11

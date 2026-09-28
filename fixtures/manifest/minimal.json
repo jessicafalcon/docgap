@@ -1,0 +1,293 @@
+{
+  "exposures": {},
+  "macros": {},
+  "metadata": {
+    "adapter_type": "duckdb",
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+    "dbt_version": "1.10.0",
+    "project_name": "docgap"
+  },
+  "metrics": {},
+  "nodes": {
+    "model.docgap.dim_prestation": {
+      "alias": "dim_prestation",
+      "columns": {
+        "PRS_NAT": {
+          "constraints": [],
+          "data_type": "INTEGER",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "PRS_NAT",
+          "quote": null,
+          "tags": []
+        },
+        "PRS_NAT_LIB": {
+          "constraints": [],
+          "data_type": "VARCHAR",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "PRS_NAT_LIB",
+          "quote": null,
+          "tags": []
+        }
+      },
+      "config": {
+        "contract": {
+          "alias_types": true,
+          "enforced": true
+        },
+        "materialized": "table",
+        "meta": {
+          "owner": "data-team"
+        }
+      },
+      "database": "analytics",
+      "description": "dim_prestation model",
+      "fqn": [
+        "docgap",
+        "marts",
+        "dim_prestation"
+      ],
+      "name": "dim_prestation",
+      "package_name": "docgap",
+      "relation_name": "\"analytics\".\"marts\".\"dim_prestation\"",
+      "resource_type": "model",
+      "schema": "marts",
+      "unique_id": "model.docgap.dim_prestation"
+    },
+    "model.docgap.dim_region": {
+      "alias": "dim_region",
+      "columns": {
+        "BEN_RES_REG": {
+          "constraints": [],
+          "data_type": "INTEGER",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "BEN_RES_REG",
+          "quote": null,
+          "tags": []
+        },
+        "REG_LIB": {
+          "constraints": [],
+          "data_type": "VARCHAR",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "REG_LIB",
+          "quote": null,
+          "tags": []
+        }
+      },
+      "config": {
+        "contract": {
+          "alias_types": true,
+          "enforced": true
+        },
+        "materialized": "table",
+        "meta": {
+          "owner": "data-team"
+        }
+      },
+      "database": "analytics",
+      "description": "dim_region model",
+      "fqn": [
+        "docgap",
+        "marts",
+        "dim_region"
+      ],
+      "name": "dim_region",
+      "package_name": "docgap",
+      "relation_name": "\"analytics\".\"marts\".\"dim_region\"",
+      "resource_type": "model",
+      "schema": "marts",
+      "unique_id": "model.docgap.dim_region"
+    },
+    "model.docgap.fct_reimbursements": {
+      "alias": "fct_reimbursements",
+      "columns": {
+        "AGE_BEN_SNDS": {
+          "constraints": [],
+          "data_type": "INTEGER",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "AGE_BEN_SNDS",
+          "quote": null,
+          "tags": []
+        },
+        "BEN_RES_REG": {
+          "constraints": [],
+          "data_type": "INTEGER",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "BEN_RES_REG",
+          "quote": null,
+          "tags": []
+        },
+        "BEN_SEX_COD": {
+          "constraints": [],
+          "data_type": "INTEGER",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "BEN_SEX_COD",
+          "quote": null,
+          "tags": []
+        },
+        "FLX_ANN_MOI": {
+          "constraints": [],
+          "data_type": "INTEGER",
+          "description": "Processing month, YYYYMM.",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "FLX_ANN_MOI",
+          "quote": null,
+          "tags": []
+        },
+        "PRS_ACT_QTE": {
+          "constraints": [],
+          "data_type": "BIGINT",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "PRS_ACT_QTE",
+          "quote": null,
+          "tags": []
+        },
+        "PRS_NAT": {
+          "constraints": [],
+          "data_type": "INTEGER",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "PRS_NAT",
+          "quote": null,
+          "tags": []
+        },
+        "PRS_PAI_MNT": {
+          "constraints": [],
+          "data_type": "DECIMAL(18,2)",
+          "description": "Amount paid, in euros.",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "PRS_PAI_MNT",
+          "quote": null,
+          "tags": []
+        },
+        "SOI_ANN": {
+          "constraints": [],
+          "data_type": "VARCHAR",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "SOI_ANN",
+          "quote": null,
+          "tags": []
+        }
+      },
+      "config": {
+        "contract": {
+          "alias_types": true,
+          "enforced": true
+        },
+        "materialized": "table",
+        "meta": {
+          "owner": "data-team"
+        }
+      },
+      "database": "analytics",
+      "description": "fct_reimbursements model",
+      "fqn": [
+        "docgap",
+        "marts",
+        "fct_reimbursements"
+      ],
+      "name": "fct_reimbursements",
+      "package_name": "docgap",
+      "relation_name": "\"analytics\".\"marts\".\"fct_reimbursements\"",
+      "resource_type": "model",
+      "schema": "marts",
+      "unique_id": "model.docgap.fct_reimbursements"
+    },
+    "model.docgap.stg_damir__prestations": {
+      "alias": "stg_damir__prestations",
+      "columns": {
+        "PRS_NAT": {
+          "constraints": [],
+          "data_type": "INTEGER",
+          "description": "",
+          "meta": {
+            "sensitivity": "internal"
+          },
+          "name": "PRS_NAT",
+          "quote": null,
+          "tags": []
+        }
+      },
+      "config": {
+        "contract": {
+          "alias_types": true,
+          "enforced": false
+        },
+        "materialized": "table",
+        "meta": {
+          "owner": "data-team"
+        }
+      },
+      "database": "analytics",
+      "description": "stg_damir__prestations model",
+      "fqn": [
+        "docgap",
+        "staging",
+        "stg_damir__prestations"
+      ],
+      "name": "stg_damir__prestations",
+      "package_name": "docgap",
+      "relation_name": "\"analytics\".\"staging\".\"stg_damir__prestations\"",
+      "resource_type": "model",
+      "schema": "staging",
+      "unique_id": "model.docgap.stg_damir__prestations"
+    },
+    "seed.docgap.prs_nat_codes": {
+      "alias": "prs_nat_codes",
+      "columns": {},
+      "config": {
+        "materialized": "seed"
+      },
+      "database": "analytics",
+      "name": "prs_nat_codes",
+      "resource_type": "seed",
+      "schema": "staging",
+      "unique_id": "seed.docgap.prs_nat_codes"
+    },
+    "test.docgap.not_null_fct_reimbursements_PRS_NAT.1a2b3c": {
+      "alias": "not_null_fct_reimbursements_PRS_NAT",
+      "columns": {},
+      "config": {
+        "materialized": "test"
+      },
+      "database": "analytics",
+      "name": "not_null_fct_reimbursements_PRS_NAT",
+      "resource_type": "test",
+      "schema": "marts_dbt_test__audit",
+      "unique_id": "test.docgap.not_null_fct_reimbursements_PRS_NAT.1a2b3c"
+    }
+  },
+  "sources": {}
+}

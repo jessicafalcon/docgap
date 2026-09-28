@@ -31,6 +31,7 @@ from docgap.models import (
     Profile,
     QueryRecord,
     RankedGap,
+    RankingScope,
     RunCanonical,
     RunManifest,
     RunOperational,
@@ -48,7 +49,7 @@ FQN = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PAI_MNT"
 SQL = "SELECT PRS_PAI_MNT FROM FCT_REIMBURSEMENTS WHERE BEN_CMU_TOP = ?"
 HASH = "0" * 64
 
-# The brief's ten contracts, each with its committed JSON Schema.
+# The brief's contracts, each with its committed JSON Schema.
 CONTRACTS: dict[str, type[BaseModel]] = {
     "column_ref": ColumnRef,
     "query_record": QueryRecord,
@@ -59,6 +60,7 @@ CONTRACTS: dict[str, type[BaseModel]] = {
     "draft": Draft,
     "gate_result": GateResult,
     "ranked_gap": RankedGap,
+    "ranking_scope": RankingScope,
     "run_manifest": RunManifest,
 }
 
@@ -86,7 +88,7 @@ def _environment(**overrides: Any) -> Environment:
 
 def _setup(**overrides: Any) -> RunSetup:
     fields: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "config": {"rank": HASH, "snapshot": HASH},
         "environment": _environment(),
         "call_sites": {
@@ -165,7 +167,7 @@ def _packet(**overrides: Any) -> EvidencePacket:
 
 
 EXAMPLES: list[BaseModel] = [
-    ColumnRef(query_id="01b2", fqn=FQN, clause=Clause.WHERE, managed=True),
+    ColumnRef(query_id="01b2", fqn=FQN, clause=Clause.WHERE),
     _query_record(),
     ColumnUsage(
         fqn=FQN,
@@ -194,6 +196,7 @@ EXAMPLES: list[BaseModel] = [
     ),
     GateResult(fqn=FQN, draft_sha256=HASH, p_supported=0.9, band=Band.READY, failure=None),
     RankedGap(rank=1, fqn=FQN, score=2.3, executions=9, failure_rate=0.2),
+    RankingScope(run_id="20260920T180000Z-1a2b3c4d", qids=("q01", "q03")),
     _manifest(),
 ]
 
@@ -244,7 +247,7 @@ def test_no_schema_without_a_contract() -> None:
 )
 def test_fqn_rejects_anything_but_four_uppercase_parts(fqn: str) -> None:
     with pytest.raises(ValidationError, match="fqn"):
-        ColumnRef(query_id="01b2", fqn=fqn, clause=Clause.SELECT, managed=True)
+        ColumnRef(query_id="01b2", fqn=fqn, clause=Clause.SELECT)
 
 
 def test_query_record_rejects_a_fingerprint_of_other_sql() -> None:
@@ -540,5 +543,5 @@ def test_canonical_hash_is_pinned() -> None:
     # Every run hash depends on the canonical bytes. A change to the serialization or
     # to the example shows here and must be deliberate.
     assert _manifest().canonical_sha256() == (
-        "e6a18d886c6aa2f45b04908ba0092d015a3e65b39179ab8ad0bdefc852c61e3c"
+        "66cc5f9aa316d142168f668cd9aa2f14836e69ca1508a114651435ee1b1a81ef"
     )

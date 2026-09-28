@@ -20,6 +20,7 @@ from pydantic import (
 from docgap.models import (
     CONTRACT_CONFIG,
     Actor,
+    Identifier,
     Key,
     ModelSettings,
     Probability,
@@ -34,6 +35,7 @@ __all__ = [
     "DocgapConfig",
     "EvidenceConfig",
     "GateConfig",
+    "ManifestConfig",
     "SeedsConfig",
     "SnapshotConfig",
     "load_config",
@@ -59,6 +61,13 @@ class ActorsConfig(
     # Strict mode takes an enum only as an instance from Python objects, and TOML
     # gives strings. Lax mode here still accepts only the enum's values.
     model_config = ConfigDict(frozen=True, strict=True)
+
+
+class ManifestConfig(_Section):
+    """Where the marts live: their dbt models are the columns docgap counts and ranks."""
+
+    mart_database: Identifier
+    mart_schema: Identifier
 
 
 class EvidenceConfig(_Section):
@@ -106,6 +115,7 @@ class DocgapConfig(_Section):
 
     snapshot: SnapshotConfig
     actors: ActorsConfig
+    manifest: ManifestConfig
     evidence: EvidenceConfig
     gate: GateConfig
     seeds: SeedsConfig
