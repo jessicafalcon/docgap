@@ -25,6 +25,9 @@ The result is reported whatever it turns out to be.
    permutation bound), and reads only `ANALYTICS.MARTS`.
 3. **12 pilot questions** are separate from the 40 and are used only to choose
    the agent model (see [The agent model](#the-agent-model)).
+4. **Written before the baseline docs.** The 40 questions and their gold SQL are
+   committed before `warehouse/baseline_docs.lock` is drawn, so no question is
+   written knowing which columns the baseline leaves undocumented (ADR 0021).
 
 ## The split
 
@@ -88,7 +91,7 @@ environment). The comparison refuses to run if two arms' manifests differ in it.
 
 | Arm | Column docs the agent reads |
 | --- | --- |
-| **Baseline** | The locked 50% of mart columns, chosen by `[seeds] baseline_docs` = 3 and frozen in `warehouse/baseline_docs.lock` |
+| **Baseline** | The locked 50% of mart columns: the M column FQNs sorted by `sha256(f"{seed}:{fqn}")` with `seed` = `[seeds] baseline_docs` = 3, the first `floor(M / 2)` documented, frozen in `warehouse/baseline_docs.lock` after the questions (ADR 0021) |
 | **Top-N** | Baseline plus docgap's drafts for its top N columns |
 | **Random-N** | Baseline plus drafts, from the same drafter and gate, for N random undocumented columns |
 | **Ceiling** (optional) | Every mart column documented from the dictionary |
