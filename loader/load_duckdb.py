@@ -11,6 +11,7 @@ its row in `RAW.DAMIR.LOADED_FILES`, so a re-run loads nothing twice.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from collections.abc import Mapping
 from itertools import zip_longest
 from pathlib import Path
@@ -69,14 +70,18 @@ def check_header(path: Path, columns: list[str]) -> None:
 def load(files: Mapping[Path, Facts], db: Path, ddl: str) -> dict[str, int]:
     """Load each file not loaded yet into `RAW.DAMIR.PRESTATIONS` in the DuckDB file `db`.
 
-    Returns the rows loaded per file name, 0 for a file loaded before.
+    Returns the rows loaded per file name, 0 for a file loaded before. Each file's
+    record holds the DDL's SHA-256, so a database loaded under another DDL fails
+    instead of skipping every file with stale types.
 
     Raises:
-        ValueError: a file differs from its pin, its header from the DDL, its row
-            count from the lock, or a loaded file of the same name had other bytes.
+        ValueError: `db` was loaded under another DDL, a file differs from its pin,
+            its header from the DDL, its row count from the lock, or a loaded file
+            of the same name had other bytes.
         duckdb.Error: a value doesn't fit its column's type; the file loads nothing.
     """
     columns = raw_columns(ddl)
+    ddl_sha256 = hashlib.sha256(ddl.encode()).hexdigest()
     db.parent.mkdir(parents=True, exist_ok=True)
     loaded: dict[str, int] = {}
     with duckdb.connect(db) as con:
@@ -86,8 +91,14 @@ def load(files: Mapping[Path, Facts], db: Path, ddl: str) -> dict[str, int]:
         # Snowflake's own load metadata skips a file `COPY` already loaded; DuckDB has none.
         con.execute(
             "CREATE TABLE IF NOT EXISTS RAW.DAMIR.LOADED_FILES "
-            "(FILE_NAME VARCHAR PRIMARY KEY, SHA256 VARCHAR NOT NULL, ROWS BIGINT NOT NULL)"
+            "(FILE_NAME VARCHAR PRIMARY KEY, SHA256 VARCHAR NOT NULL, ROWS BIGINT NOT NULL, "
+            "DDL_SHA256 VARCHAR NOT NULL)"
         )
+        stale = con.execute(
+            "SELECT count(*) FROM RAW.DAMIR.LOADED_FILES WHERE DDL_SHA256 <> ?", [ddl_sha256]
+        ).fetchone()
+        if stale is not None and stale[0]:
+            raise ValueError(f"{db}: loaded under another {DDL.name}; delete it and load again")
         for path, pin in sorted(files.items()):
             if (found := digest_file(path)) != (pin.bytes, pin.sha256):
                 raise ValueError(f"{path.name}: expected {pin[1:]}, found {found}")
@@ -105,15 +116,17 @@ def load(files: Mapping[Path, Facts], db: Path, ddl: str) -> dict[str, int]:
             con.begin()
             # Types come from the table, as in Snowflake's `COPY`: a value that doesn't
             # parse aborts the statement, like `ON_ERROR = ABORT_STATEMENT`. An empty
-            # field is NULL. The path is the lock's, not user input.
+            # field is NULL. `COPY` takes no bound path, so a quote in it is doubled.
+            source = path.as_posix().replace("'", "''")
             copied = con.execute(
-                f"COPY RAW.DAMIR.PRESTATIONS FROM '{path.as_posix()}' (DELIMITER ';', HEADER true)"
+                f"COPY RAW.DAMIR.PRESTATIONS FROM '{source}' (DELIMITER ';', HEADER true)"
             ).fetchone()
             rows = copied[0] if copied is not None else -1
             if rows != pin.rows:
                 raise ValueError(f"{path.name}: loaded {rows} rows, the lock pins {pin.rows}")
             con.execute(
-                "INSERT INTO RAW.DAMIR.LOADED_FILES VALUES (?, ?, ?)", [path.name, pin.sha256, rows]
+                "INSERT INTO RAW.DAMIR.LOADED_FILES VALUES (?, ?, ?, ?)",
+                [path.name, pin.sha256, rows, ddl_sha256],
             )
             con.commit()
             loaded[path.name] = rows

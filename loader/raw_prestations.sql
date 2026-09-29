@@ -2,14 +2,17 @@
 -- per field and nothing inferred. Snowflake SQL; loader/load_duckdb.py transpiles it
 -- for the offline warehouse, so both build the same table.
 --
--- Types were measured on the three pinned files, 107,232,480 rows (2026-09-29):
+-- Types were measured on the three pinned files, 107,232,480 rows, by
+-- loader/profile_sources.py (2026-09-29):
 -- - Codes are integers of at most 6 digits, except SOI_ANN and SOI_MOI, which keep
 --   their zero padding (`0000`, `01`) as codes (ADR 0012), and ETB_DCS_MCO (letters).
 -- - Amounts, coefficients and the rate have at most 2 decimals and 8 integer digits,
---   some written without a leading zero (`.61`). A third decimal would be rounded
---   silently, so NUMBER(18, 2) leaves room without hiding one.
+--   some written without a leading zero (`.61`). NUMBER(18, 2) holds every one.
 -- - Only PRS_ACT_NBR and FLT_ACT_NBR are ever empty (about 10% of rows); every other
---   field is NOT NULL, so a future file with a gap fails its load.
+--   field is NOT NULL, so a gap in a file fails its load.
+-- Two drifts would not fail a load: both warehouses round a third decimal, and DuckDB
+-- ignores VARCHAR lengths. Neither reaches the pinned files, and a new file needs a
+-- new lock entry, whose profile run shows both.
 -- - FILLER takes the empty field after each line's trailing `;`; staging asserts it
 --   is NULL.
 -- Keep the column order in sync with the files' header: the loader checks it.

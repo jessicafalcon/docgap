@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from decimal import Decimal
 from pathlib import Path
 
 import duckdb
@@ -32,6 +33,13 @@ def _lines(n: int) -> list[bytes]:
     """The header and the first `n` data lines of the January fixture file."""
     with (FIXTURE_DIR / "A202501.csv").open("rb") as f:
         return [f.readline() for _ in range(n + 1)]
+
+
+def _set(line: bytes, field: int, value: bytes) -> bytes:
+    """`line` with its 1-based `field` replaced by `value`."""
+    fields = line.split(b";")
+    fields[field - 1] = value
+    return b";".join(fields)
 
 
 def test_ddl_declares_56_fields_and_the_trailing_filler() -> None:
@@ -121,3 +129,85 @@ def test_other_bytes_under_a_loaded_name_fail(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="other bytes is loaded"):
         load(_write(path, _lines(3)), db, DDL.read_text())
     assert _rows(db) == (2, 1)
+
+
+def test_the_loaded_fixture_keeps_the_declared_types_codes_and_nulls(tmp_path: Path) -> None:
+    db = tmp_path / "RAW.duckdb"
+    load(FIXTURE, db, DDL.read_text())
+
+    with duckdb.connect(db, read_only=True) as con:
+        types = dict(
+            con.execute(
+                "SELECT column_name, column_type FROM (DESCRIBE RAW.DAMIR.PRESTATIONS)"
+            ).fetchall()
+        )
+        [(padded, filler, nbr_empty, qte_empty)] = con.execute(
+            "SELECT count(*) FILTER (WHERE length(SOI_MOI) <> 2 OR length(SOI_ANN) <> 4), "
+            "count(FILLER), count(*) FILTER (WHERE PRS_ACT_NBR IS NULL), "
+            "count(*) FILTER (WHERE PRS_ACT_QTE IS NULL) FROM RAW.DAMIR.PRESTATIONS"
+        ).fetchall()
+
+    assert (types["FLX_ANN_MOI"], types["PRS_PAI_MNT"], types["PRS_REM_TAU"]) == (
+        "INTEGER",
+        "DECIMAL(18,2)",
+        "DECIMAL(18,2)",
+    )
+    assert (types["SOI_ANN"], types["SOI_MOI"], types["FILLER"]) == ("VARCHAR",) * 3
+    assert padded == 0
+    assert filler == 0
+    assert nbr_empty > 0
+    assert qte_empty == 0
+
+
+def test_amounts_without_a_leading_zero_load_as_decimals(tmp_path: Path) -> None:
+    header, first = _lines(1)
+    # `PRS_ACT_COG` is field 17 and `PRS_PAI_MNT` field 21.
+    files = _write(tmp_path / "A202501.csv", [header, _set(_set(first, 17, b"-.8"), 21, b".61")])
+    db = tmp_path / "RAW.duckdb"
+
+    load(files, db, DDL.read_text())
+
+    with duckdb.connect(db, read_only=True) as con:
+        [row] = con.execute("SELECT PRS_ACT_COG, PRS_PAI_MNT FROM RAW.DAMIR.PRESTATIONS").fetchall()
+    assert row == (Decimal("-0.80"), Decimal("0.61"))
+
+
+def test_an_empty_not_null_field_loads_nothing(tmp_path: Path) -> None:
+    header, first, *rest = _lines(3)
+    # `PRS_NAT` is field 40, declared NOT NULL.
+    files = _write(tmp_path / "A202501.csv", [header, _set(first, 40, b""), *rest])
+    db = tmp_path / "RAW.duckdb"
+
+    with pytest.raises(duckdb.ConstraintException):
+        load(files, db, DDL.read_text())
+    assert _rows(db) == (0, 0)
+
+
+def test_a_database_loaded_under_another_ddl_fails(tmp_path: Path) -> None:
+    db = tmp_path / "RAW.duckdb"
+    files = _write(tmp_path / "A202501.csv", _lines(2))
+    load(files, db, DDL.read_text())
+
+    with pytest.raises(ValueError, match="loaded under another"):
+        load(
+            files,
+            db,
+            DDL.read_text().replace("PRS_ACT_QTE INTEGER NOT NULL", "PRS_ACT_QTE INTEGER"),
+        )
+    assert _rows(db) == (2, 1)
+
+
+def test_a_rerun_after_a_failed_file_loads_only_that_file(tmp_path: Path) -> None:
+    header, first, *rest = _lines(3)
+    good = tmp_path / "A202501.csv"
+    bad = tmp_path / "A202502.csv"
+    files = {**_write(good, [header, *rest]), **_write(bad, [header, b"2025X2" + first[6:]])}
+    db = tmp_path / "RAW.duckdb"
+    with pytest.raises(duckdb.Error):
+        load(files, db, DDL.read_text())
+    assert _rows(db) == (2, 1)
+
+    loaded = load({**files, **_write(bad, [header, first])}, db, DDL.read_text())
+
+    assert loaded == {"A202501.csv": 0, "A202502.csv": 1}
+    assert _rows(db) == (3, 2)
