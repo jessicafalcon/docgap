@@ -190,26 +190,30 @@ updated, open risks, next step.
 
 Update after every PR and merge, in the same change. A new session resumes from here.
 
-- **Phase:** 0 is done (#1–#11): its "Done when" holds and the phase-exit audit
-  found no blockers. Phase 4 (the deterministic core on hand-made fixtures) has
-  every step ticked, and its last PR is in review with the phase-exit audit;
-  Phase 1 waits for the offline pilot, per the brief's timeline.
+- **Phase:** 0 is done (#1–#11), and so is 4 (#12, #14, #15): each one's "Done
+  when" holds and its phase-exit audit found no blockers. Phase 2's offline block
+  (the brief's timeline row 3) is in progress. Its "Done when" needs Snowflake, so
+  the phase and its exit audit close in timeline row 7. Phase 1 waits for the
+  offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/analyze`, Phase 4 PR 3, in review.
-- **Phase 4 PR order** (approved after `devils-advocate`):
-  - **PR 1:** `feat/snapshot`, merged (#12).
-  - **PR 2:** `feat/resolve-usage`, merged (#14). `manifest.py`, `resolve` (ADR
-    0018, `schema_version` 3), `usage` with the ranking scope (ADR 0019, which
-    supersedes 0015: any agent-tagged traffic needs a scope).
-  - **PR 3:** `feat/analyze`, in review. `coverage`, `rank` over every
-    undocumented mart column (ADR 0020, score by `Decimal.ln()`), `cli.py`,
-    `pipeline.py` (run manifest, snapshot gates, resume, lock; a failed stage's
-    error in the manifest, `schema_version` 4), the report and
-    the end-to-end golden files; the last PR of the phase, so it also gets the
-    whole-repo audit.
-- **Next step:** after PR 3 merges, Phase 2 on DuckDB (the offline sample), the
-  next row of the brief's timeline, from an up-to-date `main`, starting with
-  `devils-advocate` on its PR split.
+- **Open PRs:** none.
+- **Phase 2 offline PR order** (approved after `devils-advocate`):
+  - **PR 1:** `feat/raw-load`, in progress. The typed RAW DDL (one spec for
+    DuckDB and Snowflake, nullable measures) and the offline DuckDB load over
+    `data/sample/` or `fixtures/damir/`. It also moves the baseline docs lock
+    after Phase 3's questions (ADR 0021).
+  - **PR 2:** `feat/staging-fact-lint`. The dbt project on DuckDB, the staging
+    model (aggregate only if the full three months repeat a grain key), the
+    contracted `fct_reimbursements`, `docgap lint` calling `load_marts`, and CI
+    `dbt build` over `fixtures/damir/`.
+  - **PR 3:** `feat/dims-agg`. Seeds (code→label pairs only), the 4 dimensions
+    with the dictionary's missing codes and a cap on their share of fact rows,
+    and `agg_monthly_spend_by_category`, whose category needs a decision and an
+    ADR, brought to review first.
+  - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
+    Snowflake profile, `persist_docs` check), tested offline and run in the
+    trial.
+- **Next step:** build PR 1.
