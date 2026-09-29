@@ -14,6 +14,9 @@ repos:
         # --enforce-all so CI checks every tracked file, not only newly staged ones.
         args: ["--maxkb=5000", "--enforce-all"]
       - id: check-merge-conflict
+        # Without it the hook looks for markers only during a merge, so a conflicted
+        # `git stash pop` could be committed with its markers.
+        args: ["--assume-in-merge"]
       - id: check-toml
         # The `loader/*.lock` files are TOML, but their names don't get the toml file type.
         types: [text]

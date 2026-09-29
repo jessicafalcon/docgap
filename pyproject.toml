@@ -25,6 +25,9 @@ dev = [
     "pytest-socket>=0.8.1",
     "ruff>=0.16.9",
 ]
+warehouse = [
+    "duckdb>=1.5.6",
+]
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
@@ -34,6 +37,10 @@ build-backend = "uv_build"
 # The one uv pin: CI's setup-uv reads it. Keep in sync with the uv-lock hook rev in
 # .pre-commit-config.yaml.
 required-version = "==0.12.5"
+# The loader and dbt run in the same environment as the tests, which load the
+# CI fixture into DuckDB. Neither is a docgap runtime dependency, so neither enters
+# the run's setup (ADR 0006).
+default-groups = ["dev", "warehouse"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src", ".claude/hooks", "loader"]
