@@ -12,19 +12,19 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping
+from itertools import zip_longest
 from pathlib import Path
 
 import duckdb
 import sqlglot
-from offline_sample import ROOT, SAMPLE_LOCK, Facts, digest_file, read_lock
+from offline_sample import FIXTURE_DIR, ROOT, SAMPLE_DIR, SAMPLE_LOCK, Facts, digest_file, read_lock
 from sqlglot import exp
 
-__all__ = ["DDL", "check_header", "duckdb_ddl", "load", "main", "raw_columns"]
+__all__ = ["DDL", "check_header", "load", "locked_files", "main", "raw_columns"]
 
 DDL = ROOT / "loader" / "raw_prestations.sql"
 WAREHOUSE_DIR = ROOT / "data" / "warehouse"
-# The lock names each file by its repo-relative path; a source is one directory of it.
-SOURCES = {"sample": "data/sample/", "fixture": "fixtures/damir/"}
+SOURCES = {"sample": SAMPLE_DIR, "fixture": FIXTURE_DIR}
 
 
 def raw_columns(ddl: str) -> list[str]:
@@ -38,9 +38,13 @@ def raw_columns(ddl: str) -> list[str]:
     ]
 
 
-def duckdb_ddl(ddl: str) -> str:
-    """Transpile the Snowflake DDL to DuckDB, so both warehouses build one table."""
-    return sqlglot.transpile(ddl, read="snowflake", write="duckdb")[0]
+def locked_files(directory: Path) -> dict[Path, Facts]:
+    """Return the files `sample.lock` pins in `directory`, with their pins."""
+    return {
+        ROOT / name: pin
+        for name, pin in read_lock(SAMPLE_LOCK).items()
+        if (ROOT / name).parent == directory
+    }
 
 
 def check_header(path: Path, columns: list[str]) -> None:
@@ -55,15 +59,11 @@ def check_header(path: Path, columns: list[str]) -> None:
     with path.open("rb") as f:
         found = f.readline().removesuffix(b"\n").decode("ascii").split(";")
     expected = [*columns[:-1], ""]
-    if found != expected:
-        position = next(
-            (i for i, (a, b) in enumerate(zip(found, expected, strict=False)) if a != b),
-            min(len(found), len(expected)),
-        )
-        raise ValueError(
-            f"{path.name}: header differs from {DDL.name} at field {position + 1}: "
-            f"{found[position : position + 1]} != {expected[position : position + 1]}"
-        )
+    for i, (a, b) in enumerate(zip_longest(found, expected)):
+        if a != b:
+            raise ValueError(
+                f"{path.name}: header differs from {DDL.name} at field {i + 1}: {a!r} != {b!r}"
+            )
 
 
 def load(files: Mapping[Path, Facts], db: Path, ddl: str) -> dict[str, int]:
@@ -81,7 +81,8 @@ def load(files: Mapping[Path, Facts], db: Path, ddl: str) -> dict[str, int]:
     loaded: dict[str, int] = {}
     with duckdb.connect(db) as con:
         con.execute("CREATE SCHEMA IF NOT EXISTS RAW.DAMIR")
-        con.execute(duckdb_ddl(ddl))
+        # One table in both warehouses: the Snowflake DDL, transpiled.
+        con.execute(sqlglot.transpile(ddl, read="snowflake", write="duckdb")[0])
         # Snowflake's own load metadata skips a file `COPY` already loaded; DuckDB has none.
         con.execute(
             "CREATE TABLE IF NOT EXISTS RAW.DAMIR.LOADED_FILES "
@@ -99,25 +100,22 @@ def load(files: Mapping[Path, Facts], db: Path, ddl: str) -> dict[str, int]:
                     raise ValueError(f"{path.name}: a file of that name with other bytes is loaded")
                 loaded[path.name] = 0
                 continue
+            # An exception leaves through `with`, and closing the connection rolls the
+            # open transaction back: the file and its record land together or not at all.
             con.begin()
-            try:
-                # Types come from the table, as in Snowflake's `COPY`: a value that
-                # doesn't parse aborts the statement, like `ON_ERROR = ABORT_STATEMENT`.
-                # An empty field is NULL. The path is the lock's, not user input.
-                copied = con.execute(
-                    f"COPY RAW.DAMIR.PRESTATIONS FROM '{path.as_posix()}' (DELIMITER ';', HEADER true)"
-                ).fetchone()
-                rows = copied[0] if copied is not None else -1
-                if rows != pin.rows:
-                    raise ValueError(f"{path.name}: loaded {rows} rows, the lock pins {pin.rows}")
-                con.execute(
-                    "INSERT INTO RAW.DAMIR.LOADED_FILES VALUES (?, ?, ?)",
-                    [path.name, pin.sha256, rows],
-                )
-                con.commit()
-            except BaseException:
-                con.rollback()
-                raise
+            # Types come from the table, as in Snowflake's `COPY`: a value that doesn't
+            # parse aborts the statement, like `ON_ERROR = ABORT_STATEMENT`. An empty
+            # field is NULL. The path is the lock's, not user input.
+            copied = con.execute(
+                f"COPY RAW.DAMIR.PRESTATIONS FROM '{path.as_posix()}' (DELIMITER ';', HEADER true)"
+            ).fetchone()
+            rows = copied[0] if copied is not None else -1
+            if rows != pin.rows:
+                raise ValueError(f"{path.name}: loaded {rows} rows, the lock pins {pin.rows}")
+            con.execute(
+                "INSERT INTO RAW.DAMIR.LOADED_FILES VALUES (?, ?, ?)", [path.name, pin.sha256, rows]
+            )
+            con.commit()
             loaded[path.name] = rows
     return loaded
 
@@ -127,15 +125,12 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Load the offline sample or the CI fixture.")
     parser.add_argument("source", choices=sorted(SOURCES))
     args = parser.parse_args(argv)
-    prefix = SOURCES[args.source]
-    files = {
-        ROOT / name: pin for name, pin in read_lock(SAMPLE_LOCK).items() if name.startswith(prefix)
-    }
+    directory = SOURCES[args.source]
     # The database is named after its file, so both sources are `RAW`, in their own directory.
-    for name, rows in load(
-        files, WAREHOUSE_DIR / args.source / "RAW.duckdb", DDL.read_text()
-    ).items():
-        print(f"{prefix}{name}: {f'{rows} rows loaded' if rows else 'loaded before, skipped'}")
+    db = WAREHOUSE_DIR / args.source / "RAW.duckdb"
+    for name, rows in load(locked_files(directory), db, DDL.read_text()).items():
+        where = (directory / name).relative_to(ROOT)
+        print(f"{where}: {f'{rows} rows loaded' if rows else 'loaded before, skipped'}")
 
 
 if __name__ == "__main__":

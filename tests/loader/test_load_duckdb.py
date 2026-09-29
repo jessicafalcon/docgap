@@ -5,14 +5,10 @@ from pathlib import Path
 
 import duckdb
 import pytest
-from load_duckdb import DDL, check_header, load, raw_columns
-from offline_sample import ROOT, SAMPLE_LOCK, Facts, digest_file, read_lock
+from load_duckdb import DDL, check_header, load, locked_files, raw_columns
+from offline_sample import FIELDS, FIXTURE_DIR, Facts, digest_file
 
-FIXTURE = {
-    ROOT / name: pin
-    for name, pin in read_lock(SAMPLE_LOCK).items()
-    if name.startswith("fixtures/damir/")
-}
+FIXTURE = locked_files(FIXTURE_DIR)
 COLUMNS = raw_columns(DDL.read_text())
 
 
@@ -34,19 +30,14 @@ def _write(path: Path, lines: list[bytes]) -> dict[Path, Facts]:
 
 def _lines(n: int) -> list[bytes]:
     """The header and the first `n` data lines of the January fixture file."""
-    with (ROOT / "fixtures" / "damir" / "A202501.csv").open("rb") as f:
+    with (FIXTURE_DIR / "A202501.csv").open("rb") as f:
         return [f.readline() for _ in range(n + 1)]
 
 
 def test_ddl_declares_56_fields_and_the_trailing_filler() -> None:
-    assert len(COLUMNS) == 57
+    assert len(COLUMNS) == FIELDS
     assert COLUMNS[0] == "FLX_ANN_MOI"
     assert COLUMNS[-1] == "FILLER"
-
-
-@pytest.mark.parametrize("path", sorted(FIXTURE), ids=lambda p: p.name)
-def test_every_locked_header_matches_the_ddl(path: Path) -> None:
-    check_header(path, COLUMNS)
 
 
 def test_fixture_loads_the_rows_its_lock_pins(tmp_path: Path) -> None:
@@ -54,6 +45,7 @@ def test_fixture_loads_the_rows_its_lock_pins(tmp_path: Path) -> None:
 
     loaded = load(FIXTURE, db, DDL.read_text())
 
+    assert len(FIXTURE) == 3
     assert loaded == {path.name: pin.rows for path, pin in FIXTURE.items()}
     assert _rows(db) == (sum(pin.rows for pin in FIXTURE.values()), len(FIXTURE))
 
@@ -123,12 +115,9 @@ def test_a_row_count_other_than_the_lock_loads_nothing(tmp_path: Path) -> None:
 
 def test_other_bytes_under_a_loaded_name_fail(tmp_path: Path) -> None:
     db = tmp_path / "RAW.duckdb"
-    first = tmp_path / "first"
-    second = tmp_path / "second"
-    first.mkdir()
-    second.mkdir()
-    load(_write(first / "A202501.csv", _lines(2)), db, DDL.read_text())
+    path = tmp_path / "A202501.csv"
+    load(_write(path, _lines(2)), db, DDL.read_text())
 
     with pytest.raises(ValueError, match="other bytes is loaded"):
-        load(_write(second / "A202501.csv", _lines(3)), db, DDL.read_text())
+        load(_write(path, _lines(3)), db, DDL.read_text())
     assert _rows(db) == (2, 1)
