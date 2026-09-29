@@ -26,7 +26,7 @@ The tool is a deterministic pipeline with three narrow model calls at the edges.
 1. **Snapshot the evidence.** Export query history for a fixed window, filtered by role and query tag. Replace values with placeholders, fingerprint each query, and freeze the result as a hashed Parquet file.
 2. **Resolve columns.** Parse each query with sqlglot against the schema taken from the dbt manifest. Output: fully qualified column references. Queries that can't be resolved are counted and reported, never guessed.
 3. **Grade and attribute** (evaluation set only). Compare the agent's result set to the gold query's result, with no model involved. Only failures go to a typed question: *why did it fail, and which column?*
-4. **Rank.** Score = usage × failure weight × doc status, with the weights in config. Ties are broken by column FQN, so the order never changes between runs.
+4. **Rank.** Every column with no description gets score = ln(1 + usage) × (1 + *w* × attributed failure rate), with *w* in config. Ties are broken by column FQN, so the order never changes between runs.
 5. **Draft, gate, propose.** Build an evidence packet per column (name, type, lineage SQL, aggregate profile). Draft a description, score its support with a yes/no confidence question, sort drafts into bands, write a YAML patch, and open a pull request.
 
 ### Design principles
@@ -100,22 +100,28 @@ docgap/
   eval/questions.yml        # pre-registered questions + gold SQL + split
   eval/agent/               # test agent (2 tools: list/describe, run_sql)
   src/docgap/
+    models.py               # contracts for every record between stages; schemas/ holds their JSON Schema
+    config.py               # docgap.toml, validated and hashed per section
+    artifacts.py            # Parquet read and write, typed from the contracts, atomic
     snapshot.py             # export + redact + fingerprint query history
     manifest.py             # dbt manifest -> mart schema
     resolve.py              # sqlglot -> column references
     usage.py                # per-column counts in the ranking scope
+    coverage.py             # plain and usage-weighted coverage
     grade.py                # result-set comparison
     rank.py                 # scoring, stable ordering
     evidence.py             # aggregate-only profiles, k-threshold
     llm/                    # adapter client, prompts, cache, timeouts
     patch.py                # ruamel.yaml edits -> PR
-    report.py               # report.md + run_manifest.json
-  fixtures/                 # DAMIR fixture, frozen snapshot, manifest, cached responses
+    report.py               # report.md
+    pipeline.py             # stage order, resume, run_manifest.json
+    cli.py                  # the docgap command: clock, environment, lock
+  fixtures/                 # DAMIR fixture, query history, manifest, ranking scope, cached responses
   orchestration/airflow/    # one DAG calling the CLI
   .github/workflows/        # CI
 ```
 
-Every stage writes one artifact under `runs/<run_id>/`. The next stage reads only that artifact, so any stage can be re-run or tested alone.
+Every stage writes its output under `runs/<run_id>/<stage>/`, or, for a stage whose output is only counts (`coverage`), into its record in `run_manifest.json`. A stage reads earlier stages' outputs and the run's input files only, so any stage can be re-run or tested alone.
 
 ## Governance model
 
@@ -250,11 +256,11 @@ Build a small, realistic warehouse over Open DAMIR: 56-variable monthly reimburs
 - [ ] **Type every raw column explicitly.** All 56 columns get declared types in the `RAW` DDL, plus one declared trailing filler column for the final `;`, asserted empty in staging. Nothing is inferred. The loader compares each file's header with the DDL before `COPY`. *Expect:* a schema change in a future file fails loudly instead of silently becoming `VARCHAR`, and the trailing delimiter doesn't abort the first load.
 - [ ] **Turn code lists into seeds.** A deterministic script converts the dictionary's code-to-label tables (benefit type, provider specialty, region, age bracket) into dbt seeds. Labels become lookup tables in the warehouse; the definitions of the columns themselves stay in `eval/reference/`. The code lists are in the descriptor's `MOD OPEN DAMIR` sheet. *Expect:* seed CSVs regenerate byte-identically from the `.xlsx`.
 - [ ] **Staging model.** `stg_damir__prestations` casts types, trims, and keeps source column codes: many real warehouses do, and it's what makes documentation matter. Check the grain: if dimension combinations repeat, aggregate measures by all dimensions here. `SOI_ANN` and `SOI_MOI` stay codes, never cast to a date: 48,275 rows carry `0000`/`00` or `0001`/`01` (ADR 0012). *Expect:* one row per unique dimension combination, with a surrogate key tested `unique` + `not_null`.
-- [ ] **Marts with enforced contracts.** `fct_reimbursements`, 4 dimensions from seeds, and `agg_monthly_spend_by_category`, roughly 60–80 mart columns in total. `ETB_DCS_MCO` stays out of the marts: the dictionary has no entry for it, so no draft for it could be graded (ADR 0012). The fact keeps `FLX_ANN_MOI`, `SOI_ANN` and `SOI_MOI`, and `agg_monthly_spend_by_category` groups by processing month, the month a trend is read in. Contracts are enforced, with `not_null`/`unique` on keys, `relationships` fact → dims, and `accepted_values` from seeds. CI runs `dbt build` on DuckDB over `fixtures/damir/` on every pull request, so contracts and tests run on real rows (ADR 0013). *Expect:* `dbt build` fails if any contract or test breaks.
-- [ ] **Metadata on every mart column.** `meta.owner` on models; `meta.sensitivity` on columns (demographic columns `restricted`). `docgap lint` enforces both. *Expect:* lint is green; removing one tag turns CI red.
+- [ ] **Marts with enforced contracts.** `fct_reimbursements`, 4 dimension models over seeds, and `agg_monthly_spend_by_category`, roughly 60–80 mart columns in total. `ETB_DCS_MCO` stays out of the marts: the dictionary has no entry for it, so no draft for it could be graded (ADR 0012). The fact keeps `FLX_ANN_MOI`, `SOI_ANN` and `SOI_MOI`, and `agg_monthly_spend_by_category` groups by processing month, the month a trend is read in. The seeds themselves build outside `ANALYTICS.MARTS`: `manifest.py` fails on any relation there that isn't a model with an enforced contract. Contracts are enforced, with `not_null`/`unique` on keys, `relationships` fact → dims, and `accepted_values` from seeds. CI runs `dbt build` on DuckDB over `fixtures/damir/` on every pull request, so contracts and tests run on real rows (ADR 0013). *Expect:* `dbt build` fails if any contract or test breaks.
+- [ ] **Metadata on every mart column.** `meta.owner` on models; `meta.sensitivity` on columns (demographic columns `restricted`). `docgap lint` enforces both, and lands in the first PR that adds `warehouse/`, since the pre-PR gate runs it whenever `warehouse/` changes. *Expect:* lint is green; removing one tag turns CI red.
 - [ ] **Set the baseline docs by a recorded rule.** All models get descriptions. Column descriptions exist for a subset chosen by seeded random sampling (50% of mart columns, seed in config), written from the dictionary in your own words. The chosen list is frozen in `warehouse/baseline_docs.lock`. *Expect:* a neutral, reproducible "before" state that nobody can call rigged.
 - [ ] **Persist docs and verify the agent sees them.** `persist_docs: {relation: true, columns: true}`. A check connects as `SVC_AGENT` and reads `information_schema.columns.comment`. Mixed-case column names only persist with `quote: true`; the uppercase DAMIR codes avoid this, and the check catches it if not. *Expect:* comments visible to the agent match the YAML exactly.
-- [ ] **Freeze the manifest.** Copy `target/manifest.json` to `fixtures/manifest_baseline.json` with its hash. Owed by Phase 4's `resolve`: a test reads it with `load_marts` and finds every mart model and column, so the reader written against the hand-made `fixtures/manifest/minimal.json` is checked on dbt's own output; a dbt version whose manifest isn't schema v12 needs `manifest.py` updated first. *Expect:* docgap's offline mode has the exact schema the warehouse had.
+- [ ] **Freeze the manifest.** Copy `target/manifest.json` to `fixtures/manifest/baseline.json` with its hash. Owed by Phase 4's `resolve`: a test reads it with `load_marts` and finds every mart model and column, so the reader written against the hand-made `fixtures/manifest/minimal.json` is checked on dbt's own output; a dbt version whose manifest isn't schema v12 needs `manifest.py` updated first. *Expect:* docgap's offline mode has the exact schema the warehouse had.
 
 **Done when:** `dbt build` passes on DuckDB (before the trial) and on Snowflake with zero failures and all contracts enforced, lint is green, the agent reads comments, and baseline coverage equals the locked number.
 
@@ -270,6 +276,7 @@ Create real agent traffic against the warehouse, grade it without a model, and f
   - Run the agent on them on DuckDB, 3 repetitions each, in four configurations: {Haiku 4.5, Opus 5.5} × {no column docs, every column documented}. This step writes the every-column docs from the dictionary, the same text the ceiling arm uses.
   - **Choose the agent model:** the one with the largest gap between no docs and full docs, provided its full-docs accuracy falls between 50% and 90% and the gap is at least 15 points; on an equal gap, Haiku 4.5. A frontier model can read coded columns from names and values, or recall the public dataset from training, which narrows the gap docgap is meant to close. Too weak a model fails for reasons docs can't fix, which adds noise. The pilot measures both effects instead of guessing.
   - Record the four accuracies and the choice in `docs/adr/`. The model not chosen is reported under limits, not run as a full arm.
+  - Measure the share of agent queries that are a top-level `SELECT *`, from `resolve`'s count over the pilot's traffic. `resolve` counts every column of such a query's table, so row previews could give every column of the widest table the same *u* (ADR 0020). Decide, with a decision record, whether those references count toward *u* before the tag.
   - Adjust difficulty only now.
 
   *Expect:* for the chosen model, accuracy with no docs far from 0% and 100%, and a gap to full docs large enough to pass the kill criterion in the protocol. If the gap is small for both models, the experiment can't show anything, and it's better to know before the trial starts.
@@ -288,9 +295,9 @@ Create real agent traffic against the warehouse, grade it without a model, and f
 
   Output: pass/fail plus a reason code (`error`, `timeout`, `shape_mismatch`, `row_count_mismatch`, `value_mismatch`). *Expect:* unit tests cover every rule and reason code.
 - [ ] **Run the baseline.** 40 questions × 3 repetitions = 120 runs, only after the tag's GitHub release exists. Report accuracy for discovery and holdout separately, with per-question pass rates. Its discovery traffic is what the ranking reads; the arms are compared with a baseline re-run in the Phase 6 session, under their setup. *Expect:* `grades.parquet` under the baseline's run ID, and a summary in the run report.
-- [ ] **Snapshot query history.** Wait at least 45 minutes (the `QUERY_HISTORY` latency), then export the run window filtered by role and by the baseline's tag prefix. The `run_id`, `qid` and repetition come from each query tag, so ranking can use the baseline run's discovery queries only. Redact (Phase 4 code) and save the kept rows as `fixtures/query_snapshot_baseline.jsonl`, `HistoryRow`s whose text is already normalized, with its hash: normalizing is stable, so `--offline` replays them through the same code (ADR 0016). The rows the live run dropped can't be stored redacted, so the live stage's counts are frozen beside it as `fixtures/query_snapshot_baseline.counts.json`, and the report cites those for the baseline's parse rate. The writer of both files lands with the live source.
+- [ ] **Snapshot query history.** Wait at least 45 minutes (the `QUERY_HISTORY` latency), then export the run window filtered by role and by the baseline's tag prefix. The `run_id`, `qid` and repetition come from each query tag, so ranking can use the baseline run's discovery queries only. Redact (Phase 4 code) and save the kept rows as `fixtures/query_history/baseline.jsonl`, `HistoryRow`s whose text is already normalized, with its hash: normalizing is stable, so `--offline` replays them through the same code (ADR 0016). The rows the live run dropped can't be stored redacted, so the live stage's counts are frozen beside it as `fixtures/query_history/baseline.counts.json`, and the report cites those for the baseline's parse rate. The writer of both files lands with the live source. `[snapshot] min_rows_kept` is 1 until then, which catches only an empty window; set it to 120 here, one query per baseline run, and give the fixture tests their own lower value.
 
-  The live source lands here, the first step with a warehouse: a `QUERY_HISTORY` query with bound parameters that yields the same `HistoryRow`s as the offline JSON Lines source. It converts `START_TIME` (`TIMESTAMP_LTZ`) to UTC and reads an empty `QUERY_TAG` as no tag. `cli.py`, which alone reads the clock, refuses a live export whose `as_of` is less than 45 minutes old, since the window ends at `as_of`.
+  The live source lands here, the first step with a warehouse: a `QUERY_HISTORY` query with bound parameters that yields the same `HistoryRow`s as the offline JSON Lines source. It converts `START_TIME` (`TIMESTAMP_LTZ`) to UTC and reads an empty `QUERY_TAG` as no tag. `cli.py`, which alone reads the clock, refuses a live export whose `as_of` is less than 45 minutes old, since the window ends at `as_of`. `docgap analyze` gains `--live` here, beside `--offline`, and `--history` becomes required with `--offline` only.
 
   If `ACCESS_HISTORY` is used as a cross-check, wait at least 3 hours: that's its latency. Compare on successful queries only, since `ACCESS_HISTORY` excludes failed ones, and report the share of queries whose mart columns agree with `resolve`'s (target ≥ 95%).
 
@@ -318,18 +325,18 @@ The part a data team would actually adopt: from query history and a dbt manifest
 
   *Expect:* validated against 10 hand-made queries whose expected columns were written by hand, over the hand-made `fixtures/manifest/minimal.json`; the check on real gold SQL is owed by Phase 3's questions step, and a read of a real manifest by Phase 2's "Freeze the manifest".
 - [x] **`usage`: per-column counts.** Per column: executions, distinct fingerprints, distinct questions and distinct agent runs (question × repetition, the denominator of *r*), split by actor class from the role mapping in config. In the evaluation, the counts that feed `rank` come from one agent run and its discovery `qid`s only, both named in a ranking-scope input: a window can hold several runs of the same questions (a restarted baseline, or the Phase 6 arms), and summing them would inflate *u* and the denominator of *r*. Agent-tagged traffic with no scope fails the stage, even from one run, since one run holds its holdout questions too; so does a scope no query matches, and counted traffic that touches no mart column (ADR 0019). The scope is the `RankingScope` contract, whose hash is a stage input. With a scope, every other query is counted by why it was left out (another run, another question, or untagged), and so is each scope `qid` with no query. A test feeds in a holdout-tagged query, and another run's query, and asserts that no ranking input changes. A column counts once per query, whatever clauses it is in. *Expect:* `column_usage.parquet`, one row per mart column the counted traffic touches, sorted by FQN.
-- [ ] **`coverage`: the headline governance metric.** Plain coverage = documented columns ÷ all mart columns. Usage-weighted coverage = executions on documented columns ÷ all executions. *Expect:* two numbers side by side. The gap between them is the story ("72% documented, but only 41% of what agents query").
-- [ ] **`rank`: explicit, stable scoring.** Only columns with no description are ranked. Score:
+- [x] **`coverage`: the headline governance metric.** Plain coverage = documented columns ÷ all mart columns. Usage-weighted coverage = executions on documented columns ÷ all executions, where an execution is one counted query touching one column, agent or human, in the ranking scope: in the evaluation, one run's discovery questions. A column is documented when its manifest description is not blank. The stage records the four whole-number counts and the report divides them. *Expect:* two numbers side by side. The gap between them is the story ("72% documented, but only 41% of what agents query").
+- [x] **`rank`: explicit, stable scoring.** Only columns with no description are ranked, and every one of them is: a column no counted query touched has *u* = 0 and scores 0, after every used column (ADR 0020). Score:
 
 ```latex
 \text{score}_c = \ln(1 + u_c) \times (1 + w \cdot r_c)
 ```
 
-Here *u* = executions, *r* = attributed failure rate (0 until Phase 5), and *w* = 1, set by the protocol, comes from config, in a `[rank]` section this step adds. The log dampens one heavy query from dominating. Sort by score descending, then by column FQN, so ties never reorder. The score is computed with `Decimal.ln()` at a fixed precision and then converted to a float: `math.log` goes through the platform's math library, so macOS, where golden files are made, and CI's Linux could differ in the last bit, while `Decimal.ln()` is correctly rounded everywhere. Nothing is rounded, so no new ties appear. *Expect:* `ranked_gaps.parquet` + a Markdown table.
+Here *u* = executions, *r* = attributed failure rate (0 until Phase 5), and *w* = 1, set by the protocol, comes from config, in a `[rank]` section this step adds. The log dampens one heavy query from dominating. Sort by score descending, then by column FQN, so ties never reorder. The score is computed with `Decimal.ln()` at a fixed precision and then converted to a float: `math.log` goes through the platform's math library, so macOS, where golden files are made, and CI's Linux could differ in the last bit, while `Decimal.ln()` is correctly rounded everywhere. Nothing is rounded, so no new ties appear. *Expect:* `ranked_gaps.parquet` + a Markdown table in `report.md`.
 
-- [ ] **Golden-file tests.** Fixture in → exact expected outputs checked into `tests/golden/`. *Expect:* any behaviour change shows as a diff in review.
-- [ ] **Property tests for determinism.** Shuffling input rows, or running twice, must give identical output hashes (hypothesis). *Expect:* order-dependence bugs caught before they reach a ranking.
-- [ ] **`run_manifest.json` from the first stage on.** The `RunManifest` contract: input hashes, config section hashes, environment, git SHA, output hashes, counts (parsed, unresolved, unmanaged). `cli.py` builds the environment from the installed packages and passes it in, and derives the run ID as `<as-of as YYYYMMDDTHHMMSSZ>-<first 8 hex digits of the setup hash>` with a pure core function (ADR 0007). Owed by `snapshot`: two gates in its stage record, `[snapshot] min_rows_kept` and `min_parse_rate` in `docgap.toml`, each failing the stage with its value and threshold when crossed, so an empty window or an unparseable export can't yield an all-zero ranking; the report shows the snapshot's parse rate, `--offline` reads a JSON Lines export, and resume clears a stage directory that has no stage record, `*.tmp-*` files from a killed write included, before running the stage again. Owed by `usage`: `cli.py` reads the ranking scope, one agent run ID and its discovery `qid`s, from a JSON file validated as `RankingScope`, and the report shows the stage's out-of-scope counts; owed by `resolve`: the report shows its reference counts and top-level `SELECT *` queries. *Expect:* every run is auditable, even before any model is involved.
+- [x] **Golden-file tests.** Fixture in → exact expected outputs checked into `tests/golden/`. *Expect:* any behaviour change shows as a diff in review.
+- [x] **Property tests for determinism.** Shuffling input rows, or running twice, must give identical output hashes (hypothesis), and so must a second process under another `PYTHONHASHSEED`. *Expect:* order-dependence bugs caught before they reach a ranking.
+- [x] **`run_manifest.json` from the first stage on.** The `RunManifest` contract: input hashes, config section hashes, environment, git SHA, output hashes, counts (parsed, unresolved, unmanaged). `cli.py` builds the environment from the installed packages and passes it in, and derives the run ID as `<as-of as YYYYMMDDTHHMMSSZ>-<first 8 hex digits of the setup hash>` with a pure core function (ADR 0007). Owed by `snapshot`: two gates in its stage record, `[snapshot] min_rows_kept` and `min_parse_rate` in `docgap.toml`, each failing the stage with its value and threshold when crossed, so an empty window or an unparseable export can't yield an all-zero ranking; the report shows the snapshot's parse rate, `--offline` reads a JSON Lines export, and resume clears a stage directory that has no stage record, `*.tmp-*` files from a killed write included, before running the stage again. Owed by `usage`: `cli.py` reads the ranking scope, one agent run ID and its discovery `qid`s, from a JSON file validated as `RankingScope`, and the report shows the stage's out-of-scope counts; owed by `resolve`: the report shows its reference counts and top-level `SELECT *` queries. A failed stage records its error in the operational part, a crossed gate's value and threshold included (`schema_version` 4). A stage is skipped on a re-run when its record holds: same setup, same inputs, and its outputs on disk with the recorded hashes. A lock file keeps two runs out of one run directory. *Expect:* every run is auditable, even before any model is involved.
 
 **Done when:** `docgap analyze --offline` reproduces the committed ranking byte for byte in CI, and the two coverage numbers appear in the report.
 
@@ -346,12 +353,13 @@ Add exactly two typed judgments and one drafter, all behind `llm/`, all replayab
   - system-one-adapter and typesafe-sdk pinned to exact versions in `uv.lock` on day 1. The adapter is young and has already shipped one breaking release (v0.2.0), so the typed question definitions live in docgap's own `llm/` module.
   - cache key = SHA-256 of canonical JSON `{model, prompt_version, state, questions}`, stored under `fixtures/llm_cache/`
   - `--offline` makes a cache miss an error, so CI can never call a model
+  - the first per-item failures and retries, so the observability docgap-resilience sets lands here: structured JSON-lines logs (`run_id`, `stage`, `item`, `event`, `duration_ms`), and `report.md` listing recorded failures at its top
   - a per-run spend budget, from a section this step adds to `docgap.toml`
   - a call that fails (timeout, refusal, malformed answer) is cached with its `FailureReason`, so an offline replay reproduces the failure instead of treating it as a miss. The test agent's infrastructure failures are the exception: the protocol repeats those runs instead. Decide here whether a live run retries a cached failure after its call site's timeout was raised, since the key doesn't hold the timeout (ADR 0007)
 
   *Expect:* a second run makes zero model calls and returns identical outputs.
 - [ ] **Handle the timeout gap.** The adapter's providers don't expose a configurable timeout yet. They build the Anthropic client with the SDK's default 10-minute timeout, so a hung call is bounded, just far too loosely. Pin your fork's commit or add a thin provider subclass with a tight per-call limit, set per call site in `docgap.toml`, and document it accurately in the README's "Known gap" section with a link to your open issue. On timeout, the item goes to the human band. *Expect:* a test with a never-replying fake server: the run completes, the item is flagged, and the manifest counts one timeout. This is the first local fake server, so the same PR first tests that a Unix socket and a marker-opted localhost server still work under pytest's `--disable-socket`.
-- [ ] **Failure attribution (Choice).** Only for failed runs on discovery questions. State = question, agent SQL, gold SQL, grader reason code, first 20 rows of both results, current docs of the involved columns. Two questions in one call (sketch below). *Expect:* `attributions.parquet` with full probability maps, not just the top label.
+- [ ] **Failure attribution (Choice).** Only for failed runs on discovery questions. State = question, agent SQL, gold SQL, grader reason code, first 20 rows of both results, current docs of the involved columns. Two questions in one call (sketch below). `artifacts.py` writes flat fields only, so it first gains the nested Parquet types these contracts need (maps, tuples, a nested `Profile`) before `attributions.parquet` or the evidence packets are written. *Expect:* `attributions.parquet` with full probability maps, not just the top label.
 - [ ] **Deterministic cross-check: confusion pairs.** For each failure, compare the columns resolved from the agent's SQL with those resolved from the gold SQL. The difference is a model-free attribution that costs nothing, given `resolve`. *Expect:* the report shows how often the LLM's column choice agrees with the confusion pair.
 - [ ] **Soft failure rate per column.** Using probabilities as soft counts, over failures *f* and the runs that touched column *c*:
 
@@ -406,12 +414,15 @@ Turn the ranking into a reviewed change, then measure each arm with the exact sa
   2. Re-run the Phase 2 check as `SVC_AGENT`, confirming `information_schema` comments equal that arm's YAML.
   3. Run the agent: same 40 questions, 3 repetitions, same setup hash (model IDs, prompt versions, sampling, config sections, environment), checked by comparing manifests. The agent's run ID carries the arm name, so each arm's query tags stay distinct.
 
+  Before the first arm, check that the ranking's gaps are exactly the mart columns outside `warehouse/baseline_docs.lock`: a ranking run on an arm's YAML would leave out the drafted columns, and top-N would change with no error.
+
   Run all arms in the same session so nothing else drifts between them. That's 360–480 runs on an XS warehouse, one to two evenings; where the baseline replays the Phase 3 run from the model cache, it costs warehouse time only. *Expect:* `grades.parquet` under each arm's run ID, and the change reached the agent through the same path real docs would.
 - [ ] **Compare honestly.** Holdout accuracy for top-N versus random-N is the headline, with the pre-registered paired bootstrap interval over questions. The protocol's bootstrap values go into `docgap.toml` here, as `[seeds] bootstrap = 4` and `[compare] resamples = 10000`, with their `config.py` fields and tests. Report alongside it:
   - baseline and ceiling, on both splits, and the Phase 3 baseline next to the session's
   - delivered drafts per band and per arm
   - a per-question flips table (fail → pass, pass → fail) per arm, against the session's baseline
   - the column overlap between discovery and holdout, and between top-N and random-N
+  - how many top-N columns have *u* = 0, and the columns tied on score at rank N (ADR 0020)
 
   *Expect:* a result you report whatever its size and sign, as the protocol promised.
 - [ ] **Re-run docgap on the new snapshot** (optional, second on the cut list). A fresh history snapshot after the top-N run. *Expect:* usage-weighted coverage before → after, and the next ranked list, showing the tool is a loop, not a one-off.
@@ -423,8 +434,8 @@ Turn the ranking into a reviewed change, then measure each arm with the exact sa
 
 Show how a team would run docgap unattended: weekly in Airflow, guarded by CI. The DAG only calls the CLI, so no logic lives in Airflow.
 
-- [ ] **One DAG, `docgap_weekly`.** Tasks: `snapshot → resolve → usage → rank → evidence → draft_gate → open_pr`, each a `@task` shelling out to `docgap <stage> --as-of {{ data_interval_end }}`. The CLI derives the run ID (ADR 0007); Airflow's own `run_id` holds a colon, which the `RunId` pattern rejects. *Expect:* the logical date, never `now()`, sets the window, so a backfill of any week gives the same result.
-- [ ] **Idempotent by design.** The run ID derives from the interval and the setup hash; artifacts go to `runs/<run_id>/`; stages skip when the output hash already matches. No data passes through XCom, only paths. Retries apply only to `snapshot`. *Expect:* clearing and re-running a task changes nothing.
+- [ ] **One DAG, `docgap_weekly`.** One task per `docgap` command, each a `@task` shelling out to it with `--as-of {{ data_interval_end }}`: `analyze` (snapshot, resolve, usage, coverage, rank; it resumes, so a retry redoes only what hasn't finished), then the Phase 5 and 6 commands for evidence, drafts and gate, and `open_pr`. The CLI derives the run ID (ADR 0007); Airflow's own `run_id` holds a colon, which the `RunId` pattern rejects. *Expect:* the logical date, never `now()`, sets the window, so a backfill of any week gives the same result.
+- [ ] **Idempotent by design.** The run ID derives from the interval and the setup hash; artifacts go to `runs/<run_id>/`; stages skip when the output hash already matches. No data passes through XCom, only paths. Retries apply only to the tasks with transient external failures: `analyze`, for its snapshot's warehouse read, and `open_pr`, for GitHub, which its hash check keeps idempotent. *Expect:* clearing and re-running a task changes nothing.
 - [ ] **No pull request when nothing changed.** If the ranked list and drafts equal the last open pull request's (by hash), `open_pr` short-circuits. *Expect:* no weekly noise for reviewers.
 - [ ] **Run Airflow locally with Docker Compose,** with the connection defined in environment variables for `SVC_DOCGAP` only. *Expect:* one live run recorded if trial time remains (logs + screenshot in `docs/`), otherwise a recorded fixture-mode run. The live run is first on the cut list.
 - [ ] **Test the DAG in pytest.** Import check, task order, and a `dag.test()` run in `--offline` mode. *Expect:* DAG breakage fails CI, not Monday morning.
@@ -448,7 +459,7 @@ The repo is read, not run, so the README must deliver the result in 30 seconds a
   - one-line pitch
   - the generated results block: holdout accuracy for the Phase 6 session's baseline, random-N, top-N (and ceiling), the top-N minus random-N interval, usage-weighted coverage before → after, and columns documented
   - the pull-request screenshot
-  - a three-command offline quickstart (`uv sync`, `docgap analyze --offline`, `docgap report`)
+  - a three-command offline quickstart (`uv sync`, `docgap analyze --offline` with the committed fixtures' paths, `docgap report`)
 
   The README's `>>>` blocks run under pytest: `pyproject.toml` adds `--doctest-glob="README.md"` with it, as the docgap-tests skill states.
 
@@ -499,7 +510,6 @@ About 12–16 evenings fall inside the trial. At 4 evenings a week, that's rough
 2. Re-running docgap on the post-change snapshot (Phase 6).
 3. The `ACCESS_HISTORY` cross-check.
 4. The ceiling arm.
-5. Hypothesis property tests: keep "run twice and compare hashes".
 
 ### Risks
 
@@ -516,7 +526,7 @@ About 12–16 evenings fall inside the trial. At 4 evenings a week, that's rough
 | Download links carry a session token | The lock file rots; an HTML page fails the checksum | Lock name, size and SHA-256; resolve the token at download; reject non-gzip responses |
 | Source grain has no natural key | Tests fail | Aggregate by all dimensions in staging; surrogate key tested (no duplicates in the first 2M rows of each file, ADR 0012, nor in the 2.14M-row offline sample, ADR 0013) |
 | Small n | Noisy result; a real difference under about 20 points is more likely missed than detected | Detectable effect stated in the protocol before any run (ADR 0008); 3 repetitions, holdout headline, paired bootstrap interval, flips table |
-| sqlglot misses some queries | Usage undercounted | Parse and resolve rates in every report; `ACCESS_HISTORY` cross-check on successful queries |
+| sqlglot misses some queries | Usage undercounted | The parse rate, gated, and resolve's reference counts in every report; `ACCESS_HISTORY` cross-check on successful queries |
 | Model-written probabilities cluster | Bands don't separate drafts; *r* collapses to "columns in failed queries" | Treat as ordinal; confusion-pair cross-check; blind labels and per-band accuracy; fall back to two bands |
 | Model knows Open DAMIR from training | Drafts right for the wrong reason | Gate scores support by evidence; stated in limits |
 | Adapter has no configurable timeout | A hung call stalls a run for up to 10 minutes (SDK default) | Fork pin or subclass with a tight limit; timeout goes to the human band; tested |
@@ -527,7 +537,7 @@ About 12–16 evenings fall inside the trial. At 4 evenings a week, that's rough
 - [ ] **Agent model:** Haiku 4.5 or Opus 5.5, settled by the Phase 3 pilot rule before the `preregistered` tag. The drafter, attribution and gate use Opus 5.5. Every call site runs at default sampling; config records the model ID, the settings actually sent, and a per-run budget.
 
   Rough cost for about 620–740 agent runs of up to 8 tool calls (pilot, the Phase 3 baseline, and the Phase 6 arms with their baseline), before prompt caching and the Phase 6 baseline's cache replays: on the order of $200 on Opus 5.5 and $55 on Haiku 4.5. The drafter and judgments add a few dollars. Either fits; the calendar is the constraint, not money.
-- [ ] **Where "people" traffic comes from:** generate it (a `HUMAN_ANALYST` role and service user running templated or Metabase queries) or state that the demo traffic is agent-only. Decide before Phase 1, because the first option adds a role and a user in Terraform.
+- [ ] **Where "people" traffic comes from:** generate it (a `HUMAN_ANALYST` role and service user running templated or Metabase queries) or state that the demo traffic is agent-only. Decide before Phase 1, because the first option adds a role and a user in Terraform. Under ADR 0019 a ranking scope counts one agent run's tagged queries only, so generated people traffic reaches *u*, coverage and the ranking only if the scope admits untagged traffic; until then the report and ranking show executions without the actor split `column_usage.parquet` keeps.
 - [ ] **Evenings per week during the trial:** 4 or more keeps a buffer; at 3, the cut list is active from the start.
 
 ### Sources

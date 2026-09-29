@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections import Counter
 from collections.abc import Iterable, Iterator
 from enum import StrEnum
@@ -18,7 +17,7 @@ from sqlglot.schema import MappingSchema
 
 from docgap.artifacts import read_rows, rows_sha256, write_rows
 from docgap.config import ManifestConfig
-from docgap.manifest import Marts, load_marts
+from docgap.manifest import Marts, read_marts
 from docgap.models import Clause, ColumnRef, QueryRecord, StageRecord
 
 __all__ = ["COLUMN_REFS_FILE", "Reference", "resolve", "resolve_query", "run_resolve"]
@@ -154,7 +153,7 @@ def resolve_query(
     Snowflake resolves them. A resolved reference is named by its column FQN.
     Also returns whether the outer query selects `*`, which reads every column.
 
-    >>> marts = Marts("ANALYTICS", "MARTS", {"T": {"A": "NUMBER", "B": "NUMBER"}})
+    >>> marts = Marts("ANALYTICS", "MARTS", {"T": {"A": "NUMBER", "B": "NUMBER"}}, frozenset())
     >>> refs, star = resolve_query(
     ...     "WITH C AS (SELECT * FROM T) SELECT A FROM C WHERE Z = ?",
     ...     database="ANALYTICS", schema="MARTS", marts=marts)
@@ -232,14 +231,13 @@ def run_resolve(
 ) -> StageRecord:
     """Resolve `query_snapshot.parquet` against the dbt manifest into `column_refs.parquet`."""
     records = read_rows(snapshot, QueryRecord)
-    # Read once, so the input hash covers exactly the bytes parsed.
-    manifest_bytes = manifest.read_bytes()
-    rows, counts = resolve(records, load_marts(manifest_bytes, config))
+    marts, manifest_sha256 = read_marts(manifest, config)
+    rows, counts = resolve(records, marts)
     out_dir.mkdir(parents=True, exist_ok=True)
     return StageRecord(
         setup_sha256=setup_sha256,
         inputs={
-            "manifest": hashlib.sha256(manifest_bytes).hexdigest(),
+            "manifest": manifest_sha256,
             "query_snapshot": rows_sha256(records),
         },
         outputs={"column_refs": write_rows(rows, ColumnRef, out_dir / COLUMN_REFS_FILE)},

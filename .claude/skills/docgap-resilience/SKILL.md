@@ -59,8 +59,9 @@ per-item isolation boundary, and it must record the item and the exception type.
   budget, and a **per-run spend and call budget** from config. Crossing the budget
   stops new calls and routes the remaining items to the human band, recorded.
 - **Downloads and GitHub:** connect and read timeouts, bounded retries.
-- **Airflow:** `execution_timeout` per task, `retries` only on `snapshot` and
-  `open_pr` (the steps with transient external failures),
+- **Airflow:** `execution_timeout` per task, `retries` only on `analyze` (its
+  snapshot reads the warehouse) and `open_pr` (the steps with transient external
+  failures),
   `retry_exponential_backoff=True`, `max_active_runs=1`.
 
 ## Isolate items, not stages
@@ -90,8 +91,9 @@ it can't, the access-matrix test fails the build.
 ## Know the source's latency and completeness
 
 - `QUERY_HISTORY` lags up to 45 minutes; `ACCESS_HISTORY` up to 3 hours and
-  excludes failed queries. A snapshot window must end before `as_of − latency`,
-  checked in code, not by waiting and hoping.
+  excludes failed queries. The snapshot window ends at `as_of`, so the CLI
+  refuses a live export whose `as_of` is younger than the latency: checked in
+  code, not by waiting and hoping.
 - Record the window, row counts and latency assumption in the manifest so a short
   export is visible, not silent.
 
@@ -109,7 +111,9 @@ covers manual CLI runs alongside it.
 - The run manifest is the operational record: per-stage status, counts by reason,
   gate values, retries, cache hit rate, model calls and spend, durations.
 - `docgap report` surfaces failures first: a run with recorded failures says so at
-  the top, not in an appendix.
+  the top, not in an appendix. Structured logs and per-item failures arrive with
+  the first stage that has items to fail, Phase 5's `llm/` (the brief owes both
+  there); until then a failed stage shows as its status and error in the manifest.
 
 ## Tests for failure paths
 

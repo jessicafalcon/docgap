@@ -15,7 +15,8 @@ warehouse/dbt/     dbt project over Open DAMIR (Snowflake and DuckDB profiles)
 infra/             bootstrap.sql (ACCOUNTADMIN, once) + terraform/
 loader/            download, checksum, stage, COPY; offline sample
 orchestration/     one Airflow DAG calling the CLI
-fixtures/          DAMIR fixture, frozen snapshot, manifest, profiles, model cache (offline mode)
+fixtures/          DAMIR fixture, query history, manifest, ranking scope, profiles, model cache (offline mode)
+runs/              one folder per `docgap analyze` run (gitignored, regenerated)
 tests/             unit, golden, determinism, integrity, fault injection
 docs/              EVAL_PROTOCOL.md, adr/, RESULTS.md (generated)
 .claude/           settings, hooks/, skills/, agents/
@@ -156,13 +157,15 @@ code is lost to the next session, and the review agents treat it as a finding.
   brief it affects (as the current design, not as a change), and remove it from
   "Open decisions".
 - **A threshold, key or command changes:** update every record that states it.
-- **A new skill, agent, hook or command:** add it here, with when to invoke it.
+- **A new skill, agent, hook or slash command:** add it here, with when to invoke
+  it. A `docgap` command is product behaviour, and the README documents it.
 - **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, seeds,
-  `[actors]`, `[manifest]`, and the model and prompt version at the attribution,
-  drafter and gate call sites) never change. A change to the usage, rank or evidence code
-  that changes its golden outputs, and any other `EVAL_PROTOCOL.md` change,
+  `[actors]`, `[manifest]`, the history window, and the model and prompt version
+  at the attribution, drafter and gate call sites) never change. A change to the
+  snapshot, manifest, resolve, usage, rank or evidence code that changes its
+  golden outputs, and any other `EVAL_PROTOCOL.md` change,
   needs an ADR with a justification, and the results report the deviation.
   Other files point here rather than restating the list.
 - **Code and a record disagree** and it's unclear which is right: ask me. Never
@@ -188,21 +191,25 @@ updated, open risks, next step.
 Update after every PR and merge, in the same change. A new session resumes from here.
 
 - **Phase:** 0 is done (#1–#11): its "Done when" holds and the phase-exit audit
-  found no blockers. Phase 4 (the deterministic core on hand-made fixtures) is in
-  progress; Phase 1 waits for the offline pilot, per the brief's timeline.
+  found no blockers. Phase 4 (the deterministic core on hand-made fixtures) has
+  every step ticked, and its last PR is in review with the phase-exit audit;
+  Phase 1 waits for the offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/resolve-usage`, Phase 4 PR 2.
+- **Open PRs:** `feat/analyze`, Phase 4 PR 3, in review.
 - **Phase 4 PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/snapshot`, merged (#12).
-  - **PR 2:** `feat/resolve-usage`, in review. `manifest.py`, `resolve` (ADR
+  - **PR 2:** `feat/resolve-usage`, merged (#14). `manifest.py`, `resolve` (ADR
     0018, `schema_version` 3), `usage` with the ranking scope (ADR 0019, which
     supersedes 0015: any agent-tagged traffic needs a scope).
-  - **PR 3:** `feat/analyze`. `coverage`, `rank` (score by `Decimal.ln()`),
-    `cli.py`, the run manifest with the snapshot gates, the report and the
-    end-to-end golden files; the last PR of the phase, so it also gets the
+  - **PR 3:** `feat/analyze`, in review. `coverage`, `rank` over every
+    undocumented mart column (ADR 0020, score by `Decimal.ln()`), `cli.py`,
+    `pipeline.py` (run manifest, snapshot gates, resume, lock; a failed stage's
+    error in the manifest, `schema_version` 4), the report and
+    the end-to-end golden files; the last PR of the phase, so it also gets the
     whole-repo audit.
-- **Next step:** after PR 2 merges, PR 3, `feat/analyze`, from an up-to-date
-  `main`.
+- **Next step:** after PR 3 merges, Phase 2 on DuckDB (the offline sample), the
+  next row of the brief's timeline, from an up-to-date `main`, starting with
+  `devils-advocate` on its PR split.

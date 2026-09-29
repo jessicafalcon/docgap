@@ -88,7 +88,7 @@ def _environment(**overrides: Any) -> Environment:
 
 def _setup(**overrides: Any) -> RunSetup:
     fields: dict[str, Any] = {
-        "schema_version": 3,
+        "schema_version": 4,
         "config": {"rank": HASH, "snapshot": HASH},
         "environment": _environment(),
         "call_sites": {
@@ -116,6 +116,7 @@ def _stage_run(**overrides: Any) -> StageRun:
         "started_at": T0,
         "finished_at": T0 + timedelta(seconds=3),
         "retries": 0,
+        "error": None,
     }
     return StageRun(**(fields | overrides))
 
@@ -468,10 +469,20 @@ def test_environment_package_names_are_normalized(package: str) -> None:
         ({"finished_at": T0 - timedelta(seconds=1)}, "cannot precede"),
         ({"finished_at": None}, "running stage has no finished_at"),
         ({"status": StageStatus.RUNNING}, "running stage has no finished_at"),
+        ({"status": StageStatus.FAILED}, "a failed stage has an error"),
+        ({"error": "ValueError: gate"}, "any other stage has none"),
     ],
-    ids=["before-start", "succeeded-unfinished", "running-finished"],
+    ids=[
+        "before-start",
+        "succeeded-unfinished",
+        "running-finished",
+        "failed-without-error",
+        "succeeded-with-error",
+    ],
 )
-def test_stage_run_timing_matches_its_status(overrides: dict[str, Any], message: str) -> None:
+def test_stage_run_timing_and_error_match_its_status(
+    overrides: dict[str, Any], message: str
+) -> None:
     with pytest.raises(ValidationError, match=message):
         _stage_run(**overrides)
 
@@ -481,7 +492,7 @@ def test_stage_run_timing_matches_its_status(overrides: dict[str, Any], message:
     [
         {},
         {"snapshot": _stage_run(status=StageStatus.RUNNING, finished_at=None)},
-        {"snapshot": _stage_run(status=StageStatus.FAILED)},
+        {"snapshot": _stage_run(status=StageStatus.FAILED, error="ValueError: gate")},
     ],
     ids=["missing", "running", "failed"],
 )
@@ -543,5 +554,5 @@ def test_canonical_hash_is_pinned() -> None:
     # Every run hash depends on the canonical bytes. A change to the serialization or
     # to the example shows here and must be deliberate.
     assert _manifest().canonical_sha256() == (
-        "66cc5f9aa316d142168f668cd9aa2f14836e69ca1508a114651435ee1b1a81ef"
+        "379e46d47b7f00784115765b8d49bcf12cccda5bdcca0d850d99525c17f1ae03"
     )

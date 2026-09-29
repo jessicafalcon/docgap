@@ -120,7 +120,9 @@ random-N comparison to run, and that is reported as the finding.
 1. **Top-N** is the first N rows of docgap's ranking: only columns with no
    description, sorted by score descending, then by column FQN. The rank weight
    is *w* = 1, so a column whose attributed failure rate is 1 scores twice its
-   usage term.
+   usage term. The ranking holds every mart column undocumented in the baseline
+   docs; one no counted query touched scores 0, so if fewer than N columns were
+   touched, top-N ends with untouched columns in FQN order (ADR 0020).
 2. **Ranking inputs come from discovery questions of one agent run only.** Usage
    counts only queries tagged with the Phase 3 baseline's run ID and a discovery
    `qid`, and failure attribution runs only on that run's discovery failures, so
@@ -162,6 +164,7 @@ the tag (`CLAUDE.md` → "After `preregistered`"):
 - the gate bands, 0.8 and 0.5 (`[gate]`)
 - *k* = 11 (`[evidence]`)
 - the role-to-actor mapping (`[actors]`)
+- the history window the ranking reads (`[snapshot] history_window_days`)
 - the mart database and schema whose columns can be ranked or drawn (`[manifest]`)
 - the model at the `attribution`, `drafter` and `gate` call sites
   (`[call_sites]`) and their prompt versions (in `llm/`), both recorded in the
@@ -223,6 +226,8 @@ promise a detectable headline.
   session's baseline.
 - The needed columns shared by discovery and holdout, and the overlap of top-N
   and random-N.
+- How many top-N columns have no usage, and the columns tied on score at rank N,
+  whose order the FQN decides.
 - Grade reason codes per arm, and infrastructure failures per arm.
 - The Phase 3 baseline next to the session's baseline.
 - Every deviation from this protocol, with its decision record.
@@ -230,7 +235,7 @@ promise a detectable headline.
 ## Witnessing the tag
 
 Git sets tag and commit dates from the committer's clock, so they prove nothing
-on their own (ADR 0004). The repo is public before the tag (ADR 0017), and the
+on their own (ADRs 0004 and 0017). The repo is public before the tag (ADR 0017), and the
 tag comes after the gold results are materialized, so a gold query that breaks
 the rules above is fixed before it. The order is:
 

@@ -22,7 +22,7 @@ from hypothesis import strategies as st
 import docgap.snapshot as snapshot_module
 from docgap.artifacts import canonical_lines, read_rows
 from docgap.config import ActorsConfig, SnapshotConfig
-from docgap.models import QueryRecord, StageRecord
+from docgap.models import GateCheck, QueryRecord, StageRecord
 from docgap.snapshot import (
     SNAPSHOT_FILE,
     DropReason,
@@ -31,6 +31,7 @@ from docgap.snapshot import (
     normalize,
     run_snapshot,
     snapshot,
+    snapshot_gates,
 )
 
 
@@ -55,11 +56,14 @@ def _row(**overrides: Any) -> HistoryRow:
 # Golden output
 
 
-def _run(out_dir: Path) -> StageRecord:
+GATES = SnapshotConfig(history_window_days=7, min_rows_kept=1, min_parse_rate=0.9)
+
+
+def _run(out_dir: Path, config: SnapshotConfig = GATES) -> StageRecord:
     return run_snapshot(
         HISTORY,
         as_of=AS_OF,
-        config=SnapshotConfig(history_window_days=7),
+        config=config,
         actors=ActorsConfig.model_validate(ACTORS),
         setup_sha256=SETUP,
         out_dir=out_dir,
@@ -73,6 +77,45 @@ def test_snapshot_matches_golden(tmp_path: Path, update_golden: bool) -> None:
     lines = canonical_lines(rows)
     assert stage.inputs == {"history": hashlib.sha256(HISTORY.read_bytes()).hexdigest()}
     assert stage.outputs == {"query_snapshot": hashlib.sha256(lines).hexdigest()}
+
+
+def test_a_gate_at_its_threshold_passes(tmp_path: Path) -> None:
+    stage = _run(tmp_path, GATES.model_copy(update={"min_rows_kept": 9}))
+    assert stage.gates["rows_kept"].passed
+
+
+def test_gates_are_recorded_with_their_thresholds(tmp_path: Path) -> None:
+    stage = _run(tmp_path)
+    # 12 queries reach the parser and one fails to parse.
+    assert stage.gates["parse_rate"].value == 11 / 12
+    assert stage.gates["rows_kept"] == GateCheck(value=9, threshold=1, passed=True)
+
+
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        (GATES.model_copy(update={"min_rows_kept": 10}), "rows_kept 9 < 10"),
+        (GATES.model_copy(update={"min_parse_rate": 0.95}), "parse_rate 0.916667 < 0.95"),
+    ],
+)
+def test_a_crossed_gate_fails_the_stage_and_writes_nothing(
+    tmp_path: Path, config: SnapshotConfig, message: str
+) -> None:
+    # An empty window or an export sqlglot can't read must not yield an all-zero ranking.
+    with pytest.raises(ValueError, match=f"snapshot gates crossed: {message}"):
+        _run(tmp_path / "snapshot", config)
+    assert not (tmp_path / "snapshot").exists()
+
+
+def test_nothing_reaching_the_parser_fails_the_parse_rate() -> None:
+    counts = {
+        "kept": 0,
+        "dropped.parse_error": 0,
+        "dropped.unstable_normalization": 0,
+        "dropped.multiple_statements": 0,
+        "dropped.not_a_query": 0,
+    }
+    assert not snapshot_gates(counts, GATES)["parse_rate"].passed
 
 
 def test_every_row_read_is_kept_or_counted() -> None:

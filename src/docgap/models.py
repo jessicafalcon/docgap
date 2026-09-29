@@ -485,7 +485,7 @@ class RunSetup(_Contract):
     """What a run is set up with: arms and resumed stages must match it exactly."""
 
     # Bump on any change to a contract's shape, and regenerate the committed schemas.
-    schema_version: Literal[3]
+    schema_version: Literal[4]
     config: dict[Key, Sha256]
     environment: Environment
     call_sites: dict[Key, CallSite]
@@ -533,12 +533,15 @@ class RunCanonical(_Contract):
 
 
 class StageRun(_Contract):
-    """How one stage ran this time: status, timing, retries."""
+    """How one stage ran this time: status, timing, retries, and why it failed."""
 
     status: StageStatus
     started_at: UtcDatetime
     finished_at: UtcDatetime | None
     retries: NonNegativeInt
+    # The exception's type and message, a crossed gate's value and threshold
+    # included, so the manifest says why a run stopped.
+    error: NonEmptyStr | None
 
     @model_validator(mode="after")
     def _finished_iff_not_running(self) -> Self:
@@ -546,6 +549,8 @@ class StageRun(_Contract):
             raise ValueError("a running stage has no finished_at and any other stage has one")
         if self.finished_at is not None and self.finished_at < self.started_at:
             raise ValueError("finished_at cannot precede started_at")
+        if (self.error is None) == (self.status is StageStatus.FAILED):
+            raise ValueError("a failed stage has an error and any other stage has none")
         return self
 
 

@@ -6,6 +6,11 @@
 [snapshot]
 # Query history exported per run: the week that ends at the run's as-of date.
 history_window_days = 7
+# Gates on the snapshot, each failing the stage when crossed, so an empty window or
+# an export sqlglot can't read never yields an all-zero ranking. The parse rate is
+# the share of queries reaching the parser that sqlglot normalizes.
+min_rows_kept = 1
+min_parse_rate = 0.9
 
 [actors]
 # Role → actor class. Only these roles' queries count as usage, so loads, dbt
@@ -19,6 +24,10 @@ AGENT_READER = "agent"
 # relation is unmanaged.
 mart_database = "ANALYTICS"
 mart_schema = "MARTS"
+
+[rank]
+# score = ln(1 + u) × (1 + w·r), set by the evaluation protocol.
+w = 1
 
 [evidence]
 # k: a value carried by fewer fact rows is suppressed from profiles (ADR 0003).

@@ -44,7 +44,7 @@ def _without(raw: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
 def test_committed_config_feeds_the_run_setup() -> None:
     config = load_config(CONFIG)
     setup = RunSetup(
-        schema_version=3,
+        schema_version=4,
         config=config.section_sha256(),
         environment=Environment(python="3.12.8", packages=(), code_sha256=HASH),
         call_sites={},
@@ -64,6 +64,8 @@ def test_committed_limits_match_the_governance_table() -> None:
     config = load_config(CONFIG)
     assert config.evidence.min_value_count == 11
     assert config.agent.row_cap == 200
+    # Set by the evaluation protocol, and frozen at `preregistered`.
+    assert config.rank.w == 1
 
 
 # A top-level key would sit in no section, so no section hash would cover it.
@@ -85,6 +87,9 @@ def test_unknown_key_is_rejected(path: tuple[str, ...]) -> None:
     [
         ("snapshot", "history_window_days", "7"),
         ("snapshot", "history_window_days", 0),
+        ("snapshot", "min_rows_kept", 0),
+        ("snapshot", "min_parse_rate", 1.5),
+        ("rank", "w", -1),
         ("evidence", "min_value_count", 11.0),
         ("gate", "ready_min", 1.5),
         ("gate", "confirm_min", 0.8),

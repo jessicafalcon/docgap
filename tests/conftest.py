@@ -13,8 +13,10 @@ from pydantic import BaseModel
 from docgap.artifacts import canonical_lines, write_rows
 from docgap.config import ManifestConfig
 from docgap.manifest import load_marts
-from docgap.models import Actor, QueryRecord, StageRecord
+from docgap.models import Actor, ColumnUsage, QueryRecord, RankingScope, StageRecord
+from docgap.resolve import resolve
 from docgap.snapshot import SNAPSHOT_FILE, load_history, snapshot
+from docgap.usage import COLUMN_USAGE_FILE, usage
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -33,10 +35,15 @@ def update_golden(request: pytest.FixtureRequest) -> bool:
 
 
 # The chain of hand-made fixtures the stage tests share: the query-history export,
-# snapshotted at a fixed as-of, and the dbt manifest.
+# snapshotted at a fixed as-of, the dbt manifest, and the ranking scope.
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 HISTORY = FIXTURES / "query_history" / "basic.jsonl"
 MANIFEST = FIXTURES / "manifest" / "minimal.json"
+SCOPE_FILE = FIXTURES / "ranking_scope" / "basic.json"
+# In the history, q01 and q03 of run BASELINE play the discovery questions and
+# q02 a holdout one.
+SCOPE = RankingScope.model_validate_json(SCOPE_FILE.read_bytes())
+BASELINE = SCOPE.run_id
 AS_OF = datetime(2026, 9, 21, tzinfo=UTC)
 ACTORS = {"AGENT_READER": Actor.AGENT}
 MARTS_CONFIG = ManifestConfig(mart_database="ANALYTICS", mart_schema="MARTS")
@@ -58,6 +65,22 @@ def snapshot_parquet(tmp_path: Path) -> Path:
     path = tmp_path / "snapshot" / SNAPSHOT_FILE
     path.parent.mkdir()
     write_rows(snapshot_records(), QueryRecord, path)
+    return path
+
+
+def usage_rows() -> list[ColumnUsage]:
+    """The column usage of the fixture snapshot, in the fixture scope."""
+    records = snapshot_records()
+    refs, _ = resolve(records, MARTS)
+    rows, _ = usage(records, refs, scope=SCOPE)
+    return rows
+
+
+@pytest.fixture
+def usage_parquet(tmp_path: Path) -> Path:
+    path = tmp_path / "usage" / COLUMN_USAGE_FILE
+    path.parent.mkdir()
+    write_rows(usage_rows(), ColumnUsage, path)
     return path
 
 

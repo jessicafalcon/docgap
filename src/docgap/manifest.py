@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from docgap.config import ManifestConfig
 from docgap.models import Identifier
 
-__all__ = ["DBT_SCHEMA_VERSION", "Marts", "load_marts"]
+__all__ = ["DBT_SCHEMA_VERSION", "Marts", "load_marts", "read_marts"]
 
 # The manifest shape this reader was written against. Another version fails
 # loading instead of being read under a guessed shape.
@@ -41,6 +43,8 @@ class _NodeConfig(_Read):
 
 class _Column(_Read):
     name: str
+    # dbt writes an empty string for a column with no description.
+    description: str = ""
     data_type: str | None = None
     quote: bool | None = None
 
@@ -61,13 +65,30 @@ class _Manifest(_Read):
     nodes: dict[str, _Node]
 
 
+def _fqn(database: str, schema: str, table: str, column: str) -> str:
+    return f"{database}.{schema}.{table}.{column}"
+
+
 @dataclass(frozen=True)
 class Marts:
-    """The mart relations: table name to column name to dbt data type, uppercased."""
+    """The mart relations: table name to column name to dbt data type, uppercased.
+
+    `documented` holds the FQNs of the columns with a description; every other
+    column is "missing", the gaps `coverage` counts and `rank` ranks.
+    """
 
     database: str
     schema: str
     tables: Mapping[str, Mapping[str, str]]
+    documented: frozenset[str]
+
+    def fqns(self) -> list[str]:
+        """Every mart column as `DATABASE.SCHEMA.TABLE.COLUMN`, sorted."""
+        return sorted(
+            _fqn(self.database, self.schema, table, column)
+            for table, columns in self.tables.items()
+            for column in columns
+        )
 
 
 def _identifier(name: str, where: str) -> str:
@@ -79,7 +100,7 @@ def _identifier(name: str, where: str) -> str:
         raise ValueError(f"{where}: {name!r} is not an unquoted identifier") from None
 
 
-def _mart_columns(node: _Node) -> dict[str, str]:
+def _mart_columns(node: _Node) -> tuple[dict[str, str], set[str]]:
     if node.resource_type != "model" or not node.config.contract.enforced:
         # The manifest lists only the columns declared in YAML; without an enforced
         # contract a column the model builds could be missing, and never be counted.
@@ -87,6 +108,7 @@ def _mart_columns(node: _Node) -> dict[str, str]:
             f"{node.unique_id}: a mart relation must be a model with an enforced contract"
         )
     columns: dict[str, str] = {}
+    documented: set[str] = set()
     for column in node.columns.values():
         where = f"{node.unique_id}.{column.name}"
         if column.quote and column.name != column.name.upper():
@@ -97,9 +119,12 @@ def _mart_columns(node: _Node) -> dict[str, str]:
         if name in columns:
             raise ValueError(f"{where}: declared twice")
         columns[name] = column.data_type
+        # Whitespace alone tells the agent nothing, so it counts as no description.
+        if column.description.strip():
+            documented.add(name)
     if not columns:
         raise ValueError(f"{node.unique_id}: no columns declared")
-    return columns
+    return columns, documented
 
 
 def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:
@@ -123,6 +148,7 @@ def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:
             f"dbt manifest: adapter {parsed.metadata.adapter_type!r}, expected one of {sorted(_ADAPTERS)}"
         )
     tables: dict[str, dict[str, str]] = {}
+    documented: set[str] = set()
     for node in sorted(parsed.nodes.values(), key=lambda node: node.unique_id):
         if node.resource_type not in _RELATIONS or node.database is None or node.schema_ is None:
             continue
@@ -134,9 +160,21 @@ def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:
         table = _identifier(node.alias or "", f"{node.unique_id} alias")
         if table in tables:
             raise ValueError(f"{node.unique_id}: a second relation named {table}")
-        tables[table] = _mart_columns(node)
+        tables[table], described = _mart_columns(node)
+        documented.update(
+            _fqn(config.mart_database, config.mart_schema, table, column) for column in described
+        )
     if not tables:
         raise ValueError(
             f"dbt manifest: no relation in {config.mart_database}.{config.mart_schema}"
         )
-    return Marts(config.mart_database, config.mart_schema, tables)
+    return Marts(config.mart_database, config.mart_schema, tables, frozenset(documented))
+
+
+def read_marts(path: Path, config: ManifestConfig) -> tuple[Marts, str]:
+    """Read a dbt manifest file into the marts, with the SHA-256 of the bytes parsed.
+
+    The file is read once, so the hash a stage records covers exactly what it parsed.
+    """
+    manifest = path.read_bytes()
+    return load_marts(manifest, config), hashlib.sha256(manifest).hexdigest()

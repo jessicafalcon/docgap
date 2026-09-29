@@ -30,6 +30,17 @@ def test_reads_the_mart_models_uppercased() -> None:
     assert marts.tables["DIM_PRESTATION"] == {"PRS_NAT": "INTEGER", "PRS_NAT_LIB": "VARCHAR"}
 
 
+def test_a_column_with_a_description_is_documented() -> None:
+    marts = _load(_set(("nodes", FCT, "columns", "PRS_NAT", "description"), " \n"))
+    # Whitespace alone is no description.
+    assert marts.documented == {
+        "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLX_ANN_MOI",
+        "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PAI_MNT",
+    }
+    assert len(marts.fqns()) == 12
+    assert marts.documented <= set(marts.fqns())
+
+
 def test_lowercase_column_names_are_uppercased() -> None:
     marts = _load(_set(("nodes", FCT, "columns", "PRS_NAT", "name"), "prs_nat"))
     assert "PRS_NAT" in marts.tables["FCT_REIMBURSEMENTS"]

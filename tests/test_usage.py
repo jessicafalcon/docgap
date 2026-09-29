@@ -8,7 +8,16 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from conftest import MANIFEST, MARTS, MARTS_CONFIG, SETUP, assert_golden, snapshot_records
+from conftest import (
+    BASELINE,
+    MANIFEST,
+    MARTS,
+    MARTS_CONFIG,
+    SCOPE,
+    SETUP,
+    assert_golden,
+    snapshot_records,
+)
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -25,9 +34,6 @@ from docgap.models import (
 from docgap.resolve import COLUMN_REFS_FILE, resolve, run_resolve
 from docgap.usage import COLUMN_USAGE_FILE, run_usage, usage
 
-BASELINE = "20260920T180000Z-1a2b3c4d"
-# In the fixture, q01 and q03 play the discovery questions and q02 a holdout one.
-SCOPE = RankingScope(run_id=BASELINE, qids=("q03", "q01"))
 FQN = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PAI_MNT"
 
 

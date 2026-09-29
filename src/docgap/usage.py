@@ -7,6 +7,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from docgap.artifacts import read_rows, rows_sha256, write_rows
+from docgap.manifest import Marts
 from docgap.models import (
     Actor,
     ColumnRef,
@@ -17,7 +18,7 @@ from docgap.models import (
     canonical_sha256,
 )
 
-__all__ = ["COLUMN_USAGE_FILE", "run_usage", "usage"]
+__all__ = ["COLUMN_USAGE_FILE", "executions", "run_usage", "usage"]
 
 COLUMN_USAGE_FILE = "column_usage.parquet"
 
@@ -110,6 +111,21 @@ def usage(
         "columns": len(rows),
     } | counts
     return rows, counts
+
+
+def executions(rows: Iterable[ColumnUsage], marts: Marts) -> dict[str, int]:
+    """Executions per mart column, agent and human together, and 0 for an untouched column.
+
+    Raises:
+        ValueError: a row names a column that isn't in the marts, so the usage was
+            resolved against another manifest.
+    """
+    counts = dict.fromkeys(marts.fqns(), 0)
+    for row in rows:
+        if row.fqn not in counts:
+            raise ValueError(f"column usage for {row.fqn}, which is not a mart column")
+        counts[row.fqn] = row.executions_agent + row.executions_human
+    return counts
 
 
 def run_usage(
