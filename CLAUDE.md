@@ -46,6 +46,7 @@ the file is the current standard, and memory of it may be stale.
 |---|---|---|
 | **Fresh clone** | `uv sync`, `uv run pre-commit install` (the pre-commit and commit-msg hooks); gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
 | **Offline data** needed (DuckDB work) and `data/sample/` is missing | `uv run python loader/offline_sample.py`, with the sources in `data/open_damir/` | It checks sources and outputs against the locks; `--update-lock` only under an ADR that supersedes 0013 |
+| **Offline warehouse** needed and `data/warehouse/<source>/RAW.duckdb` is missing | `uv run python loader/load_duckdb.py sample` (or `fixture`, what CI builds on) | It checks each file against `loader/sample.lock` and its header against `loader/raw_prestations.sql`; a re-run loads nothing twice |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -206,7 +207,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `data/sample/` or `fixtures/damir/`. It also moves the baseline docs lock
     after Phase 3's questions (ADR 0021).
   - **PR 2:** `feat/staging-fact-lint`. The dbt project on DuckDB, the staging
-    model (aggregate only if the full three months repeat a grain key), the
+    model (one row per source line: the full three months repeat no grain key), the
     contracted `fct_reimbursements`, `docgap lint` calling `load_marts`, and CI
     `dbt build` over `fixtures/damir/`.
   - **PR 3:** `feat/dims-agg`. Seeds (code→label pairs only), the 4 dimensions
