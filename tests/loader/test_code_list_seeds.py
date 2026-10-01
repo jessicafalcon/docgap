@@ -42,6 +42,7 @@ def test_a_list_ends_at_its_first_blank_line() -> None:
         ([("X", "L"), (1, " ")], "row 2 (X): no label for code 1"),
         ([("X", "L"), (1,)], "row 2 (X): no label for code 1"),
         ([("X", "L"), (1, "A"), (1, "B")], "row 3 (X): code 1 listed twice"),
+        ([("X", "L"), (1, "A"), (None, "B"), (2, "C")], "row 3 (X): label 'B' has no code"),
         ([("X", "L"), (), ("X", "L")], "row 3: a second code list for X"),
         ([("Y", "L"), (1, "A")], "no code list for X"),
     ],

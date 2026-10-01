@@ -21,6 +21,20 @@ month (measured on 2026-10-01). The dictionary also says
 measures are already filtered. Which column is the category, and which measures
 does the aggregate sum?
 
+The measurements, with DuckDB over the three pinned files read as text, then over
+the offline sample's warehouse:
+
+```sql
+create view src as select * from read_csv('data/open_damir/A2025*.csv.gz', delim = ';', header = true, all_varchar = true);
+select FLX_ANN_MOI, PSE_ACT_SNDS, count(*), sum(FLT_PAI_MNT::double), sum(FLT_REM_MNT::double)
+from src group by all order by all;
+-- 5 codes, 9,732 rows: the benefit-type dimension adds them with no label.
+select PRS_NAT::int, count(*) from src
+where PRS_NAT::int not in (select PRS_NAT from 'warehouse/dbt/seeds/prs_nat.csv') group by all order by all;
+-- On data/warehouse/sample/ANALYTICS.duckdb: 967,053,557.88 against 798,168,484.50.
+select sum(PRS_PAI_MNT), sum(PRS_PAI_MNT) filter (where PRS_REM_TYP = 0) from MARTS.fct_reimbursements;
+```
+
 ## Considered Options
 
 1. **`PSE_ACT_SNDS`, summing `FLT_PAI_MNT` and `FLT_REM_MNT`.** Every column has

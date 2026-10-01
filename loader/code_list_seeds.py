@@ -72,11 +72,14 @@ def code_lists(
                 current = code
                 lists[current] = {}
             continue
-        if code is None:
-            current = None
-            continue
         where = f"{SHEET} row {number} ({current})"
         label = row[1] if len(row) > 1 else None
+        if code is None:
+            # Only a blank line ends a list; a label with no code would cut it short.
+            if label is not None:
+                raise ValueError(f"{where}: label {label!r} has no code")
+            current = None
+            continue
         # bool is an int subclass; a code read as True would pass as 1.
         if type(code) is not int:
             raise ValueError(f"{where}: code {code!r} is not an integer")
