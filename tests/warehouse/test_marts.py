@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import yaml
-from code_list_seeds import VARIABLES, sheet_rows
+from code_list_seeds import VARIABLE_SHEET, VARIABLES, sheet_rows
 from offline_sample import ROOT
 
 MARTS = ROOT / "warehouse" / "dbt" / "models" / "marts"
@@ -30,7 +30,7 @@ def test_no_mart_column_is_documented_before_the_baseline_lock() -> None:
 def test_every_mart_column_has_a_dictionary_entry() -> None:
     # ADR 0012: no draft for any other column could be graded. A dimension's label
     # column is graded by the line that opens its code list, which the seeds leave out.
-    variables = {row[0] for row in sheet_rows("OPEN DAMIR") if row and isinstance(row[0], str)}
+    variables = {row[0] for row in sheet_rows(VARIABLE_SHEET) if row and isinstance(row[0], str)}
     gradable = variables | {f"{name}_LIB" for name in VARIABLES}
     assert {name.split(".")[1] for name in _columns()} <= gradable
 

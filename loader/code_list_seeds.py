@@ -17,12 +17,14 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import openpyxl
+from offline_sample import ROOT
 
 __all__ = [
     "DICTIONARY",
     "SEED_DIR",
     "SHEET",
     "VARIABLES",
+    "VARIABLE_SHEET",
     "code_lists",
     "main",
     "render",
@@ -30,9 +32,10 @@ __all__ = [
     "sheet_rows",
 ]
 
-ROOT = Path(__file__).resolve().parents[1]
 DICTIONARY = ROOT / "eval" / "reference" / "2024_descriptif-variables_open-damir-base-complete.xlsx"
+# Code lists, and the variables the dictionary defines.
 SHEET = "MOD OPEN DAMIR"
+VARIABLE_SHEET = "OPEN DAMIR"
 SEED_DIR = ROOT / "warehouse" / "dbt" / "seeds"
 
 # Age bracket, region of residence, benefit type and provider activity: the four

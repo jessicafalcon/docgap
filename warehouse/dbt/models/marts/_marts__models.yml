@@ -250,16 +250,13 @@ models:
         config:
           meta:
             sensitivity: public
+      # Its codes are related to the dimension through the aggregate, which holds
+      # the same set: one scan of the fact fewer.
       - name: PSE_ACT_SNDS
         data_type: integer
         config:
           meta:
             sensitivity: public
-        data_tests:
-          - relationships:
-              arguments:
-                to: ref('dim_provider_activity')
-                field: PSE_ACT_SNDS
       - name: PSE_ACT_CAT
         data_type: integer
         config:
