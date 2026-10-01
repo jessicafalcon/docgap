@@ -24,10 +24,12 @@ The result is reported whatever it turns out to be.
    most 200 rows (the agent's row cap) and at most 5 columns (the grader's
    permutation bound), and reads only `ANALYTICS.MARTS`.
 3. **12 pilot questions** are separate from the 40 and are used only to choose
-   the agent model (see [The agent model](#the-agent-model)).
+   the agent model (see [The agent model](#the-agent-model)). The pilot runs
+   before the 40 are written, and none of the 40 repeats a pilot question's ID
+   or text (ADR 0024).
 4. **Written before the baseline docs.** `warehouse/baseline_docs.lock` is drawn
-   only once the offline pilot passes the kill criterion, so the 40 questions, their
-   gold SQL and any change the pilot makes to them come first. The lock lands in
+   only once the offline pilot passes the kill criterion, so the pilot's changes to
+   the setup, and the 40 questions with their gold SQL, come first. The lock lands in
    its own pull request, merged after the questions' pull request, and GitHub's
    merge times witness the order, since commit dates prove nothing (ADR 0021).
 
@@ -204,7 +206,8 @@ the tag (`CLAUDE.md` → "After `preregistered`"):
 The pilot runs the 12 pilot questions, 3 repetitions each, on DuckDB over the
 offline sample pinned by `loader/sample.lock` (ADR 0013), in four configurations:
 {Haiku 4.5, Opus 5.5} × {no column docs, every column documented from the
-dictionary}. The agent writes Snowflake SQL, as in the trial, and the harness
+dictionary}. The every-column text is the dictionary's, verbatim and in French: it
+is the ceiling arm's text, and its locked half is the baseline's (ADR 0025). The agent writes Snowflake SQL, as in the trial, and the harness
 transpiles it to DuckDB (ADR 0014). A final answer that can't be transpiled is a
 failed run, and the pilot reports how many there were. For each model, the gap is full-docs accuracy minus
 no-docs accuracy.
@@ -214,9 +217,9 @@ no-docs accuracy.
 2. **Choice:** the eligible model with the larger gap; on an equal gap, Haiku
    4.5, the cheaper.
 3. **Kill criterion:** if neither model is eligible, change the setup (harder
-   questions, more coded columns) and run the pilot again; question difficulty
-   is adjusted only here. If nothing makes a model eligible, that is the
-   finding, and it is reported.
+   questions, more coded columns) and run the pilot again, at most twice;
+   question difficulty is adjusted only here. If no model is eligible after the
+   third pass, that is the finding, and it is reported (ADR 0024).
 
 The four accuracies and the choice go in their own decision record. The model
 not chosen is reported under limits and doesn't run as an arm. The 15-point

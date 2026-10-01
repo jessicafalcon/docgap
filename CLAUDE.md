@@ -204,7 +204,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** none.
+- **Open PRs:** `docs/phase3-pilot-first`, Phase 3's plan records, in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -226,6 +226,23 @@ Update after every PR and merge, in the same change. A new session resumes from 
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** plan Phase 3's offline PR split (timeline row 4: questions and
-  gold SQL, grader, agent loop, pilot) and run `devils-advocate` on it.
-  `feat/loader-snowflake` still lands before the go/no-go.
+- **Phase 3 offline PR order** (approved after `devils-advocate`; ADRs 0024, 0025):
+  - **PR 0:** `docs/phase3-pilot-first`, in review. The pilot runs before the 40
+    questions, with at most two reruns (ADR 0024); the every-column docs are the
+    dictionary's text, verbatim in French, built into a manifest by `dbt parse`
+    (ADR 0025); the agent's offline database holds the marts only, with DuckDB's
+    file access off; `llm/` lands with the agent loop; row 4 is 7–13 evenings.
+  - **PR 1:** `feat/grader`. `grade.py` on the existing `Grade` contracts.
+  - **PR 2:** `feat/agent-loop`. A minimal `llm/` (one client, cache, timeout,
+    retries) and `eval/agent/` on DuckDB; the decision record on what the agent
+    sends at default settings. Split in two if it grows large.
+  - **PR 3:** `feat/offline-pilot`. 12 pilot questions, the every-column docs,
+    the run, and the decision records on the model and on `SELECT *`.
+  - **PR 4:** `feat/load-full-duckdb`. The three full months into DuckDB after
+    the `sources.lock` check; any time before PR 5.
+  - **PR 5:** `feat/questions`. The 40 questions and gold SQL, checked on the
+    full data.
+  - **PR 6:** `feat/baseline-docs`. The lock, the baseline YAML and the frozen
+    manifest, merged after PR 5 (ADR 0021).
+- **Next step:** after PR 0 merges, `feat/grader`. `feat/loader-snowflake` still
+  lands before the go/no-go.
