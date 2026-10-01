@@ -204,7 +204,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** none. `feat/dims-agg`, Phase 2 PR 3, is in progress.
+- **Open PRs:** `feat/dims-agg`, Phase 2 PR 3, in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -216,12 +216,17 @@ Update after every PR and merge, in the same change. A new session resumes from 
     grain key), the contracted `fct_reimbursements` (DAMIR columns only: the key stays in staging),
     `docgap lint` calling `load_marts`, and CI `dbt build` over `fixtures/damir/`.
     The mart sensitivity tags are frozen at `preregistered` (ADR 0022).
-  - **PR 3:** `feat/dims-agg`, in progress. Seeds (code→label pairs only), the 4
-    dimensions with the dictionary's missing codes and a cap on their share of fact rows,
-    and `agg_monthly_spend_by_category` by processing month and provider activity,
-    summing the pre-filtered `FLT_` measures (ADR 0023, approved after
-    `devils-advocate`).
+  - **PR 3:** `feat/dims-agg`, in review. Seeds from `loader/code_list_seeds.py`
+    (code→label pairs only, built in STAGING); 4 dimensions (benefit type,
+    provider activity, region, age bracket), the benefit type adding the 5 codes
+    the dictionary lacks under a 0.1% cap; and `agg_monthly_spend_by_category` by
+    processing month and provider activity, summing the pre-filtered `FLT_`
+    measures (ADR 0023, approved after `devils-advocate`). 67 mart columns; new
+    models' descriptions state the grain in column codes only.
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** PR 3 (`feat/dims-agg`): the seeds, dimensions and aggregate.
+- **Next step:** after PR 3 merges, plan Phase 3's offline PR split (timeline
+  row 4: questions and gold SQL, grader, agent loop, pilot) and run
+  `devils-advocate` on it. `feat/loader-snowflake` still lands before the
+  go/no-go.
