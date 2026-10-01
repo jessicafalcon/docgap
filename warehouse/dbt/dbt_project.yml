@@ -29,3 +29,11 @@ models:
       # columns declared in YAML, and a contract makes the build fail on any other.
       +contract:
         enforced: true
+
+# The dictionary's code lists, from `loader/code_list_seeds.py`. They build in STAGING:
+# docgap fails on any relation in MARTS that isn't a contracted model, and the agent
+# reads the labels through the dimension models built on them.
+seeds:
+  docgap:
+    +schema: STAGING
+    +quote_columns: false

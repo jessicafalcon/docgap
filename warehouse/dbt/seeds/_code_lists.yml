@@ -1,0 +1,22 @@
+# Codes and labels are typed here, not inferred from the CSV.
+seeds:
+  - name: age_ben_snds
+    config:
+      column_types:
+        AGE_BEN_SNDS: integer
+        AGE_BEN_SNDS_LIB: varchar
+  - name: ben_res_reg
+    config:
+      column_types:
+        BEN_RES_REG: integer
+        BEN_RES_REG_LIB: varchar
+  - name: prs_nat
+    config:
+      column_types:
+        PRS_NAT: integer
+        PRS_NAT_LIB: varchar
+  - name: pse_act_snds
+    config:
+      column_types:
+        PSE_ACT_SNDS: integer
+        PSE_ACT_SNDS_LIB: varchar

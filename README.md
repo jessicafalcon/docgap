@@ -114,8 +114,8 @@ the Anthropic API for the agent, drafter and judgments.
 | --- | --- |
 | `src/docgap/` | The tool: contracts, config, and the stages built so far |
 | `eval/` | Evaluation material; `eval/reference/` holds the official dictionary, which `src/` never reads |
-| `loader/` | Source checksums, the offline sample cut, and the `RAW` table and its DuckDB load |
-| `warehouse/dbt/` | The dbt project: staging and the contracted marts over Open DAMIR |
+| `loader/` | Source checksums, the offline sample cut, the `RAW` table and its DuckDB load, and the code-list seeds |
+| `warehouse/dbt/` | The dbt project: the dictionary's code lists as seeds, staging, and the contracted marts over Open DAMIR |
 | `fixtures/` | The Open DAMIR fixture and query-history fixtures for offline tests |
 | `docs/` | The evaluation protocol and the decision records in `docs/adr/` |
 | `PROJECT-BRIEF.md` | The plan: phases, steps, risks and open decisions |
