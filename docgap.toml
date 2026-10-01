@@ -51,6 +51,31 @@ baseline_docs = 3
 statement_timeout_seconds = 60
 row_cap = 200
 
+[llm]
+# Per model call, at every call site. The SDK retries a connection error, a timeout,
+# 408, 409, 429 and 5xx, with backoff honouring Retry-After, `max_retries` times.
+timeout_seconds = 120
+max_retries = 2
+# Per run, over live calls only: a cache hit costs nothing. A call that would start
+# with either limit reached is refused, and the run stops. One pilot pass makes at
+# most 2 models × 72 runs × 9 calls = 1,296 calls, about $30 at the rates the brief
+# estimates.
+max_calls = 1300
+max_spend_usd = 45
+
+# USD per million tokens, from the provider's price list (checked 2026-10-01). Cache
+# writes and reads are charged at the input rate, an overestimate: the agent sets no
+# cache breakpoints. Every model a call site or the pilot names needs a price.
+[llm.prices]
+"claude-haiku-4-5-20251001" = { input = 1.0, output = 5.0 }
+"claude-opus-5-5" = { input = 4.0, output = 20.0 }
+
+[pilot]
+# The two candidates for the agent model, pinned by ID: Haiku 4.5 by its dated ID,
+# since its alias can move; Opus 5.5 has only the one. The pilot picks one by the
+# protocol's rule, and it becomes `[call_sites.agent]` at the tag.
+models = ["claude-haiku-4-5-20251001", "claude-opus-5-5"]
+
 # Model call sites. Every call runs at the model's default sampling, so `sampling`
 # lists the settings sent, and none are. The agent's call site is added when the
 # Phase 3 pilot picks its model.
