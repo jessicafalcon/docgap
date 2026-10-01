@@ -2,25 +2,18 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 
 from docgap.artifacts import write_atomic
+from docgap.models import CONTRACT_CONFIG, canonical_json, canonical_sha256
 
 __all__ = ["ResponseCache", "cache_key"]
 
 
-def _canonical(value: JsonValue) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    ).encode()
-
-
 class _Inputs(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+    model_config = CONTRACT_CONFIG
 
     model: str
     prompt_version: str
@@ -28,14 +21,10 @@ class _Inputs(BaseModel):
 
 
 class _Entry(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+    model_config = CONTRACT_CONFIG
 
     inputs: _Inputs
     response: JsonValue
-
-
-def _inputs(model: str, prompt_version: str, state: JsonValue) -> JsonValue:
-    return {"model": model, "prompt_version": prompt_version, "state": state}
 
 
 def cache_key(model: str, prompt_version: str, state: JsonValue) -> str:
@@ -46,7 +35,7 @@ def cache_key(model: str, prompt_version: str, state: JsonValue) -> str:
     >>> cache_key("m", "v1", {"repetition": 1}) == cache_key("m", "v1", {"repetition": 2})
     False
     """
-    return hashlib.sha256(_canonical(_inputs(model, prompt_version, state))).hexdigest()
+    return canonical_sha256(_Inputs(model=model, prompt_version=prompt_version, state=state))
 
 
 class ResponseCache:
@@ -77,13 +66,18 @@ class ResponseCache:
             return None
         return entry.response
 
-    def put(self, model: str, prompt_version: str, state: JsonValue, response: JsonValue) -> None:
-        """Write an entry atomically, so a crash never leaves half a response to replay."""
-        entry = _canonical({"inputs": _inputs(model, prompt_version, state), "response": response})
+    def put(
+        self, key: str, model: str, prompt_version: str, state: JsonValue, response: JsonValue
+    ) -> None:
+        """Write an entry atomically, so a crash never leaves half a response to replay.
+
+        `key` is `cache_key` of the inputs, which the caller has already computed;
+        `get` checks it before replaying the entry.
+        """
+        inputs = _Inputs(model=model, prompt_version=prompt_version, state=state)
+        entry = canonical_json(_Entry(inputs=inputs, response=response))
         self._directory.mkdir(parents=True, exist_ok=True)
-        write_atomic(
-            self._path(cache_key(model, prompt_version, state)), lambda sink: sink.write(entry)
-        )
+        write_atomic(self._path(key), lambda sink: sink.write(entry))
 
     def discard(self, key: str) -> None:
         """Delete an entry, if there is one."""

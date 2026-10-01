@@ -186,20 +186,25 @@ def test_corrupt_entry_is_a_miss(tmp_path: Path, corrupt: Callable[[bytes], byte
 
 
 def _sdk_transport(
-    monkeypatch: pytest.MonkeyPatch, statuses: list[int], config: LlmConfig
-) -> tuple[Transport, list[int]]:
-    """The real transport over the SDK, its HTTP answered in-process by `statuses`, in order."""
+    monkeypatch: pytest.MonkeyPatch, answers: list[int | None], config: LlmConfig
+) -> tuple[Transport, list[int | None]]:
+    """The real transport over the SDK, its HTTP answered in-process, in order.
+
+    Each answer is a status, or None for a refused connection.
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    seen: list[int] = []
+    seen: list[int | None] = []
 
     def handle(request: httpx2.Request) -> httpx2.Response:
-        status = statuses[len(seen)]
-        seen.append(status)
-        if status == 200:
+        answer = answers[len(seen)]
+        seen.append(answer)
+        if answer is None:
+            raise httpx2.ConnectError("refused", request=request)
+        if answer == 200:
             return httpx2.Response(200, json=_message())
         error = {"type": "error", "error": {"type": "api_error", "message": "injected"}}
         # The shortest wait the SDK honours, so the test doesn't sleep through backoff.
-        return httpx2.Response(status, headers={"retry-after-ms": "1"}, json=error)
+        return httpx2.Response(answer, headers={"retry-after-ms": "1"}, json=error)
 
     http_client = anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handle))
     return anthropic_transport(config, http_client=http_client), seen
@@ -214,11 +219,16 @@ def test_rate_limit_then_success_is_retried(monkeypatch: pytest.MonkeyPatch) -> 
     assert seen == [429, 200]
 
 
-def test_server_errors_past_the_retries_are_transient(monkeypatch: pytest.MonkeyPatch) -> None:
-    send, seen = _sdk_transport(monkeypatch, [500, 529, 503], _config(max_retries=2))
-    with pytest.raises(TransientError, match="Error"):
+@pytest.mark.parametrize(
+    "answers", [[500, 529, 503], [429, 429, 429], [None, None, None]], ids=["5xx", "429", "refused"]
+)
+def test_failures_past_the_retries_are_transient(
+    monkeypatch: pytest.MonkeyPatch, answers: list[int | None]
+) -> None:
+    send, seen = _sdk_transport(monkeypatch, answers, _config(max_retries=2))
+    with pytest.raises(TransientError):
         send(MODEL, PARAMS)
-    assert seen == [500, 529, 503]
+    assert seen == answers
 
 
 @pytest.mark.parametrize("status", [400, 401, 404])
@@ -229,15 +239,3 @@ def test_permanent_error_fails_on_the_first_attempt(
     with pytest.raises(anthropic.APIStatusError):
         send(MODEL, PARAMS)
     assert seen == [status]
-
-
-def test_connection_error_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    def refuse(request: httpx2.Request) -> httpx2.Response:
-        raise httpx2.ConnectError("refused", request=request)
-
-    http_client = anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(refuse))
-    send = anthropic_transport(_config(max_retries=0), http_client=http_client)
-    with pytest.raises(TransientError, match="APIConnectionError"):
-        send(MODEL, PARAMS)

@@ -344,6 +344,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx2" },
     { name = "hypothesis" },
     { name = "pre-commit" },
     { name = "pyarrow-stubs" },
@@ -372,6 +373,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx2", specifier = ">=2.13.1" },
     { name = "hypothesis", specifier = ">=6.168.2" },
     { name = "pre-commit", specifier = ">=4.6.2" },
     { name = "pyarrow-stubs", specifier = ">=20.0.0.20260819" },

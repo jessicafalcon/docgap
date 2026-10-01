@@ -21,8 +21,9 @@ type Params = Mapping[str, JsonValue]
 # Sends one request and returns the response as JSON.
 type Transport = Callable[[str, Params], JsonValue]
 
-# The statuses the SDK itself retries: a timeout, a lock conflict, and the server's.
-_TRANSIENT_STATUS = frozenset({408, 409})
+# The statuses the SDK retries, with any 5xx: keep in sync with its `_should_retry`.
+# A 5xx the server marks `x-should-retry: false` isn't retried, but is still transient.
+_RETRIED_STATUS = frozenset({408, 409, 429})
 
 
 class TransientError(Exception):
@@ -51,10 +52,10 @@ def anthropic_transport(
         try:
             # The SDK types each parameter; the call sites build them as JSON.
             message: object = client.messages.create(model=model, **params)  # pyright: ignore[reportArgumentType, reportCallIssue, reportUnknownVariableType]
-        except (anthropic.APIConnectionError, anthropic.RateLimitError) as error:
+        except anthropic.APIConnectionError as error:
             raise TransientError(type(error).__name__) from error
         except anthropic.APIStatusError as error:
-            if error.status_code in _TRANSIENT_STATUS or error.status_code >= 500:
+            if error.status_code in _RETRIED_STATUS or error.status_code >= 500:
                 raise TransientError(type(error).__name__) from error
             raise
         if not isinstance(message, Message):
@@ -133,7 +134,7 @@ class LlmClient:
             raise
         message = Message.model_validate(response)
         cost = self.budget.charge(model, message.usage)
-        self._cache.put(model, prompt_version, state, response)
+        self._cache.put(key, model, prompt_version, state, response)
         self._log.event(
             stage,
             item,

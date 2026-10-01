@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from typing import TextIO
 
-__all__ = ["EventLog", "Field"]
+__all__ = ["EventLog"]
 
-type Field = str | int | float | bool | None
+type _Field = str | int | float | bool | None
 
 
 class EventLog:
@@ -34,10 +34,10 @@ class EventLog:
         event: str,
         *,
         duration_ms: int | None = None,
-        **fields: Field,
+        **fields: _Field,
     ) -> None:
         """Write one event and flush it, so a crash keeps every event before it."""
-        record: dict[str, Field] = {
+        record: dict[str, _Field] = {
             **fields,
             "run_id": self._run_id,
             "stage": stage,
