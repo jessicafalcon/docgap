@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+import duckdb
 import pytest
 from pydantic import BaseModel
 
@@ -17,6 +18,7 @@ from docgap.models import Actor, ColumnUsage, QueryRecord, RankingScope, StageRe
 from docgap.resolve import resolve
 from docgap.snapshot import SNAPSHOT_FILE, load_history, snapshot
 from docgap.usage import COLUMN_USAGE_FILE, usage
+from eval.agent.warehouse import copy_marts
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -97,3 +99,27 @@ def assert_golden(
         (directory / "counts.json").write_text(counts)
     assert lines == (directory / f"{artifact}.jsonl").read_bytes()
     assert counts == (directory / "counts.json").read_text()
+
+
+@pytest.fixture
+def agent_db(tmp_path: Path) -> Path:
+    """The agent's marts-only copy of a small dbt build, as `copy_marts` writes it.
+
+    The build holds two mart tables, named as dbt names them, and a staging table
+    the copy must leave out. The fact has 300 rows, past the agent's 200-row cap.
+    """
+    build = tmp_path / "build" / "ANALYTICS.duckdb"
+    build.parent.mkdir()
+    with duckdb.connect(build) as con:
+        con.execute("CREATE SCHEMA MARTS; CREATE SCHEMA STAGING")
+        con.execute(
+            "CREATE TABLE MARTS.fct_reimbursements AS SELECT (202501 + i % 3)::INTEGER AS FLX_ANN_MOI,"
+            " (i % 50)::INTEGER AS BEN_RES_REG, (i / 4)::DECIMAL(12, 2) AS PRS_PAI_MNT"
+            " FROM range(300) t(i)"
+        )
+        con.execute(
+            "CREATE TABLE MARTS.dim_region AS SELECT * FROM (VALUES (11, 'Ile-de-France'),"
+            " (24, 'Centre-Val de Loire')) v(BEN_RES_REG, BEN_RES_REG_LIB)"
+        )
+        con.execute("CREATE TABLE STAGING.stg_prestations AS SELECT 1 AS PRS_NAT")
+    return copy_marts(build, tmp_path / "agent", database="ANALYTICS", schema="MARTS")

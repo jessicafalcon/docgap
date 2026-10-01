@@ -10,7 +10,7 @@ the disagreement is a finding to fix.
 
 ```text
 src/docgap/        the tool: deterministic core + llm/ (the only model edge) + cli.py
-eval/              questions + gold SQL, test agent, reference dictionary (never read by src/)
+eval/              questions + gold SQL, test agent, reference dictionary (never read by src/ or eval/agent/)
 warehouse/dbt/     dbt project over Open DAMIR (Snowflake and DuckDB profiles)
 infra/             bootstrap.sql (ACCOUNTADMIN, once) + terraform/
 loader/            download, checksum, stage, COPY; offline sample and its DuckDB load; code-list seeds
@@ -49,6 +49,7 @@ the file is the current standard, and memory of it may be stale.
 | **Offline warehouse** needed and `data/warehouse/<source>/RAW.duckdb` is missing | `uv run python loader/load_duckdb.py sample` (or `fixture`, the CI fixture) | It checks each file against `loader/sample.lock` and its header against `loader/raw_prestations.sql`; a re-run loads nothing twice |
 | **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` | It rewrites the code-list seeds in `warehouse/dbt/seeds/`; until it runs, the byte-identity test fails |
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
+| **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`) | It copies the build's marts alone into the agent's database (ADR 0026) |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |

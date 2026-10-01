@@ -42,6 +42,20 @@ def test_a_column_with_a_description_is_documented() -> None:
     assert marts.documented <= set(marts.fqns())
 
 
+def test_descriptions_are_read_for_the_agent() -> None:
+    marts = _load(_set(("nodes", FCT, "description"), "  "))
+    assert marts.column_descriptions == {
+        "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLX_ANN_MOI": "Processing month, YYYYMM.",
+        "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PAI_MNT": "Amount paid, in euros.",
+    }
+    assert set(marts.column_descriptions) == marts.documented
+    # A blank model description is no description, as for a column.
+    assert marts.table_descriptions == {
+        "DIM_PRESTATION": "dim_prestation model",
+        "DIM_REGION": "dim_region model",
+    }
+
+
 def test_lowercase_column_names_are_uppercased() -> None:
     marts = _load(_set(("nodes", FCT, "columns", "PRS_NAT", "name"), "prs_nat"))
     assert "PRS_NAT" in marts.tables["FCT_REIMBURSEMENTS"]

@@ -52,9 +52,10 @@ required-version = "==0.12.5"
 default-groups = ["dev", "warehouse"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "src", ".claude/hooks", "loader"]
+testpaths = ["tests", "src", "eval", ".claude/hooks", "loader"]
 # The hooks and the loader are scripts, not a package; tests import them by module name.
-pythonpath = [".claude/hooks", "loader"]
+# The root makes `eval.agent` importable: the harness is not part of the docgap package.
+pythonpath = [".", ".claude/hooks", "loader"]
 # Tests are offline: any socket other than a Unix one fails the test that opens it
 # (docgap-tests). A test that needs a local fake server opts in with a marker.
 addopts = ["--doctest-modules", "--disable-socket", "--allow-unix-socket"]
@@ -74,9 +75,10 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "PT", "PTH", "DTZ", "S"]
 max-line-length = 120
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+# Tests build SQL from fixed text to probe the warehouse.
+"tests/**" = ["S101", "S608"]
 
 [tool.pyright]
-include = ["src", "tests", ".claude/hooks", "loader"]
-strict = ["src"]
+include = ["src", "eval", "tests", ".claude/hooks", "loader"]
+strict = ["src", "eval"]
 extraPaths = [".claude/hooks", "loader"]

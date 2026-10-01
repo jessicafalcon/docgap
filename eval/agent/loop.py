@@ -1,0 +1,303 @@
+"""The test agent: a tool-calling loop that answers one question with one SQL query."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from enum import StrEnum
+from pathlib import Path
+from typing import Literal
+
+from anthropic.types import Message
+from pydantic import BaseModel, ConfigDict, JsonValue
+
+from docgap.artifacts import write_atomic
+from docgap.config import AgentConfig
+from docgap.grade import Result
+from docgap.llm import LlmClient, TransientError
+from docgap.log import EventLog
+from docgap.models import GradeReason, ModelSettings
+from eval.agent.tools import FINAL_ANSWER, AgentTools, TranspileError, tool_definitions
+from eval.agent.warehouse import SqlError, SqlTimeout
+
+__all__ = [
+    "PROMPT_VERSION",
+    "AgentRun",
+    "ErrorCause",
+    "Question",
+    "Transcript",
+    "run_agent",
+    "system_prompt",
+]
+
+# Names the system prompt and the tool definitions together: change either, and
+# this changes, so no cached response is replayed under a prompt it never saw.
+PROMPT_VERSION = "agent-1"
+
+type Outcome = Result | Literal[GradeReason.ERROR, GradeReason.TIMEOUT]
+
+
+def system_prompt(max_tool_calls: int) -> str:
+    """The agent's system prompt: the task, the tool budget and how the answer is judged."""
+    return (
+        "You answer a question about the data in a Snowflake warehouse by writing one SQL"
+        " query.\n\n"
+        f"Explore with list_tables, describe and run_sql: at most {max_tool_calls} tool"
+        " calls in all. Then call final_answer with one Snowflake SQL query whose result"
+        " answers the question.\n\n"
+        "The answer is judged by its result alone: the number of columns, the number of"
+        " rows and the values must match the expected result. Column names don't matter,"
+        " and row order matters only when the question asks for one. Return only the"
+        " columns the question asks for."
+    )
+
+
+class ErrorCause(StrEnum):
+    """Why a run ended as `error`; the pilot's report counts each cause apart."""
+
+    NO_FINAL_ANSWER = "no_final_answer"
+    MALFORMED_ANSWER = "malformed_answer"
+    TRANSPILE = "transpile"
+    SQL = "sql"
+    INFRASTRUCTURE = "infrastructure"
+
+
+@dataclass(frozen=True, slots=True)
+class Question:
+    """A question the agent answers: its ID and its text."""
+
+    qid: str
+    text: str
+
+
+class Transcript(BaseModel):
+    """One agent run as it happened: the conversation, the final SQL and how it ended."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    run_id: str
+    qid: str
+    repetition: int
+    # The call site's settings as sent: the pilot's candidate, or `[call_sites.agent]`.
+    model: str
+    sampling: dict[str, str | int | float | bool]
+    prompt_version: str
+    # Attempts made; more than one only after an infrastructure failure.
+    attempts: int
+    # The Messages API conversation, the tool results and their SQL included.
+    messages: list[JsonValue]
+    tool_calls: int
+    final_sql: str | None
+    outcome: Literal["result", "error", "timeout"]
+    error_cause: ErrorCause | None
+    error_detail: str | None
+    result_rows: int | None
+
+    def save(self, path: Path) -> None:
+        """Write the transcript as JSON, atomically."""
+        text = self.model_dump_json(indent=1).encode()
+        write_atomic(path, lambda sink: sink.write(text))
+
+
+@dataclass(frozen=True, slots=True)
+class AgentRun:
+    """A run's transcript and the outcome the grader reads."""
+
+    transcript: Transcript
+    outcome: Outcome
+
+
+@dataclass(frozen=True, slots=True)
+class _End:
+    outcome: Outcome
+    final_sql: str | None = None
+    cause: ErrorCause | None = None
+    detail: str | None = None
+
+
+def _error(cause: ErrorCause, detail: str) -> _End:
+    return _End(GradeReason.ERROR, cause=cause, detail=detail)
+
+
+@dataclass(frozen=True, slots=True)
+class _Context:
+    question: Question
+    repetition: int
+    site: ModelSettings
+    llm: LlmClient
+    tools: AgentTools
+    config: AgentConfig
+    log: EventLog
+
+    @property
+    def item(self) -> str:
+        return f"{self.question.qid}:{self.repetition}"
+
+
+@dataclass(slots=True)
+class _Conversation:
+    """One attempt's messages and tool calls, kept when a model call fails mid-run."""
+
+    messages: list[JsonValue]
+    tool_calls: int = 0
+
+
+def _blocks(message: Message) -> list[JsonValue]:
+    # Every block goes back as returned, thinking blocks included: Opus 5.5 checks
+    # that the conversation before each of its thinking blocks is unchanged.
+    return [block.model_dump(mode="json", exclude_none=True) for block in message.content]
+
+
+def _since(started: float) -> int:
+    return round((time.monotonic() - started) * 1000)
+
+
+def _finish(context: _Context, final_sql: str) -> _End:
+    started = time.monotonic()
+    try:
+        result = context.tools.run_final(final_sql)
+    except TranspileError as error:
+        end = _error(ErrorCause.TRANSPILE, str(error))
+    except SqlError as error:
+        end = _error(ErrorCause.SQL, str(error))
+    except SqlTimeout as error:
+        end = _End(GradeReason.TIMEOUT, detail=str(error))
+    else:
+        end = _End(result)
+    context.log.event(
+        "agent",
+        context.item,
+        "final_sql",
+        duration_ms=_since(started),
+        outcome=end.outcome if isinstance(end.outcome, GradeReason) else "result",
+    )
+    return _End(end.outcome, final_sql, end.cause, end.detail)
+
+
+def _attempt(context: _Context, conversation: _Conversation) -> _End:
+    """Run the conversation until a final answer or the end of the tool budget."""
+    messages = conversation.messages
+    limit = context.config.max_tool_calls
+    settings: dict[str, JsonValue] = {
+        "max_tokens": context.config.max_tokens,
+        "system": system_prompt(limit),
+        "tools": tool_definitions(
+            row_cap=context.config.row_cap,
+            timeout_seconds=context.config.statement_timeout_seconds,
+        ),
+    }
+    while True:
+        message = context.llm.complete(
+            context.site,
+            {**settings, "messages": list(messages)},
+            prompt_version=PROMPT_VERSION,
+            draw=context.repetition,
+            stage="agent",
+            item=context.item,
+        )
+        messages.append({"role": "assistant", "content": _blocks(message)})
+        if message.stop_reason != "tool_use":
+            return _error(
+                ErrorCause.NO_FINAL_ANSWER, f"stopped with stop_reason {message.stop_reason}"
+            )
+        uses = [block for block in message.content if block.type == "tool_use"]
+        final = next((use for use in uses if use.name == FINAL_ANSWER), None)
+        if final is not None:
+            sql = final.input.get("final_sql")
+            if not isinstance(sql, str):
+                return _error(ErrorCause.MALFORMED_ANSWER, "final_sql is no string")
+            return _finish(context, sql)
+        if conversation.tool_calls >= limit:
+            return _error(ErrorCause.NO_FINAL_ANSWER, f"no final answer within {limit} tool calls")
+        results: list[JsonValue] = []
+        for use in uses:
+            if conversation.tool_calls >= limit:
+                text, is_error = f"Tool call limit of {limit} reached.", True
+            else:
+                conversation.tool_calls += 1
+                started = time.monotonic()
+                result = context.tools.call(use.name, use.input)
+                text, is_error = result.text, result.is_error
+                context.log.event(
+                    "agent",
+                    context.item,
+                    "tool_call",
+                    duration_ms=_since(started),
+                    tool=use.name,
+                    failed=is_error,
+                )
+            results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": use.id,
+                    "content": text,
+                    "is_error": is_error,
+                }
+            )
+        if conversation.tool_calls >= limit:
+            results.append(
+                {"type": "text", "text": "That was your last tool call. Call final_answer now."}
+            )
+        messages.append({"role": "user", "content": results})
+
+
+def run_agent(
+    question: Question,
+    repetition: int,
+    *,
+    run_id: str,
+    site: ModelSettings,
+    llm: LlmClient,
+    tools: AgentTools,
+    config: AgentConfig,
+    log: EventLog,
+) -> AgentRun:
+    """Answer one question once with the call site's model, and run the final SQL it gives.
+
+    A model call that fails after the retries is an infrastructure failure, not the
+    agent's: the run starts over, replaying the calls the cache holds, and after
+    `config.run_attempts` attempts it ends as `error`.
+
+    Raises:
+        CacheMiss: offline, and the cache lacks a call.
+        BudgetExhausted: the run's call or spend limit is reached.
+    """
+    context = _Context(question, repetition, site, llm, tools, config, log)
+    attempts = 0
+    while True:
+        attempts += 1
+        conversation = _Conversation([{"role": "user", "content": question.text}])
+        try:
+            end = _attempt(context, conversation)
+            break
+        except TransientError as error:
+            log.event("agent", context.item, "run_attempt_failed", exception_type=str(error))
+            if attempts == config.run_attempts:
+                end = _error(ErrorCause.INFRASTRUCTURE, str(error))
+                break
+    outcome = end.outcome
+    transcript = Transcript(
+        run_id=run_id,
+        qid=question.qid,
+        repetition=repetition,
+        model=site.model,
+        sampling=site.sampling,
+        prompt_version=PROMPT_VERSION,
+        attempts=attempts,
+        messages=conversation.messages,
+        tool_calls=conversation.tool_calls,
+        final_sql=end.final_sql,
+        outcome="result" if isinstance(outcome, Result) else outcome.value,
+        error_cause=end.cause,
+        error_detail=end.detail,
+        result_rows=len(outcome.rows) if isinstance(outcome, Result) else None,
+    )
+    log.event(
+        "agent",
+        context.item,
+        "run_done",
+        outcome=transcript.outcome,
+        error_cause=end.cause,
+        attempts=attempts,
+    )
+    return AgentRun(transcript, outcome)

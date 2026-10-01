@@ -205,7 +205,7 @@ def test_normalize(sql: str, expected: str) -> None:
 )
 def test_no_value_form_survives_redaction(value: str) -> None:
     # The query is only parsed, never run.
-    assert "4242" not in normalize(f"select a from t where b = {value}")  # noqa: S608
+    assert "4242" not in normalize(f"select a from t where b = {value}")
 
 
 def test_a_redacted_snapshot_normalizes_to_itself() -> None:

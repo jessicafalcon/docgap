@@ -64,6 +64,8 @@ def test_committed_limits_match_the_governance_table() -> None:
     config = load_config(CONFIG)
     assert config.evidence.min_value_count == 11
     assert config.agent.row_cap == 200
+    assert config.agent.max_tool_calls == 8
+    assert config.agent.run_attempts == 3
     # Set by the evaluation protocol, and frozen at `preregistered`.
     assert config.rank.w == 1
 
