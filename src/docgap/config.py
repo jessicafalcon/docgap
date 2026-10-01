@@ -122,8 +122,9 @@ class AgentConfig(_Section):
 class Price(_Section):
     """A model's rates in USD per million tokens."""
 
-    input: NonNegativeFloat
-    output: NonNegativeFloat
+    # Positive, so no model escapes the spend limit.
+    input: PositiveFloat
+    output: PositiveFloat
 
 
 class LlmConfig(_Section):

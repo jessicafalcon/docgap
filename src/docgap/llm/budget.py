@@ -37,7 +37,8 @@ class Budget:
     def reserve(self, model: str) -> None:
         """Count one call about to start.
 
-        A failed call counts too: it may have been billed.
+        A failed call counts too, though it adds no spend: the API reports no usage
+        for it, so the call limit is what bounds failed calls.
 
         Raises:
             BudgetExhausted: the call or spend limit is reached.
@@ -56,12 +57,12 @@ class Budget:
     def charge(self, model: str, usage: Usage) -> float:
         """Add one response's cost to the spend and return it."""
         price = self._config.prices[model]
-        # No call site sets a cache breakpoint, so cache tokens are charged at the
-        # input rate: an overestimate if one ever does.
+        # Bounds that never undercount: a cache read costs at most the input rate,
+        # and a cache write at most twice it (the 1-hour cache's rate).
         input_tokens = (
             usage.input_tokens
-            + (usage.cache_creation_input_tokens or 0)
             + (usage.cache_read_input_tokens or 0)
+            + 2 * (usage.cache_creation_input_tokens or 0)
         )
         cost = (input_tokens * price.input + usage.output_tokens * price.output) * _PER_TOKEN
         self.spend_usd += cost

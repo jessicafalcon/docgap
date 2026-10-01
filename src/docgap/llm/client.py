@@ -10,9 +10,10 @@ from anthropic.types import Message
 from pydantic import JsonValue, ValidationError
 
 from docgap.config import LlmConfig
-from docgap.llm.budget import Budget
+from docgap.llm.budget import Budget, BudgetExhausted
 from docgap.llm.cache import ResponseCache, cache_key
 from docgap.log import EventLog
+from docgap.models import ModelSettings
 
 __all__ = ["CacheMiss", "LlmClient", "TransientError", "Transport", "anthropic_transport"]
 
@@ -28,6 +29,11 @@ _RETRIED_STATUS = frozenset({408, 409, 429})
 
 class TransientError(Exception):
     """An infrastructure failure left after the SDK's retries: not an answer, never cached."""
+
+    def __init__(self, exception_type: str) -> None:
+        super().__init__(exception_type)
+        # The SDK error's class name, such as `APITimeoutError`, for logs and reasons.
+        self.exception_type = exception_type
 
 
 class CacheMiss(Exception):
@@ -86,7 +92,7 @@ class LlmClient:
 
     def complete(
         self,
-        model: str,
+        site: ModelSettings,
         params: Params,
         *,
         prompt_version: str,
@@ -96,15 +102,22 @@ class LlmClient:
     ) -> Message:
         """Return the model's response to `params`, from the cache when it holds one.
 
-        The key holds the model, the prompt version, the parameters and `draw`, the
-        call site's extra state, such as the agent's repetition number.
+        The request is `params` with the call site's model and sampling settings,
+        so what is sent is what the run's setup records. The key holds the model,
+        the prompt version, the request and `draw`, the call site's extra state,
+        such as the agent's repetition number.
 
         Raises:
+            ValueError: `params` sets a sampling key the call site also sets.
             CacheMiss: offline, and the cache doesn't hold this call.
             BudgetExhausted: the run's call or spend limit is reached.
             TransientError: the call failed after the SDK's retries; nothing is cached.
         """
-        state: JsonValue = {"params": dict(params), "draw": draw}
+        if overlap := sorted(set(params) & set(site.sampling)):
+            raise ValueError(f"the call site sets {overlap}; the request may not")
+        request: dict[str, JsonValue] = {**params, **site.sampling}
+        model = site.model
+        state: JsonValue = {"params": request, "draw": draw}
         key = cache_key(model, prompt_version, state)
         cached = self._cache.get(key)
         if cached is not None:
@@ -112,6 +125,7 @@ class LlmClient:
                 message = Message.model_validate(cached)
             except ValidationError:
                 self._cache.discard(key)
+                self._log.event(stage, item, "cache_entry_discarded")
             else:
                 self.cache_hits += 1
                 self._log.event(stage, item, "model_call", cache="hit")
@@ -119,20 +133,31 @@ class LlmClient:
         self.cache_misses += 1
         if self._transport is None:
             raise CacheMiss(f"{stage} {item}: no cached response for key {key}")
-        self.budget.reserve(model)
+        try:
+            self.budget.reserve(model)
+        except BudgetExhausted as error:
+            self._log.event(stage, item, "budget_exhausted", reason=str(error))
+            raise
         started = time.monotonic()
         try:
-            response = self._transport(model, params)
-        except TransientError as error:
+            response = self._transport(model, request)
+            message = Message.model_validate(response)
+        except Exception as error:
+            # Logged, then raised unchanged: a transient failure for the caller to
+            # repeat, anything else to stop the run.
             self._log.event(
                 stage,
                 item,
                 "model_call_failed",
                 duration_ms=_since(started),
-                exception_type=str(error),
+                exception_type=(
+                    error.exception_type
+                    if isinstance(error, TransientError)
+                    else type(error).__name__
+                ),
+                transient=isinstance(error, TransientError),
             )
             raise
-        message = Message.model_validate(response)
         cost = self.budget.charge(model, message.usage)
         self._cache.put(key, model, prompt_version, state, response)
         self._log.event(

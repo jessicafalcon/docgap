@@ -11,6 +11,7 @@ from pathlib import Path
 import anthropic
 import httpx2
 import pytest
+from anthropic.types import Usage
 from pydantic import JsonValue
 
 from docgap.config import LlmConfig, Price
@@ -26,8 +27,10 @@ from docgap.llm import (
     cache_key,
 )
 from docgap.log import EventLog
+from docgap.models import ModelSettings
 
 MODEL = "claude-test"
+SITE = ModelSettings(model=MODEL, sampling={})
 PARAMS: dict[str, JsonValue] = {
     "max_tokens": 100,
     "messages": [{"role": "user", "content": "How many rows?"}],
@@ -81,9 +84,9 @@ def _client(
     return client, sink
 
 
-def _complete(client: LlmClient, draw: int = 1) -> str:
+def _complete(client: LlmClient, draw: int = 1, site: ModelSettings = SITE) -> str:
     message = client.complete(
-        MODEL, PARAMS, prompt_version="v1", draw=draw, stage="agent", item="q01"
+        site, PARAMS, prompt_version="v1", draw=draw, stage="agent", item="q01"
     )
     block = message.content[0]
     assert block.type == "text"
@@ -158,7 +161,7 @@ def test_unpriced_model_is_refused_before_any_call(tmp_path: Path) -> None:
     transport = FakeTransport(_message())
     client, _ = _client(tmp_path, transport, _config())
     with pytest.raises(ValueError, match="no price"):
-        client.complete("other", PARAMS, prompt_version="v1", draw=1, stage="s", item="i")
+        _complete(client, site=ModelSettings(model="other", sampling={}))
     assert transport.calls == []
 
 
@@ -220,7 +223,9 @@ def test_rate_limit_then_success_is_retried(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.parametrize(
-    "answers", [[500, 529, 503], [429, 429, 429], [None, None, None]], ids=["5xx", "429", "refused"]
+    "answers",
+    [[500, 529, 503], [429, 429, 429], [408, 408, 408], [409, 409, 409], [None, None, None]],
+    ids=["5xx", "429", "408", "409", "refused"],
 )
 def test_failures_past_the_retries_are_transient(
     monkeypatch: pytest.MonkeyPatch, answers: list[int | None]
@@ -239,3 +244,60 @@ def test_permanent_error_fails_on_the_first_attempt(
     with pytest.raises(anthropic.APIStatusError):
         send(MODEL, PARAMS)
     assert seen == [status]
+
+
+def test_hung_call_times_out_at_the_configured_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    timeouts: list[object] = []
+
+    def hang(request: httpx2.Request) -> httpx2.Response:
+        timeouts.append(request.extensions["timeout"]["read"])
+        raise httpx2.ReadTimeout("no reply", request=request)
+
+    http_client = anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(hang))
+    send = anthropic_transport(_config(max_retries=1), http_client=http_client)
+    with pytest.raises(TransientError) as raised:
+        send(MODEL, PARAMS)
+    assert raised.value.exception_type == "APITimeoutError"
+    # Each attempt waits at most `[llm] timeout_seconds`.
+    assert timeouts == [5, 5]
+
+
+def test_call_site_sampling_is_sent_and_keyed(tmp_path: Path) -> None:
+    transport = FakeTransport(_message("cold"), _message("warm"))
+    client, _ = _client(tmp_path, transport, _config())
+    hot = ModelSettings(model=MODEL, sampling={"temperature": 1.0})
+    assert [_complete(client), _complete(client, site=hot)] == ["cold", "warm"]
+    assert transport.calls[1] == (MODEL, {**PARAMS, "temperature": 1.0})
+
+
+def test_request_may_not_set_what_the_call_site_sets(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    client, _ = _client(tmp_path, transport, _config())
+    site = ModelSettings(model=MODEL, sampling={"max_tokens": 5})
+    with pytest.raises(ValueError, match="max_tokens"):
+        _complete(client, site=site)
+
+
+def test_budget_stop_and_permanent_failure_are_logged(tmp_path: Path) -> None:
+    transport = FakeTransport(ValueError("bad request"))
+    client, sink = _client(tmp_path, transport, _config(max_calls=1))
+    with pytest.raises(ValueError, match="bad request"):
+        _complete(client)
+    with pytest.raises(BudgetExhausted):
+        _complete(client, draw=2)
+    failed, stopped = _events(sink)
+    assert (failed["exception_type"], failed["transient"]) == ("ValueError", False)
+    assert stopped["event"] == "budget_exhausted"
+
+
+def test_cache_tokens_are_charged_at_bounds_that_never_undercount() -> None:
+    budget = Budget(_config())
+    usage = Usage(
+        input_tokens=100_000,
+        output_tokens=0,
+        cache_read_input_tokens=100_000,
+        cache_creation_input_tokens=100_000,
+    )
+    # $1 per million input tokens: 0.1 + 0.1 for reads + twice 0.1 for writes.
+    assert budget.charge(MODEL, usage) == pytest.approx(0.4)

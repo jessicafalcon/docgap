@@ -53,19 +53,24 @@ row_cap = 200
 
 [llm]
 # Per model call, at every call site. The SDK retries a connection error, a timeout,
-# 408, 409, 429 and 5xx, with backoff honouring Retry-After, `max_retries` times.
-timeout_seconds = 120
+# 408, 409, 429 and 5xx, with backoff honouring Retry-After, `max_retries` times. The
+# timeout is the SDK's own estimate for the largest reply a call site asks for without
+# streaming: 3,600 s × 16,000 tokens (the agent's `max_tokens`) / 128,000 = 450 s.
+timeout_seconds = 450
 max_retries = 2
-# Per run, over live calls only: a cache hit costs nothing. A call that would start
-# with either limit reached is refused, and the run stops. One pilot pass makes at
-# most 2 models × 72 runs × 9 calls = 1,296 calls, about $30 at the rates the brief
-# estimates.
-max_calls = 1300
+# Per process, over live calls only: a cache hit costs nothing, and a resumed run
+# starts again from zero. A call that would start with either limit reached is refused,
+# and the run stops. A failed call counts as a call but adds no spend, since the API
+# reports no usage for it. One pilot pass makes at most 2 models × 72 runs × 9 calls
+# = 1,296 calls, about $30 at the rates the brief estimates; the rest of the call limit
+# is room for calls that fail and are made again.
+max_calls = 1400
 max_spend_usd = 45
 
 # USD per million tokens, from the provider's price list (checked 2026-10-01). Cache
-# writes and reads are charged at the input rate, an overestimate: the agent sets no
-# cache breakpoints. Every model a call site or the pilot names needs a price.
+# reads are charged at the input rate and cache writes at twice it, bounds that never
+# undercount; the agent sets no cache breakpoints. Every model a call site or the
+# pilot names needs a price.
 [llm.prices]
 "claude-haiku-4-5-20251001" = { input = 1.0, output = 5.0 }
 "claude-opus-5-5" = { input = 4.0, output = 20.0 }
