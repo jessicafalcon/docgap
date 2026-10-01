@@ -1,4 +1,4 @@
-"""Read the dbt manifest into the mart schema that `resolve` qualifies queries against."""
+"""Read the dbt manifest: the mart schema `resolve` qualifies against, and the tags `lint` checks."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
 from docgap.config import ManifestConfig
-from docgap.models import Identifier
+from docgap.models import Identifier, Sensitivity
 
-__all__ = ["DBT_SCHEMA_VERSION", "Marts", "load_marts", "read_marts"]
+__all__ = ["DBT_SCHEMA_VERSION", "Marts", "lint_manifest", "load_marts", "read_marts"]
 
 # The manifest shape this reader was written against. Another version fails
 # loading instead of being read under a guessed shape.
@@ -21,6 +21,7 @@ DBT_SCHEMA_VERSION = "https://schemas.getdbt.com/dbt/manifest/v12.json"
 _ADAPTERS = frozenset({"duckdb", "snowflake"})
 _RELATIONS = frozenset({"model", "seed", "snapshot"})
 _IDENTIFIER = TypeAdapter[str](Identifier)
+_SENSITIVITIES = frozenset(sensitivity.value for sensitivity in Sensitivity)
 
 
 class _Read(BaseModel):
@@ -39,6 +40,9 @@ class _ContractConfig(_Read):
 
 class _NodeConfig(_Read):
     contract: _ContractConfig = _ContractConfig()
+    # A tag of any JSON type is read, so `lint` reports a wrong one instead of the
+    # manifest failing to load.
+    meta: dict[str, JsonValue] = {}
 
 
 class _Column(_Read):
@@ -47,6 +51,8 @@ class _Column(_Read):
     description: str = ""
     data_type: str | None = None
     quote: bool | None = None
+    # dbt 1.12 writes a column's meta both here and under its `config`.
+    meta: dict[str, JsonValue] = {}
 
 
 class _Node(_Read):
@@ -127,14 +133,7 @@ def _mart_columns(node: _Node) -> tuple[dict[str, str], set[str]]:
     return columns, documented
 
 
-def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:
-    """Read the models in the configured mart schema from a dbt `manifest.json`.
-
-    Raises:
-        ValueError: the manifest is another dbt schema version or adapter, the mart
-            schema has no relation, or a mart relation is not a contracted model
-            with typed, unquoted columns.
-    """
+def _parse(manifest: bytes) -> _Manifest:
     try:
         parsed = _Manifest.model_validate_json(manifest)
     except ValidationError as error:
@@ -147,15 +146,28 @@ def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:
         raise ValueError(
             f"dbt manifest: adapter {parsed.metadata.adapter_type!r}, expected one of {sorted(_ADAPTERS)}"
         )
+    return parsed
+
+
+def _nodes(parsed: _Manifest) -> list[_Node]:
+    return sorted(parsed.nodes.values(), key=lambda node: node.unique_id)
+
+
+def _in_marts(node: _Node, config: ManifestConfig) -> bool:
+    return (
+        node.resource_type in _RELATIONS
+        and node.database is not None
+        and node.schema_ is not None
+        and (node.database.upper(), node.schema_.upper())
+        == (config.mart_database, config.mart_schema)
+    )
+
+
+def _marts(parsed: _Manifest, config: ManifestConfig) -> Marts:
     tables: dict[str, dict[str, str]] = {}
     documented: set[str] = set()
-    for node in sorted(parsed.nodes.values(), key=lambda node: node.unique_id):
-        if node.resource_type not in _RELATIONS or node.database is None or node.schema_ is None:
-            continue
-        if (node.database.upper(), node.schema_.upper()) != (
-            config.mart_database,
-            config.mart_schema,
-        ):
+    for node in _nodes(parsed):
+        if not _in_marts(node, config):
             continue
         table = _identifier(node.alias or "", f"{node.unique_id} alias")
         if table in tables:
@@ -169,6 +181,48 @@ def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:
             f"dbt manifest: no relation in {config.mart_database}.{config.mart_schema}"
         )
     return Marts(config.mart_database, config.mart_schema, tables, frozenset(documented))
+
+
+def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:
+    """Read the models in the configured mart schema from a dbt `manifest.json`.
+
+    Raises:
+        ValueError: the manifest is another dbt schema version or adapter, the mart
+            schema has no relation, or a mart relation is not a contracted model
+            with typed, unquoted columns.
+    """
+    return _marts(_parse(manifest), config)
+
+
+def lint_manifest(manifest: bytes, config: ManifestConfig) -> list[str]:
+    """Return each gap in the metadata contract, one line per model or mart column.
+
+    Every model needs a non-blank `meta.owner`, and every mart column a
+    `meta.sensitivity` of `public`, `internal` or `restricted`. The marts must load
+    first, so a manifest `analyze` can't read never passes.
+
+    Raises:
+        ValueError: as `load_marts`.
+    """
+    parsed = _parse(manifest)
+    _marts(parsed, config)
+    gaps: list[str] = []
+    for node in _nodes(parsed):
+        if node.resource_type != "model":
+            continue
+        owner = node.config.meta.get("owner")
+        if not (isinstance(owner, str) and owner.strip()):
+            gaps.append(f"{node.unique_id}: meta.owner is {owner!r}, expected a non-blank name")
+        if not _in_marts(node, config):
+            continue
+        for column in node.columns.values():
+            sensitivity = column.meta.get("sensitivity")
+            if not (isinstance(sensitivity, str) and sensitivity in _SENSITIVITIES):
+                gaps.append(
+                    f"{node.unique_id}.{column.name}: meta.sensitivity is {sensitivity!r}, "
+                    f"expected one of {sorted(_SENSITIVITIES)}"
+                )
+    return gaps
 
 
 def read_marts(path: Path, config: ManifestConfig) -> tuple[Marts, str]:

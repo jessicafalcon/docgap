@@ -47,6 +47,7 @@ the file is the current standard, and memory of it may be stale.
 | **Fresh clone** | `uv sync`, `uv run pre-commit install` (the pre-commit and commit-msg hooks); gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
 | **Offline data** needed (DuckDB work) and `data/sample/` is missing | `uv run python loader/offline_sample.py`, with the sources in `data/open_damir/` | It checks sources and outputs against the locks; `--update-lock` only under an ADR that supersedes 0013 |
 | **Offline warehouse** needed and `data/warehouse/<source>/RAW.duckdb` is missing | `uv run python loader/load_duckdb.py sample` (or `fixture`, the CI fixture) | It checks each file against `loader/sample.lock` and its header against `loader/raw_prestations.sql`; a re-run loads nothing twice |
+| **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -70,8 +71,9 @@ In this order. Stop at the first step that fails, fix, and restart from there;
 after any fix, step 1 always runs again.
 
 1. `uv run pytest` and `uv run pre-commit run --all-files` are green. If `infra/`
-   changed: `terraform fmt -check && terraform validate`. If `warehouse/` changed:
-   `dbt parse` and `docgap lint`.
+   changed: `terraform fmt -check && terraform validate`. If `warehouse/`,
+   `loader/` or `fixtures/damir/` changed: what CI runs, `dbt build` over the
+   fixture and `uv run docgap lint`.
 2. Cleanup review with the four `/simplify` angles (reuse, simplification,
    efficiency, altitude), sized by what the PR changes; fix or answer the findings:
    - **Docs only** (every changed path is `*.md`): skip it; the auditor in step 3
@@ -162,8 +164,9 @@ code is lost to the next session, and the review agents treat it as a finding.
   it. A `docgap` command is product behaviour, and the README documents it.
 - **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
-  values that pick the arms' content (the rank weight, gate bands, *k*, seeds,
-  `[actors]`, `[manifest]`, the history window, and the model and prompt version
+  values that pick the arms' content (the rank weight, gate bands, *k*, the mart
+  columns' `meta.sensitivity` tags, seeds, `[actors]`, `[manifest]`, the history
+  window, and the model and prompt version
   at the attribution, drafter and gate call sites) never change. A change to the
   snapshot, manifest, resolve, usage, rank or evidence code that changes its
   golden outputs, and any other `EVAL_PROTOCOL.md` change,
@@ -200,17 +203,18 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/raw-load`, Phase 2 PR 1, in review.
+- **Open PRs:** `feat/staging-fact-lint`, Phase 2 PR 2, in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
-  - **PR 1:** `feat/raw-load`, in review. The typed RAW DDL (one spec for
+  - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
     offline DuckDB load over `data/sample/` or `fixtures/damir/`, and
     `loader/profile_sources.py`. It also moves the baseline docs lock after
     Phase 3's offline pilot (ADR 0021).
-  - **PR 2:** `feat/staging-fact-lint`. The dbt project on DuckDB, the staging
+  - **PR 2:** `feat/staging-fact-lint`, in review. The dbt project on DuckDB, the staging
     model (one row per source line: the full three months repeat no grain key), the
-    contracted `fct_reimbursements`, `docgap lint` calling `load_marts`, and CI
-    `dbt build` over `fixtures/damir/`.
+    contracted `fct_reimbursements` (DAMIR columns only: the key stays in staging),
+    `docgap lint` calling `load_marts`, and CI `dbt build` over `fixtures/damir/`.
+    The mart sensitivity tags are frozen at `preregistered` (ADR 0022).
   - **PR 3:** `feat/dims-agg`. Seeds (code→label pairs only), the 4 dimensions
     with the dictionary's missing codes and a cap on their share of fact rows,
     and `agg_monthly_spend_by_category`, whose category needs a decision and an
@@ -218,4 +222,5 @@ Update after every PR and merge, in the same change. A new session resumes from 
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** after PR 1 merges, PR 2 from an up-to-date `main`.
+- **Next step:** after PR 2 merges, PR 3 (`feat/dims-agg`) from an up-to-date
+  `main`, with the category decision and its ADR brought to review first.

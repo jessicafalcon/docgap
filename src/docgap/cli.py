@@ -22,6 +22,7 @@ from pydantic import ValidationError
 
 import docgap
 from docgap.config import load_config
+from docgap.manifest import lint_manifest
 from docgap.models import Environment, RankingScope, RunSetup
 from docgap.pipeline import MANIFEST_FILE, REPORT_FILE, analyze, run_id
 from docgap.rank import RANKED_GAPS_FILE
@@ -199,6 +200,25 @@ def analyze_command(
     typer.echo(f"ranking {run_dir / 'rank' / RANKED_GAPS_FILE}")
     typer.echo(f"report {run_dir / REPORT_FILE}")
     typer.echo(f"manifest {run_dir / MANIFEST_FILE}")
+
+
+@app.command("lint")
+def lint_command(
+    manifest: Annotated[Path, typer.Option(help="dbt manifest.json.")] = Path(
+        "warehouse/dbt/target/manifest.json"
+    ),
+    config: Annotated[Path, typer.Option(help="docgap.toml.")] = Path("docgap.toml"),
+) -> None:
+    """Check `meta.owner` on every model and `meta.sensitivity` on every mart column."""
+    try:
+        gaps = lint_manifest(manifest.read_bytes(), load_config(config).manifest)
+    except (OSError, ValueError) as error:
+        _fail(error)
+    for gap in gaps:
+        typer.echo(f"docgap lint: {gap}", err=True)
+    if gaps:
+        raise typer.Exit(1)
+    typer.echo("docgap lint: every model has an owner and every mart column a sensitivity")
 
 
 if __name__ == "__main__":

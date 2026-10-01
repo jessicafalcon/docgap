@@ -4,8 +4,12 @@
 (schema v12, DuckDB adapter): three mart models with enforced contracts
 (`fct_reimbursements`, `dim_prestation`, `dim_region`), a staging model without
 one, a seed and a test. It carries only the fields `docgap.manifest` reads, plus a
-few it ignores. The columns match the queries in `fixtures/query_history/basic.jsonl`
-and the hand-checked queries in `tests/test_resolve.py`.
+few it ignores: `config.meta.owner` on each model and `meta.sensitivity` on each
+column are the tags `docgap lint` reads. The pinned dbt 1.12.5 writes the same
+fields, and a column's `meta` under its `config` as well. The columns match the
+queries in `fixtures/query_history/basic.jsonl` and the hand-checked queries in
+`tests/test_resolve.py`.
 
-The unit tests keep this file. Phase 2's "Freeze the manifest" step adds a test
-that reads the manifest the real dbt project builds.
+The unit tests keep this file. CI reads the manifest the real dbt project builds
+with `docgap lint`, and Phase 2's "Freeze the manifest" step adds a test that reads
+the frozen one.

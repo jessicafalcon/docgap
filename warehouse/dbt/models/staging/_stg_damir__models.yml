@@ -1,0 +1,16 @@
+models:
+  - name: stg_damir__prestations
+    description: >-
+      Open DAMIR reimbursement lines with their text codes trimmed and a surrogate
+      key over the grain, one row per source line.
+    config:
+      meta:
+        owner: data-team
+    columns:
+      - name: PRESTATION_KEY
+        description: >-
+          MD5 of the line's grain fields, every field but the measures. Unique
+          while no two source lines share a dimension combination.
+        data_tests:
+          - unique
+          - not_null

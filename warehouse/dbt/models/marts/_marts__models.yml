@@ -1,0 +1,287 @@
+models:
+  - name: fct_reimbursements
+    description: >-
+      Open DAMIR reimbursements, one row per source line of the monthly files.
+    config:
+      meta:
+        owner: data-team
+    # Column descriptions are left blank until the baseline docs are drawn by the
+    # recorded rule (ADR 0021). `restricted` marks the beneficiary's demographics
+    # (age bracket, sex, region of residence); every other column is published
+    # open data, so `public`.
+    columns:
+      - name: FLX_ANN_MOI
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: ORG_CLE_REG
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: AGE_BEN_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: restricted
+      - name: BEN_RES_REG
+        data_type: integer
+        config:
+          meta:
+            sensitivity: restricted
+      - name: BEN_CMU_TOP
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: BEN_QLT_COD
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: BEN_SEX_COD
+        data_type: integer
+        config:
+          meta:
+            sensitivity: restricted
+      - name: DDP_SPE_COD
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: ETE_CAT_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: ETE_REG_COD
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: ETE_TYP_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: ETP_REG_COD
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: ETP_CAT_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: MDT_TYP_COD
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: MFT_COD
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_FJH_TYP
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_ACT_COG
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_ACT_NBR
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_ACT_QTE
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_DEP_MNT
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_PAI_MNT
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_REM_BSE
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_REM_MNT
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: FLT_ACT_COG
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: FLT_ACT_NBR
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: FLT_ACT_QTE
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: FLT_PAI_MNT
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: FLT_DEP_MNT
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: FLT_REM_MNT
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: SOI_ANN
+        data_type: varchar
+        config:
+          meta:
+            sensitivity: public
+      - name: SOI_MOI
+        data_type: varchar
+        config:
+          meta:
+            sensitivity: public
+      - name: ASU_NAT
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: ATT_NAT
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: CPL_COD
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: CPT_ENV_TYP
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: DRG_AFF_NAT
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: ETE_IND_TAA
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: EXO_MTF
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: MTM_NAT
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_NAT
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_PPU_SEC
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_REM_TAU
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_REM_TYP
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRS_PDS_QCP
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: EXE_INS_REG
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PSE_ACT_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PSE_ACT_CAT
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PSE_SPE_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PSE_STJ_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PRE_INS_REG
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PSP_ACT_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PSP_ACT_CAT
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PSP_SPE_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: PSP_STJ_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+      - name: TOP_PS5_TRG
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public

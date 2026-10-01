@@ -10,9 +10,10 @@ import pytest
 from conftest import MANIFEST, MARTS_CONFIG
 
 from docgap.config import ManifestConfig
-from docgap.manifest import load_marts
+from docgap.manifest import lint_manifest, load_marts
 
 FCT = "model.docgap.fct_reimbursements"
+STG = "model.docgap.stg_damir__prestations"
 
 
 def _load(edit: Callable[[dict[str, Any]], object] | None = None) -> Any:
@@ -121,3 +122,39 @@ def test_a_column_declared_twice_fails() -> None:
 
     with pytest.raises(ValueError, match="declared twice"):
         _load(twice)
+
+
+def _lint(edit: Callable[[dict[str, Any]], object]) -> list[str]:
+    manifest = json.loads(MANIFEST.read_bytes())
+    edit(manifest)
+    return lint_manifest(json.dumps(manifest).encode(), MARTS_CONFIG)
+
+
+def test_lint_passes_a_tagged_manifest() -> None:
+    assert lint_manifest(MANIFEST.read_bytes(), MARTS_CONFIG) == []
+
+
+@pytest.mark.parametrize("value", [None, "", "secret", "RESTRICTED", ["restricted"]])
+def test_lint_names_a_mart_column_without_a_known_sensitivity(value: object) -> None:
+    meta = ("nodes", FCT, "columns", "PRS_NAT", "meta")
+    edit = _set(meta, {} if value is None else {"sensitivity": value})
+    assert _lint(edit) == [
+        f"{FCT}.PRS_NAT: meta.sensitivity is {value!r}, "
+        "expected one of ['internal', 'public', 'restricted']"
+    ]
+
+
+@pytest.mark.parametrize("model", [FCT, STG])
+@pytest.mark.parametrize("value", [None, " ", 7])
+def test_lint_names_a_model_without_an_owner(model: str, value: object) -> None:
+    edit = _set(("nodes", model, "config", "meta"), {} if value is None else {"owner": value})
+    assert _lint(edit) == [f"{model}: meta.owner is {value!r}, expected a non-blank name"]
+
+
+def test_lint_asks_no_sensitivity_outside_the_marts() -> None:
+    assert _lint(_set(("nodes", STG, "columns", "PRS_NAT", "meta"), {})) == []
+
+
+def test_lint_fails_on_marts_analyze_could_not_read() -> None:
+    with pytest.raises(ValueError, match="enforced contract"):
+        _lint(_set(("nodes", FCT, "config", "contract", "enforced"), False))
