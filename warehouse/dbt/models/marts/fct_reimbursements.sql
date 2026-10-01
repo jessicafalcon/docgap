@@ -1,10 +1,10 @@
--- The fact at the staging grain, one row per source line. ETB_DCS_MCO stays out: the
--- dictionary has no entry for it, so no draft for it could be graded (ADR 0012).
+-- The fact at the staging grain, one row per source line. Only DAMIR columns with a
+-- dictionary entry: a draft for any other column couldn't be graded (ADR 0012). So
+-- ETB_DCS_MCO stays out, and so does staging's surrogate key, tested there.
 -- Every column is cast to its contract type, as in every mart: dbt compares the type
 -- names each adapter reports, so a type that changes upstream (an expression, a
 -- Snowflake VARCHAR length) would fail the contract on one warehouse and not the other.
 select
-    cast(PRESTATION_KEY as varchar) as PRESTATION_KEY,
     cast(FLX_ANN_MOI as integer) as FLX_ANN_MOI,
     cast(ORG_CLE_REG as integer) as ORG_CLE_REG,
     cast(AGE_BEN_SNDS as integer) as AGE_BEN_SNDS,

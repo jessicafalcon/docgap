@@ -10,14 +10,6 @@ models:
     # (age bracket, sex, region of residence); every other column is published
     # open data, so `public`.
     columns:
-      - name: PRESTATION_KEY
-        data_type: varchar
-        data_tests:
-          - unique
-          - not_null
-        config:
-          meta:
-            sensitivity: public
       - name: FLX_ANN_MOI
         data_type: integer
         config:
