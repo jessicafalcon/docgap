@@ -1,0 +1,23 @@
+# Offline profiles: one DuckDB warehouse per loaded source, from
+# `uv run python loader/load_duckdb.py {fixture,sample}`. Paths are relative to
+# warehouse/dbt/, where dbt runs. DuckDB names each database after its file, so
+# the models build into ANALYTICS and read the source from RAW, read-only.
+docgap:
+  target: fixture
+  outputs:
+    fixture:
+      type: duckdb
+      path: ../../data/warehouse/fixture/ANALYTICS.duckdb
+      schema: MAIN
+      threads: 4
+      attach:
+        - path: ../../data/warehouse/fixture/RAW.duckdb
+          read_only: true
+    sample:
+      type: duckdb
+      path: ../../data/warehouse/sample/ANALYTICS.duckdb
+      schema: MAIN
+      threads: 4
+      attach:
+        - path: ../../data/warehouse/sample/RAW.duckdb
+          read_only: true

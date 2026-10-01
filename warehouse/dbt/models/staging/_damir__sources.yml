@@ -1,0 +1,10 @@
+sources:
+  - name: damir
+    description: The Open DAMIR monthly files as delivered, loaded by loader/.
+    database: RAW
+    schema: DAMIR
+    tables:
+      - name: PRESTATIONS
+        description: >-
+          One row per source line of the pinned monthly files, typed by
+          loader/raw_prestations.sql.

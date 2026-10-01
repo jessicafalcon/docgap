@@ -1,0 +1,31 @@
+# The Open DAMIR warehouse: RAW.DAMIR.PRESTATIONS → ANALYTICS.STAGING → ANALYTICS.MARTS.
+# The same project builds on DuckDB offline and on Snowflake (ADR 0014).
+name: docgap
+version: "1.0.0"
+profile: docgap
+
+flags:
+  # dbt would otherwise send usage events on every command, and CI has no reason to.
+  send_anonymous_usage_stats: false
+
+# Database and schema names are uppercase and quoted, so a rebuild on DuckDB finds the
+# relations it built: unquoted, dbt searches for them lowercased and refuses the
+# uppercase match. Snowflake stores an unquoted name uppercased, so on it this changes
+# nothing. Model names stay unquoted, as Snowflake uppercases them.
+quoting:
+  database: true
+  schema: true
+  identifier: false
+
+models:
+  docgap:
+    staging:
+      +schema: STAGING
+      +materialized: view
+    marts:
+      +schema: MARTS
+      +materialized: table
+      # docgap reads only contracted models in MARTS: the manifest lists the
+      # columns declared in YAML, and a contract makes the build fail on any other.
+      +contract:
+        enforced: true

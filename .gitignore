@@ -18,6 +18,10 @@ __pycache__/
 terraform.tfstate*
 .terraform/
 
+# dbt's build output and logs
+warehouse/dbt/target/
+warehouse/dbt/logs/
+
 # Pipeline outputs (fixtures/ is committed; runs/ is regenerated)
 runs/
 
