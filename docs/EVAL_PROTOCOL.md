@@ -168,6 +168,8 @@ the tag (`CLAUDE.md` → "After `preregistered`"):
 - the rank weight *w* = 1 (`[rank]`)
 - the gate bands, 0.8 and 0.5 (`[gate]`)
 - *k* = 11 (`[evidence]`)
+- each mart column's `meta.sensitivity` tag, which decides whether its evidence
+  carries values (ADR 0022)
 - the role-to-actor mapping (`[actors]`)
 - the history window the ranking reads (`[snapshot] history_window_days`)
 - the mart database and schema whose columns can be ranked or drawn (`[manifest]`)

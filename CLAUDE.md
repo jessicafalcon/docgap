@@ -71,9 +71,9 @@ In this order. Stop at the first step that fails, fix, and restart from there;
 after any fix, step 1 always runs again.
 
 1. `uv run pytest` and `uv run pre-commit run --all-files` are green. If `infra/`
-   changed: `terraform fmt -check && terraform validate`. If `warehouse/` or
-   `loader/raw_prestations.sql` changed: what CI runs, `dbt build` over the fixture
-   and `uv run docgap lint`.
+   changed: `terraform fmt -check && terraform validate`. If `warehouse/`,
+   `loader/` or `fixtures/damir/` changed: what CI runs, `dbt build` over the
+   fixture and `uv run docgap lint`.
 2. Cleanup review with the four `/simplify` angles (reuse, simplification,
    efficiency, altitude), sized by what the PR changes; fix or answer the findings:
    - **Docs only** (every changed path is `*.md`): skip it; the auditor in step 3
@@ -164,8 +164,9 @@ code is lost to the next session, and the review agents treat it as a finding.
   it. A `docgap` command is product behaviour, and the README documents it.
 - **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
-  values that pick the arms' content (the rank weight, gate bands, *k*, seeds,
-  `[actors]`, `[manifest]`, the history window, and the model and prompt version
+  values that pick the arms' content (the rank weight, gate bands, *k*, the mart
+  columns' `meta.sensitivity` tags, seeds, `[actors]`, `[manifest]`, the history
+  window, and the model and prompt version
   at the attribution, drafter and gate call sites) never change. A change to the
   snapshot, manifest, resolve, usage, rank or evidence code that changes its
   golden outputs, and any other `EVAL_PROTOCOL.md` change,
@@ -202,17 +203,18 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** none.
+- **Open PRs:** `feat/staging-fact-lint`, Phase 2 PR 2, in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
     offline DuckDB load over `data/sample/` or `fixtures/damir/`, and
     `loader/profile_sources.py`. It also moves the baseline docs lock after
     Phase 3's offline pilot (ADR 0021).
-  - **PR 2:** `feat/staging-fact-lint`, in progress. The dbt project on DuckDB, the staging
+  - **PR 2:** `feat/staging-fact-lint`, in review. The dbt project on DuckDB, the staging
     model (one row per source line: the full three months repeat no grain key), the
-    contracted `fct_reimbursements`, `docgap lint` calling `load_marts`, and CI
-    `dbt build` over `fixtures/damir/`.
+    contracted `fct_reimbursements` (DAMIR columns only: the key stays in staging),
+    `docgap lint` calling `load_marts`, and CI `dbt build` over `fixtures/damir/`.
+    The mart sensitivity tags are frozen at `preregistered` (ADR 0022).
   - **PR 3:** `feat/dims-agg`. Seeds (code→label pairs only), the 4 dimensions
     with the dictionary's missing codes and a cap on their share of fact rows,
     and `agg_monthly_spend_by_category`, whose category needs a decision and an
@@ -220,4 +222,5 @@ Update after every PR and merge, in the same change. A new session resumes from 
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** finish PR 2, `feat/staging-fact-lint`, and open it for review.
+- **Next step:** after PR 2 merges, PR 3 (`feat/dims-agg`) from an up-to-date
+  `main`, with the category decision and its ADR brought to review first.

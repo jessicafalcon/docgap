@@ -92,8 +92,10 @@ cassettes for provider formats. Never the real API in tests.
 ## Where tests live and how they run
 
 - `tests/` mirrors `src/docgap/`, plus `tests/hooks/` and `tests/loader/` for the
-  scripts beside it; `tests/golden/` holds expected outputs; `fixtures/` holds the
-  DAMIR fixture, the frozen snapshot, manifest, profiles and model cache.
+  scripts beside it, and `tests/warehouse/` for rules on the dbt project's files
+  (`dbt build` runs the dbt tests themselves); `tests/golden/` holds expected
+  outputs; `fixtures/` holds the DAMIR fixture, the frozen snapshot, manifest,
+  profiles and model cache.
 - `pyproject.toml` enables `--doctest-modules`; README `>>>` blocks run too once
   Phase 8 adds `--doctest-glob="README.md"`.
 - CI runs `uv sync --locked && uv run --frozen pytest` with no credentials in the
