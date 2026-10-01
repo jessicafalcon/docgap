@@ -59,6 +59,24 @@ too; opening a network socket fails:
 uv run pytest
 ```
 
+### Build the warehouse offline and lint its metadata
+
+The dbt project in `warehouse/dbt/` builds on DuckDB over the committed Open
+DAMIR fixture, as CI does on every pull request:
+
+```sh
+uv run python loader/load_duckdb.py fixture
+(cd warehouse/dbt && uv run dbt build)
+uv run docgap lint
+```
+
+`docgap lint` reads the manifest that `dbt build` wrote
+(`warehouse/dbt/target/manifest.json`, or `--manifest`). It fails with one line
+per gap in the metadata contract: a model with no `meta.owner`, or a mart column
+whose `meta.sensitivity` isn't `public`, `internal` or `restricted`. It first
+reads the marts the way `analyze` does, so it also fails on any relation in
+`ANALYTICS.MARTS` that isn't a dbt model with an enforced contract.
+
 ## How it works
 
 A deterministic pipeline, with the model calls at the edges:
@@ -96,7 +114,8 @@ the Anthropic API for the agent, drafter and judgments.
 | --- | --- |
 | `src/docgap/` | The tool: contracts, config, and the stages built so far |
 | `eval/` | Evaluation material; `eval/reference/` holds the official dictionary, which `src/` never reads |
-| `loader/` | Source checksums and the offline sample cut |
+| `loader/` | Source checksums, the offline sample cut, and the `RAW` table and its DuckDB load |
+| `warehouse/dbt/` | The dbt project: staging and the contracted marts over Open DAMIR |
 | `fixtures/` | The Open DAMIR fixture and query-history fixtures for offline tests |
 | `docs/` | The evaluation protocol and the decision records in `docs/adr/` |
 | `PROJECT-BRIEF.md` | The plan: phases, steps, risks and open decisions |

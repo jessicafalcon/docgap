@@ -193,3 +193,28 @@ def test_environment_holds_runtime_dependencies_only() -> None:
     names = {package.split("==")[0] for package in _runtime_packages()}
     assert {"pydantic", "pyarrow", "sqlglot", "typer"} <= names
     assert not names & {"docgap", "pytest", "ruff", "pyright", "hypothesis"}
+
+
+def test_lint_exits_1_and_names_each_gap(tmp_path: Path) -> None:
+    manifest = json.loads(MANIFEST.read_bytes())
+    del manifest["nodes"]["model.docgap.dim_region"]["config"]["meta"]["owner"]
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest))
+    result = CliRunner().invoke(app, ["lint", f"--manifest={path}", f"--config={CONFIG}"])
+    assert result.exit_code == 1
+    assert result.output == (
+        "docgap lint: model.docgap.dim_region: meta.owner is None, expected a non-blank name\n"
+    )
+
+
+def test_lint_passes_a_tagged_manifest() -> None:
+    result = CliRunner().invoke(app, ["lint", f"--manifest={MANIFEST}", f"--config={CONFIG}"])
+    assert result.exit_code == 0, result.output
+
+
+def test_lint_reports_an_unreadable_manifest_in_one_line(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        app, ["lint", f"--manifest={tmp_path / 'missing.json'}", f"--config={CONFIG}"]
+    )
+    assert result.exit_code == 1
+    assert result.output.startswith("docgap: [Errno 2]")
