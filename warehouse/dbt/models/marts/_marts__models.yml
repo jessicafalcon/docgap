@@ -304,11 +304,13 @@ models:
             sensitivity: public
 
   # The dimensions hold the dictionary's code→label pairs, seeded by
-  # `loader/code_list_seeds.py`. Region and age bracket are the beneficiary's
+  # `loader/code_list_seeds.py`. Their descriptions, like the aggregate's, state the
+  # grain in column codes only: a column's meaning waits for the baseline docs
+  # (ADR 0021). Region and age bracket are the beneficiary's
   # demographics, so `restricted` as in the fact (ADR 0022).
   - name: dim_age_bracket
     description: >-
-      Beneficiary age brackets, one row per code.
+      One row per AGE_BEN_SNDS code, with its label.
     config:
       meta:
         owner: data-team
@@ -331,7 +333,7 @@ models:
 
   - name: dim_benefit_type
     description: >-
-      Benefit types, one row per code.
+      One row per PRS_NAT code, with its label.
     config:
       meta:
         owner: data-team
@@ -353,7 +355,7 @@ models:
 
   - name: dim_provider_activity
     description: >-
-      Executing provider activities, one row per code.
+      One row per PSE_ACT_SNDS code, with its label.
     config:
       meta:
         owner: data-team
@@ -376,7 +378,7 @@ models:
 
   - name: dim_region
     description: >-
-      Beneficiary regions of residence, one row per code.
+      One row per BEN_RES_REG code, with its label.
     config:
       meta:
         owner: data-team
@@ -399,7 +401,7 @@ models:
 
   - name: agg_monthly_spend_by_category
     description: >-
-      Spend per processing month and executing provider activity.
+      One row per FLX_ANN_MOI and PSE_ACT_SNDS.
     config:
       meta:
         owner: data-team
