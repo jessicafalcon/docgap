@@ -36,6 +36,9 @@ are then written once, over the marts the pilot leaves. ADR 0021 still holds: th
 lock is drawn after the pilot and merged after the questions' pull request, so the
 questions and every setup change come before it. Option 4 bounds the spend and the
 calendar, and fixes before the first pass when "nothing makes a model eligible".
+A mart change that writing the 40 shows is needed, such as the specialty dimension
+ADR 0023 leaves out, is still allowed until the lock. It changes what the agent
+sees, so it runs the pilot again (ADR 0012), and that pass counts toward the two.
 
 ### Consequences
 

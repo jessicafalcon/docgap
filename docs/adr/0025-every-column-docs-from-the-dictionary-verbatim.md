@@ -9,10 +9,12 @@
 The offline pilot's full-docs configuration documents every mart column from the
 dictionary. The same text is the ceiling arm's, and its locked half is the
 baseline's (ADR 0021), so it is fixed at the tag. The dictionary is French: its
-variable sheet, `OPEN DAMIR`, gives each variable a label (`Libellé`) and, for some,
-a comment (`Commentaires`) of up to several hundred characters. The questions are in
-English. Under ADR 0024 the text is written after the pilot's questions and before
-the 40, by the person who then writes the 40. Offline, the agent's `describe()`
+variable sheet, `OPEN DAMIR`, gives each of its 61 variables a label (`Libellé`),
+and 33 of them a comment (`Commentaires`): 16 comments run over 200 characters,
+the longest 730 (counted on 2026-10-01 with openpyxl over the sheet, stripped of
+leading and trailing whitespace). The questions are in English. Under ADR 0024
+the text is written after the pilot's questions and before the 40, by the person
+who then writes the 40. Offline, the agent's `describe()`
 reads descriptions from the dbt manifest. Which text documents each column, and how
 does it reach the full-docs manifest?
 
@@ -46,7 +48,10 @@ option 5 would add a path the trial never uses.
 - Good, because the agent reads the full-docs text the same way it reads any arm's.
 - Bad, because the docs are French and the questions English. Both candidate models
   read French, and the pilot measures the result.
-- Bad, because drafts in English would put two languages in an arm. Phase 5's
-  drafter writes French, so an arm reads in one language (owed by the drafter step).
-- Bad, because some comments are far longer than the drafter's 200-character cap, so
+- Bad, because drafts in English would put two languages in an arm's column docs.
+  Phase 5's drafter writes French (owed by the drafter step). The model
+  descriptions stay English: they state the grain in column codes.
+- Bad, because the text and its script join the values frozen at the tag
+  (`EVAL_PROTOCOL.md`, "Values that pick the arms' content").
+- Bad, because 16 comments are longer than the drafter's 200-character cap, so
   the ceiling arm and the baseline carry longer text than any draft.

@@ -167,8 +167,8 @@ code is lost to the next session, and the review agents treat it as a finding.
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, the mart
   columns' `meta.sensitivity` tags, seeds, `[actors]`, `[manifest]`, the history
-  window, and the model and prompt version
-  at the attribution, drafter and gate call sites) never change. A change to the
+  window, the every-column docs text and its script, and the model and prompt
+  version at the attribution, drafter and gate call sites) never change. A change to the
   snapshot, manifest, resolve, usage, rank or evidence code that changes its
   golden outputs, and any other `EVAL_PROTOCOL.md` change,
   needs an ADR with a justification, and the results report the deviation.
@@ -231,7 +231,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
     questions, with at most two reruns (ADR 0024); the every-column docs are the
     dictionary's text, verbatim in French, built into a manifest by `dbt parse`
     (ADR 0025); the agent's offline database holds the marts only, with DuckDB's
-    file access off; `llm/` lands with the agent loop; row 4 is 7–13 evenings.
+    file access off (ADR 0026); `llm/` lands with the agent loop, with the spend
+    budget and structured logs; row 4 is 7–13 evenings.
   - **PR 1:** `feat/grader`. `grade.py` on the existing `Grade` contracts.
   - **PR 2:** `feat/agent-loop`. A minimal `llm/` (one client, cache, timeout,
     retries) and `eval/agent/` on DuckDB; the decision record on what the agent
