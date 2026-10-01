@@ -217,10 +217,10 @@ Update after every PR and merge, in the same change. A new session resumes from 
     The mart sensitivity tags are frozen at `preregistered` (ADR 0022).
   - **PR 3:** `feat/dims-agg`, in progress. Seeds (code→label pairs only), the 4
     dimensions with the dictionary's missing codes and a cap on their share of fact rows,
-    and `agg_monthly_spend_by_category`, whose category needs a decision and an
-    ADR, brought to review first.
+    and `agg_monthly_spend_by_category` by processing month and provider activity,
+    summing the pre-filtered `FLT_` measures (ADR 0023, approved after
+    `devils-advocate`).
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** PR 3 (`feat/dims-agg`): the category decision and its ADR,
-  brought to review first, then the seeds, dimensions and aggregate.
+- **Next step:** PR 3 (`feat/dims-agg`): the seeds, dimensions and aggregate.
