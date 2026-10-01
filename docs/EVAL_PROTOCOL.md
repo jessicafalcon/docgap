@@ -22,7 +22,8 @@ The result is reported whatever it turns out to be.
 2. **Gold SQL is gradable.** Its result is deterministic (an ordered question
    orders by keys that leave no ties, and no `LIMIT` cuts through ties), has at
    most 200 rows (the agent's row cap) and at most 5 columns (the grader's
-   permutation bound), and reads only `ANALYTICS.MARTS`.
+   permutation bound), holds scalar values only (no list or struct), and reads
+   only `ANALYTICS.MARTS`.
 3. **12 pilot questions** are separate from the 40. They choose the agent
    model (see [The agent model](#the-agent-model)), and the pilot settles the
    difficulty and the mart columns the 40 are then written for. None of the 40
@@ -71,7 +72,7 @@ order, and the first that fails gives the reason code:
 
 | Check | Rule | Reason code |
 | --- | --- | --- |
-| The run produced a result | No final answer within 8 tool calls, or a SQL error | `error` |
+| The run produced a result | No final answer within 8 tool calls, a SQL error, or, offline, a final answer sqlglot can't transpile | `error` |
 | | The statement timeout was reached | `timeout` |
 | Same shape | The result has exactly the gold's number of columns; names are ignored | `shape_mismatch` |
 | Same row count | Exactly the gold's number of rows | `row_count_mismatch` |
@@ -82,10 +83,16 @@ Values are normalized before the comparison:
 - **Numbers** of any type become `Decimal`, a float through its shortest
   round-trip string (`Decimal(repr(x))`), then round to 2 places with
   `ROUND_HALF_EVEN`, so a FLOAT 2.675 and a NUMBER 2.675 both give 2.68. A
-  number never equals a string.
+  number never equals a string. A non-finite number equals only the same one:
+  NaN equals NaN, and infinity never equals minus infinity.
+- **Booleans** equal booleans only: TRUE is not the number 1.
 - **Strings** are trimmed of leading and trailing whitespace; case is kept.
-- **Dates and timestamps** compare as ISO 8601 strings.
+- **Dates, times and timestamps** compare as ISO 8601 strings, so they equal a
+  string of the same text; a timestamp keeps its offset.
 - **NULL** equals NULL and nothing else.
+- **A list or a struct** in the agent's result equals no gold value, since gold
+  results hold scalars only.
+- **Any other type** is a harness error, never a grade.
 
 ## The arms
 

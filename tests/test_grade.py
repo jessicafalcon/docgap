@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Literal
 
@@ -10,6 +10,14 @@ import pytest
 
 from docgap.grade import MAX_COLUMNS, Result, check, grade
 from docgap.models import Grade, GradeReason
+
+
+class _NumpyStyleFloat(float):
+    """A float subclass whose repr isn't a number's text, as NumPy's `float64` is."""
+
+    def __repr__(self) -> str:
+        return f"np.float64({float(self)})"
+
 
 GOLD = Result(2, (("pharmacie", Decimal("10.50")), ("dentaire", Decimal("3.00"))))
 
@@ -92,11 +100,14 @@ def test_a_multiset_counts_repeated_rows() -> None:
         (1e300, Decimal("1e300")),  # beyond the default 28-digit precision
         (2**120, Decimal(2**120)),
         (float("inf"), Decimal("Infinity")),
+        (float("nan"), float("nan")),  # a non-finite number equals only itself
+        (Decimal("NaN"), float("nan")),
+        (_NumpyStyleFloat(2.675), Decimal("2.675")),
         (None, None),
         ("  Pharmacie ", "Pharmacie"),
         (date(2025, 1, 1), "2025-01-01"),
         (datetime(2025, 1, 1, 8, 30, tzinfo=UTC), "2025-01-01T08:30:00+00:00"),
-        ([1, 2], [1, 2]),
+        (time(8, 30), "08:30:00"),
     ],
 )
 def test_values_that_normalize_alike_match(value: object, expected: object) -> None:
@@ -116,7 +127,9 @@ def test_values_that_normalize_alike_match(value: object, expected: object) -> N
             1.005,
             1.01,
         ),  # 1.005 is 1.00499… as a float, but its shortest text rounds half-even to 1.00
-        ([1, 2], (1, 2)),
+        (float("inf"), float("-inf")),
+        ([1, 2], "[1, 2]"),  # a list or a struct equals no gold value
+        ({"a": 1}, 1),
     ],
 )
 def test_values_that_normalize_apart_mismatch(value: object, expected: object) -> None:
@@ -127,6 +140,21 @@ def test_gold_wider_than_the_permutation_bound_is_refused() -> None:
     wide = Result(MAX_COLUMNS + 1, ())
     with pytest.raises(ValueError, match="6 columns"):
         check(wide, wide, ordered=False)
+
+
+def test_gold_holding_a_list_is_refused() -> None:
+    with pytest.raises(ValueError, match="scalars only"):
+        check(_one([1, 2]), _one([1, 2]), ordered=True)
+
+
+def test_a_value_of_no_protocol_type_fails_loudly() -> None:
+    with pytest.raises(TypeError, match="bytes"):
+        check(_one(b"x"), _one("x"), ordered=True)
+
+
+def test_a_result_without_columns_is_refused() -> None:
+    with pytest.raises(ValueError, match="at least one column"):
+        Result(0, ())
 
 
 def test_a_row_of_the_wrong_width_is_refused() -> None:

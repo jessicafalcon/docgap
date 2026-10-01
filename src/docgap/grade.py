@@ -18,6 +18,7 @@ __all__ = ["MAX_COLUMNS", "Result", "check", "grade", "normalize"]
 MAX_COLUMNS = 5
 
 _CENT = Decimal("0.01")
+_COMPOSITE = ("composite",)
 # Quantizing needs the integer digits plus 2: a float reaches 309 of them and a DuckDB
 # HUGEINT 39, so 400 never overflows.
 _CONTEXT = Context(prec=400, rounding=ROUND_HALF_EVEN)
@@ -31,6 +32,8 @@ class Result:
     rows: tuple[tuple[object, ...], ...]
 
     def __post_init__(self) -> None:
+        if self.width < 1:
+            raise ValueError("a result has at least one column")
         if any(len(row) != self.width for row in self.rows):
             raise ValueError(f"every row needs {self.width} values")
 
@@ -44,6 +47,10 @@ def normalize(value: object) -> Hashable:
     (('string', 'PHARMACIE'), ('string', '2025-01-01'), ('null',))
     >>> normalize(True) == normalize(1)
     False
+
+    Raises:
+        TypeError: a value of no type the protocol names, such as a NumPy integer: the
+            harness passed it unconverted, and grading it would fail a correct answer.
     """
     match value:
         case None:
@@ -52,8 +59,9 @@ def normalize(value: object) -> Hashable:
         case bool():
             return ("bool", value)
         case int() | float() | Decimal():
-            # A float through its shortest round-trip text, so FLOAT 2.675 rounds as typed.
-            exact = Decimal(repr(value)) if isinstance(value, float) else Decimal(value)
+            # A float through its shortest round-trip text, so FLOAT 2.675 rounds as typed;
+            # `float()` first, since a subclass's repr (NumPy's) isn't a number's text.
+            exact = Decimal(repr(float(value))) if isinstance(value, float) else Decimal(value)
             if not exact.is_finite():
                 return ("nonfinite", str(exact))
             return ("number", exact.quantize(_CENT, context=_CONTEXT))
@@ -61,9 +69,12 @@ def normalize(value: object) -> Hashable:
             return ("string", value.strip())
         case date() | time():
             return ("string", value.isoformat())
+        case list() | tuple() | dict():
+            # A list or a struct the agent selected. Gold results hold scalars only, so
+            # this equals no gold value, whatever it holds.
+            return _COMPOSITE
         case _:
-            # A list or a struct the agent selected: equal only to the same value.
-            return ("other", type(value).__name__, repr(value))
+            raise TypeError(f"cannot grade a value of type {type(value).__name__}")
 
 
 def _normalized(result: Result) -> list[tuple[Hashable, ...]]:
@@ -89,7 +100,7 @@ def check(
     <GradeReason.VALUE_MISMATCH: 'value_mismatch'>
 
     Raises:
-        ValueError: gold has more than `MAX_COLUMNS` columns.
+        ValueError: gold has more than `MAX_COLUMNS` columns, or a list or a struct.
     """
     if gold.width > MAX_COLUMNS:
         raise ValueError(f"gold has {gold.width} columns; the protocol allows {MAX_COLUMNS}")
@@ -100,6 +111,8 @@ def check(
     if len(outcome.rows) != len(gold.rows):
         return GradeReason.ROW_COUNT_MISMATCH
     expected, actual = _normalized(gold), _normalized(outcome)
+    if any(value == _COMPOSITE for row in expected for value in row):
+        raise ValueError("gold results hold scalars only")
     expected_counts = Counter(expected)
     for order in permutations(range(gold.width)):
         rows = [tuple(row[i] for i in order) for row in actual]

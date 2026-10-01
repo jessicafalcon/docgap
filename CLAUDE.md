@@ -199,7 +199,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
   when" holds and its phase-exit audit found no blockers. Phase 2's offline block
   (the brief's timeline row 3) is done except `feat/loader-snowflake`. Its "Done
   when" needs Snowflake, so the phase and its exit audit close in timeline row 7.
-  Phase 1 waits for the offline pilot, per the brief's timeline.
+  Phase 3's offline block (timeline row 4) is in progress. Phase 1 waits for the
+  offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
