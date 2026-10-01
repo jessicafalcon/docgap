@@ -200,14 +200,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/raw-load`, Phase 2 PR 1, in review.
+- **Open PRs:** none.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
-  - **PR 1:** `feat/raw-load`, in review. The typed RAW DDL (one spec for
+  - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
     offline DuckDB load over `data/sample/` or `fixtures/damir/`, and
     `loader/profile_sources.py`. It also moves the baseline docs lock after
     Phase 3's offline pilot (ADR 0021).
-  - **PR 2:** `feat/staging-fact-lint`. The dbt project on DuckDB, the staging
+  - **PR 2:** `feat/staging-fact-lint`, in progress. The dbt project on DuckDB, the staging
     model (one row per source line: the full three months repeat no grain key), the
     contracted `fct_reimbursements`, `docgap lint` calling `load_marts`, and CI
     `dbt build` over `fixtures/damir/`.
@@ -218,4 +218,4 @@ Update after every PR and merge, in the same change. A new session resumes from 
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** after PR 1 merges, PR 2 from an up-to-date `main`.
+- **Next step:** finish PR 2, `feat/staging-fact-lint`, and open it for review.
