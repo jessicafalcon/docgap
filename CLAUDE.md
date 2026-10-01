@@ -203,24 +203,24 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/staging-fact-lint`, Phase 2 PR 2, in review.
+- **Open PRs:** none. `feat/dims-agg`, Phase 2 PR 3, is in progress.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
     offline DuckDB load over `data/sample/` or `fixtures/damir/`, and
     `loader/profile_sources.py`. It also moves the baseline docs lock after
     Phase 3's offline pilot (ADR 0021).
-  - **PR 2:** `feat/staging-fact-lint`, in review. The dbt project on DuckDB, the staging
-    model (one row per source line: the full three months repeat no grain key), the
-    contracted `fct_reimbursements` (DAMIR columns only: the key stays in staging),
+  - **PR 2:** `feat/staging-fact-lint`, merged (#17). The dbt project on DuckDB,
+    the staging model (one row per source line: the full three months repeat no
+    grain key), the contracted `fct_reimbursements` (DAMIR columns only: the key stays in staging),
     `docgap lint` calling `load_marts`, and CI `dbt build` over `fixtures/damir/`.
     The mart sensitivity tags are frozen at `preregistered` (ADR 0022).
-  - **PR 3:** `feat/dims-agg`. Seeds (code→label pairs only), the 4 dimensions
-    with the dictionary's missing codes and a cap on their share of fact rows,
+  - **PR 3:** `feat/dims-agg`, in progress. Seeds (code→label pairs only), the 4
+    dimensions with the dictionary's missing codes and a cap on their share of fact rows,
     and `agg_monthly_spend_by_category`, whose category needs a decision and an
     ADR, brought to review first.
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** after PR 2 merges, PR 3 (`feat/dims-agg`) from an up-to-date
-  `main`, with the category decision and its ADR brought to review first.
+- **Next step:** PR 3 (`feat/dims-agg`): the category decision and its ADR,
+  brought to review first, then the seeds, dimensions and aggregate.
