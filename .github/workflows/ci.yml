@@ -54,5 +54,14 @@ jobs:
           SKIP: uv-lock,gitleaks-system
       - run: uv run --frozen pytest
 
+      # The dbt project over the committed fixture, so contracts and tests run on real
+      # rows (ADR 0013), then the metadata contract on the manifest that build wrote.
+      - name: Load the Open DAMIR fixture into DuckDB
+        run: uv run --frozen python loader/load_duckdb.py fixture
+      - name: Build the warehouse
+        working-directory: warehouse/dbt
+        run: uv run --frozen dbt build
+      - run: uv run --frozen docgap lint
+
       - name: Scan full history for secrets
         run: gitleaks git --redact --verbose .
