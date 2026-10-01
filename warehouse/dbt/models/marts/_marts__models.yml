@@ -25,11 +25,21 @@ models:
         config:
           meta:
             sensitivity: restricted
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_age_bracket')
+                field: AGE_BEN_SNDS
       - name: BEN_RES_REG
         data_type: integer
         config:
           meta:
             sensitivity: restricted
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_region')
+                field: BEN_RES_REG
       - name: BEN_CMU_TOP
         data_type: integer
         config:
@@ -210,6 +220,11 @@ models:
         config:
           meta:
             sensitivity: public
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_benefit_type')
+                field: PRS_NAT
       - name: PRS_PPU_SEC
         data_type: integer
         config:
@@ -240,6 +255,11 @@ models:
         config:
           meta:
             sensitivity: public
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_provider_activity')
+                field: PSE_ACT_SNDS
       - name: PSE_ACT_CAT
         data_type: integer
         config:
@@ -282,6 +302,136 @@ models:
             sensitivity: public
       - name: TOP_PS5_TRG
         data_type: integer
+        config:
+          meta:
+            sensitivity: public
+
+  # The dimensions hold the dictionary's code→label pairs, seeded by
+  # `loader/code_list_seeds.py`. Region and age bracket are the beneficiary's
+  # demographics, so `restricted` as in the fact (ADR 0022).
+  - name: dim_age_bracket
+    description: >-
+      Beneficiary age brackets, one row per code.
+    config:
+      meta:
+        owner: data-team
+    columns:
+      - name: AGE_BEN_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: restricted
+        data_tests:
+          - unique
+          - not_null
+      - name: AGE_BEN_SNDS_LIB
+        data_type: varchar
+        config:
+          meta:
+            sensitivity: restricted
+        data_tests:
+          - not_null
+
+  - name: dim_benefit_type
+    description: >-
+      Benefit types, one row per code.
+    config:
+      meta:
+        owner: data-team
+    columns:
+      - name: PRS_NAT
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+        data_tests:
+          - unique
+          - not_null
+      # Empty for the codes the 2024 dictionary lacks.
+      - name: PRS_NAT_LIB
+        data_type: varchar
+        config:
+          meta:
+            sensitivity: public
+
+  - name: dim_provider_activity
+    description: >-
+      Executing provider activities, one row per code.
+    config:
+      meta:
+        owner: data-team
+    columns:
+      - name: PSE_ACT_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+        data_tests:
+          - unique
+          - not_null
+      - name: PSE_ACT_SNDS_LIB
+        data_type: varchar
+        config:
+          meta:
+            sensitivity: public
+        data_tests:
+          - not_null
+
+  - name: dim_region
+    description: >-
+      Beneficiary regions of residence, one row per code.
+    config:
+      meta:
+        owner: data-team
+    columns:
+      - name: BEN_RES_REG
+        data_type: integer
+        config:
+          meta:
+            sensitivity: restricted
+        data_tests:
+          - unique
+          - not_null
+      - name: BEN_RES_REG_LIB
+        data_type: varchar
+        config:
+          meta:
+            sensitivity: restricted
+        data_tests:
+          - not_null
+
+  - name: agg_monthly_spend_by_category
+    description: >-
+      Spend per processing month and executing provider activity.
+    config:
+      meta:
+        owner: data-team
+    columns:
+      - name: FLX_ANN_MOI
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+        data_tests:
+          - not_null
+      - name: PSE_ACT_SNDS
+        data_type: integer
+        config:
+          meta:
+            sensitivity: public
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_provider_activity')
+                field: PSE_ACT_SNDS
+      - name: FLT_PAI_MNT
+        data_type: decimal(18, 2)
+        config:
+          meta:
+            sensitivity: public
+      - name: FLT_REM_MNT
+        data_type: decimal(18, 2)
         config:
           meta:
             sensitivity: public

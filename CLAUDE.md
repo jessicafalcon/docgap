@@ -13,7 +13,7 @@ src/docgap/        the tool: deterministic core + llm/ (the only model edge) + c
 eval/              questions + gold SQL, test agent, reference dictionary (never read by src/)
 warehouse/dbt/     dbt project over Open DAMIR (Snowflake and DuckDB profiles)
 infra/             bootstrap.sql (ACCOUNTADMIN, once) + terraform/
-loader/            download, checksum, stage, COPY; offline sample and its DuckDB load
+loader/            download, checksum, stage, COPY; offline sample and its DuckDB load; code-list seeds
 orchestration/     one Airflow DAG calling the CLI
 fixtures/          DAMIR fixture, query history, manifest, ranking scope, profiles, model cache (offline mode)
 runs/              one folder per `docgap analyze` run (gitignored, regenerated)
