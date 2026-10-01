@@ -167,8 +167,8 @@ code is lost to the next session, and the review agents treat it as a finding.
   the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, the mart
   columns' `meta.sensitivity` tags, seeds, `[actors]`, `[manifest]`, the history
-  window, and the model and prompt version
-  at the attribution, drafter and gate call sites) never change. A change to the
+  window, the every-column docs text and its script, and the model and prompt
+  version at the attribution, drafter and gate call sites) never change. A change to the
   snapshot, manifest, resolve, usage, rank or evidence code that changes its
   golden outputs, and any other `EVAL_PROTOCOL.md` change,
   needs an ADR with a justification, and the results report the deviation.
@@ -197,14 +197,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
 
 - **Phase:** 0 is done (#1–#11), and so is 4 (#12, #14, #15): each one's "Done
   when" holds and its phase-exit audit found no blockers. Phase 2's offline block
-  (the brief's timeline row 3) is in progress. Its "Done when" needs Snowflake, so
-  the phase and its exit audit close in timeline row 7. Phase 1 waits for the
-  offline pilot, per the brief's timeline.
+  (the brief's timeline row 3) is done except `feat/loader-snowflake`. Its "Done
+  when" needs Snowflake, so the phase and its exit audit close in timeline row 7.
+  Phase 1 waits for the offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/dims-agg`, Phase 2 PR 3, in review.
+- **Open PRs:** `docs/phase3-pilot-first`, Phase 3's plan records, in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -216,7 +216,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
     grain key), the contracted `fct_reimbursements` (DAMIR columns only: the key stays in staging),
     `docgap lint` calling `load_marts`, and CI `dbt build` over `fixtures/damir/`.
     The mart sensitivity tags are frozen at `preregistered` (ADR 0022).
-  - **PR 3:** `feat/dims-agg`, in review. Seeds from `loader/code_list_seeds.py`
+  - **PR 3:** `feat/dims-agg`, merged (#18). Seeds from `loader/code_list_seeds.py`
     (code→label pairs only, built in STAGING); 4 dimensions (benefit type,
     provider activity, region, age bracket), the benefit type adding the 5 codes
     the dictionary lacks under a 0.1% cap; and `agg_monthly_spend_by_category` by
@@ -226,7 +226,24 @@ Update after every PR and merge, in the same change. A new session resumes from 
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** after PR 3 merges, plan Phase 3's offline PR split (timeline
-  row 4: questions and gold SQL, grader, agent loop, pilot) and run
-  `devils-advocate` on it. `feat/loader-snowflake` still lands before the
-  go/no-go.
+- **Phase 3 offline PR order** (approved after `devils-advocate`; ADRs 0024, 0025):
+  - **PR 0:** `docs/phase3-pilot-first`, in review. The pilot runs before the 40
+    questions, with at most two reruns (ADR 0024); the every-column docs are the
+    dictionary's text, verbatim in French, built into a manifest by `dbt parse`
+    (ADR 0025); the agent's offline database holds the marts only, with DuckDB's
+    file access off (ADR 0026); `llm/` lands with the agent loop, with the spend
+    budget and structured logs; row 4 is 7–13 evenings.
+  - **PR 1:** `feat/grader`. `grade.py` on the existing `Grade` contracts.
+  - **PR 2:** `feat/agent-loop`. A minimal `llm/` (one client, cache, timeout,
+    retries) and `eval/agent/` on DuckDB; the decision record on what the agent
+    sends at default settings. Split in two if it grows large.
+  - **PR 3:** `feat/offline-pilot`. 12 pilot questions, the every-column docs,
+    the run, and the decision records on the model and on `SELECT *`.
+  - **PR 4:** `feat/load-full-duckdb`. The three full months into DuckDB after
+    the `sources.lock` check; any time before PR 5.
+  - **PR 5:** `feat/questions`. The 40 questions and gold SQL, checked on the
+    full data.
+  - **PR 6:** `feat/baseline-docs`. The lock, the baseline YAML and the frozen
+    manifest, merged after PR 5 (ADR 0021).
+- **Next step:** after PR 0 merges, `feat/grader`. `feat/loader-snowflake` still
+  lands before the go/no-go.

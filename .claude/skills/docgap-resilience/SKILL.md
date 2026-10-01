@@ -112,8 +112,9 @@ covers manual CLI runs alongside it.
   gate values, retries, cache hit rate, model calls and spend, durations.
 - `docgap report` surfaces failures first: a run with recorded failures says so at
   the top, not in an appendix. Structured logs and per-item failures arrive with
-  the first stage that has items to fail, Phase 5's `llm/` (the brief owes both
-  there); until then a failed stage shows as its status and error in the manifest.
+  the first code that has items to fail, Phase 3's agent loop and its `llm/` (the
+  brief owes both there); until then a failed stage shows as its status and error
+  in the manifest.
 
 ## Tests for failure paths
 
