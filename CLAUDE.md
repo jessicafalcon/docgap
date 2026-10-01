@@ -197,14 +197,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
 
 - **Phase:** 0 is done (#1–#11), and so is 4 (#12, #14, #15): each one's "Done
   when" holds and its phase-exit audit found no blockers. Phase 2's offline block
-  (the brief's timeline row 3) is in progress. Its "Done when" needs Snowflake, so
-  the phase and its exit audit close in timeline row 7. Phase 1 waits for the
-  offline pilot, per the brief's timeline.
+  (the brief's timeline row 3) is done except `feat/loader-snowflake`. Its "Done
+  when" needs Snowflake, so the phase and its exit audit close in timeline row 7.
+  Phase 1 waits for the offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/dims-agg`, Phase 2 PR 3, in review.
+- **Open PRs:** none.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -216,7 +216,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
     grain key), the contracted `fct_reimbursements` (DAMIR columns only: the key stays in staging),
     `docgap lint` calling `load_marts`, and CI `dbt build` over `fixtures/damir/`.
     The mart sensitivity tags are frozen at `preregistered` (ADR 0022).
-  - **PR 3:** `feat/dims-agg`, in review. Seeds from `loader/code_list_seeds.py`
+  - **PR 3:** `feat/dims-agg`, merged (#18). Seeds from `loader/code_list_seeds.py`
     (code→label pairs only, built in STAGING); 4 dimensions (benefit type,
     provider activity, region, age bracket), the benefit type adding the 5 codes
     the dictionary lacks under a 0.1% cap; and `agg_monthly_spend_by_category` by
@@ -226,7 +226,6 @@ Update after every PR and merge, in the same change. A new session resumes from 
   - **Later, before the go/no-go:** `feat/loader-snowflake` (download, PUT/COPY,
     Snowflake profile, `persist_docs` check), tested offline and run in the
     trial.
-- **Next step:** after PR 3 merges, plan Phase 3's offline PR split (timeline
-  row 4: questions and gold SQL, grader, agent loop, pilot) and run
-  `devils-advocate` on it. `feat/loader-snowflake` still lands before the
-  go/no-go.
+- **Next step:** plan Phase 3's offline PR split (timeline row 4: questions and
+  gold SQL, grader, agent loop, pilot) and run `devils-advocate` on it.
+  `feat/loader-snowflake` still lands before the go/no-go.
