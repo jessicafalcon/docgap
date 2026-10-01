@@ -26,6 +26,10 @@ dev = [
     "ruff>=0.16.9",
 ]
 warehouse = [
+    # Exact pins: the dbt version sets the manifest schema `docgap.manifest` reads (v12),
+    # and the adapter sets the type names the contracts compare.
+    "dbt-core==1.12.5",
+    "dbt-duckdb==1.11.0",
     "duckdb>=1.5.6",
 ]
 
