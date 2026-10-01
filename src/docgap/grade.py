@@ -100,9 +100,10 @@ def check(
     if len(outcome.rows) != len(gold.rows):
         return GradeReason.ROW_COUNT_MISMATCH
     expected, actual = _normalized(gold), _normalized(outcome)
+    expected_counts = Counter(expected)
     for order in permutations(range(gold.width)):
         rows = [tuple(row[i] for i in order) for row in actual]
-        if (rows == expected) if ordered else (Counter(rows) == Counter(expected)):
+        if (rows == expected) if ordered else (Counter(rows) == expected_counts):
             return None
     return GradeReason.VALUE_MISMATCH
 

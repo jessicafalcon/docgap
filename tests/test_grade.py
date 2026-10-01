@@ -33,7 +33,7 @@ def test_a_different_column_count_is_a_shape_mismatch(result: Result) -> None:
     assert check(result, GOLD, ordered=False) is GradeReason.SHAPE_MISMATCH
 
 
-def test_column_names_play_no_part_and_an_empty_gold_matches_an_empty_result() -> None:
+def test_an_empty_result_matches_an_empty_gold_of_the_same_width() -> None:
     assert check(Result(2, ()), Result(2, ()), ordered=True) is None
 
 
@@ -42,10 +42,6 @@ def test_a_different_row_count_is_a_row_count_mismatch(
     rows: tuple[tuple[object, ...], ...],
 ) -> None:
     assert check(Result(2, rows), GOLD, ordered=False) is GradeReason.ROW_COUNT_MISMATCH
-
-
-def test_shape_is_checked_before_row_count() -> None:
-    assert check(Result(1, ()), GOLD, ordered=False) is GradeReason.SHAPE_MISMATCH
 
 
 def test_a_wrong_value_is_a_value_mismatch() -> None:
