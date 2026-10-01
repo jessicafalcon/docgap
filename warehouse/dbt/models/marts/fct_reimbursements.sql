@@ -1,7 +1,8 @@
 -- The fact at the staging grain, one row per source line. ETB_DCS_MCO stays out: the
 -- dictionary has no entry for it, so no draft for it could be graded (ADR 0012).
--- Every column is cast to its contract type: dbt compares the type names the adapter
--- reports, and DuckDB fails an INTEGER against a declared BIGINT.
+-- Every column is cast to its contract type, as in every mart: dbt compares the type
+-- names each adapter reports, so a type that changes upstream (an expression, a
+-- Snowflake VARCHAR length) would fail the contract on one warehouse and not the other.
 select
     cast(PRESTATION_KEY as varchar) as PRESTATION_KEY,
     cast(FLX_ANN_MOI as integer) as FLX_ANN_MOI,

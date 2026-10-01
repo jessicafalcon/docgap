@@ -3,18 +3,10 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
-from offline_sample import FIXTURE_DIR, grain_key
+from offline_sample import FIXTURE_DIR, ROOT, grain_key
 
-STAGING = (
-    Path(__file__).resolve().parents[2]
-    / "warehouse"
-    / "dbt"
-    / "models"
-    / "staging"
-    / "stg_damir__prestations.sql"
-)
+STAGING = ROOT / "warehouse" / "dbt" / "models" / "staging" / "stg_damir__prestations.sql"
 
 
 def test_the_key_hashes_the_sample_grain_fields() -> None:
