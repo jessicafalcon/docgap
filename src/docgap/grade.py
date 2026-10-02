@@ -12,7 +12,7 @@ from typing import Literal
 
 from docgap.models import Grade, GradeReason
 
-__all__ = ["MAX_COLUMNS", "Result", "check", "grade", "normalize"]
+__all__ = ["MAX_COLUMNS", "Outcome", "Result", "check", "grade", "normalize"]
 
 # The protocol's permutation bound: 5! = 120 column orders at most.
 MAX_COLUMNS = 5
@@ -36,6 +36,10 @@ class Result:
             raise ValueError("a result has at least one column")
         if any(len(row) != self.width for row in self.rows):
             raise ValueError(f"every row needs {self.width} values")
+
+
+# What an agent run ends with: a result, or the reason it produced none.
+type Outcome = Result | Literal[GradeReason.ERROR, GradeReason.TIMEOUT]
 
 
 def normalize(value: object) -> Hashable:
@@ -82,7 +86,7 @@ def _normalized(result: Result) -> list[tuple[Hashable, ...]]:
 
 
 def check(
-    outcome: Result | Literal[GradeReason.ERROR, GradeReason.TIMEOUT],
+    outcome: Outcome,
     gold: Result,
     *,
     ordered: bool,
@@ -124,7 +128,7 @@ def check(
 def grade(
     qid: str,
     repetition: int,
-    outcome: Result | Literal[GradeReason.ERROR, GradeReason.TIMEOUT],
+    outcome: Outcome,
     gold: Result,
     *,
     ordered: bool,

@@ -10,15 +10,24 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
-from pydantic import JsonValue
+from conftest import SLOW_SQL
+from pydantic import JsonValue, ValidationError
 
-from docgap.config import AgentConfig, LlmConfig, Price
+from docgap.config import AgentConfig, LlmConfig, Price, load_config
 from docgap.grade import Result
 from docgap.llm import Budget, LlmClient, ResponseCache, TransientError
 from docgap.log import EventLog
 from docgap.manifest import Marts
 from docgap.models import GradeReason, ModelSettings
-from eval.agent.loop import AgentRun, ErrorCause, Question, run_agent
+from eval.agent.loop import (
+    PROMPT_VERSION,
+    AgentRun,
+    ErrorCause,
+    Question,
+    Transcript,
+    call_site,
+    run_agent,
+)
 from eval.agent.tools import AgentTools
 from eval.agent.warehouse import Warehouse
 
@@ -30,6 +39,8 @@ CONFIG = AgentConfig(
 COUNT = "SELECT COUNT(*) FROM FCT_REIMBURSEMENTS"
 FCT = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS"
 _ids = itertools.count(1)
+ROOT = Path(__file__).resolve().parents[2]
+PROMPT_SHA256 = "60aa5a7e468cd3a349513363bd504d1b49ed4df90d47776c5c76a7ff44bf5130"
 
 
 def _docs(text: str | None) -> Marts:
@@ -38,8 +49,6 @@ def _docs(text: str | None) -> Marts:
         "ANALYTICS",
         "MARTS",
         {"FCT_REIMBURSEMENTS": {}, "DIM_REGION": {}},
-        frozenset(described),
-        {},
         described,
     )
 
@@ -213,11 +222,12 @@ def test_failed_final_answer_is_an_error_with_its_cause(
 
 def test_final_answer_past_the_timeout_is_a_timeout(agent_db: Path, tmp_path: Path) -> None:
     harness = Harness(agent_db, tmp_path / "cache", timeout_seconds=0.2)
-    slow = "SELECT SUM(a.range * b.range) FROM range(100000000) a, range(1000) b"
-    run = harness.run(ScriptedModel(_reply(_use("final_answer", final_sql=slow))))
+    try:
+        run = harness.run(ScriptedModel(_reply(_use("final_answer", final_sql=SLOW_SQL))))
+    finally:
+        harness.warehouse.close()
     assert run.outcome is GradeReason.TIMEOUT
     assert (run.transcript.outcome, run.transcript.error_cause) == ("timeout", None)
-    harness.warehouse.close()
 
 
 def test_infrastructure_failure_repeats_the_run_from_the_cache(harness: Harness) -> None:
@@ -274,3 +284,40 @@ def test_offline_rerun_reproduces_the_transcript(harness: Harness) -> None:
     offline = harness.run(None)
     assert offline.transcript.model_dump_json() == online.transcript.model_dump_json()
     assert offline.outcome == online.outcome
+
+
+def test_transcript_records_the_call_site_as_it_ran(harness: Harness) -> None:
+    run = harness.run(ScriptedModel(_reply(_use("final_answer", final_sql=COUNT))))
+    site = run.transcript.call_site
+    assert (site.model, site.sampling, site.prompt_version) == (MODEL, {}, PROMPT_VERSION)
+
+
+def test_prompt_version_names_the_prompt_text() -> None:
+    # The hash of the system prompt and the tool definitions under the committed
+    # `[agent]` limits. A change to either text fails here: give it a new
+    # `PROMPT_VERSION`, then update the hash.
+    config = load_config(ROOT / "docgap.toml").agent
+    site = call_site(ModelSettings(model=MODEL, sampling={}), config)
+    assert (site.prompt_version, site.prompt_sha256) == (PROMPT_VERSION, PROMPT_SHA256)
+
+
+@pytest.mark.parametrize(
+    ("outcome", "cause", "rows"),
+    [
+        ("error", None, None),
+        ("result", ErrorCause.SQL, 1),
+        ("result", None, None),
+        ("timeout", None, 3),
+    ],
+)
+def test_transcript_ties_its_cause_and_rows_to_its_outcome(
+    harness: Harness, outcome: str, cause: ErrorCause | None, rows: int | None
+) -> None:
+    run = harness.run(ScriptedModel(_reply(_use("final_answer", final_sql=COUNT))))
+    fields = run.transcript.model_dump() | {
+        "outcome": outcome,
+        "error_cause": cause,
+        "result_rows": rows,
+    }
+    with pytest.raises(ValidationError):
+        Transcript.model_validate_json(json.dumps(fields, default=str))

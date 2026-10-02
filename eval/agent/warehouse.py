@@ -15,6 +15,8 @@ from docgap.grade import Result
 
 __all__ = ["SqlError", "SqlTimeout", "Warehouse", "copy_marts"]
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 class SqlError(Exception):
     """The statement failed: its message goes back to the agent."""
@@ -104,15 +106,12 @@ class Warehouse:
 
     def columns(self, table: str) -> list[tuple[str, str]]:
         """A mart table's columns and their types, in table order; empty for no such table."""
-        return [
-            (name, data_type)
-            for name, data_type in self._con.execute(
-                "SELECT column_name, data_type FROM information_schema.columns"
-                " WHERE table_catalog = ? AND table_schema = ? AND table_name = ?"
-                " ORDER BY ordinal_position",
-                [self._database, self._schema, table],
-            ).fetchall()
-        ]
+        return self._con.execute(
+            "SELECT column_name, data_type FROM information_schema.columns"
+            " WHERE table_catalog = ? AND table_schema = ? AND table_name = ?"
+            " ORDER BY ordinal_position",
+            [self._database, self._schema, table],
+        ).fetchall()
 
     def query(self, sql: str, max_rows: int) -> tuple[list[str], Result]:
         """Run one DuckDB statement and fetch its column names and at most `max_rows` rows.
@@ -150,11 +149,11 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument("source", choices=["sample", "fixture"])
     args = parser.parse_args(argv)
-    marts = load_config(Path("docgap.toml")).manifest
-    build = Path("data/warehouse", args.source, f"{marts.mart_database}.duckdb")
+    marts = load_config(ROOT / "docgap.toml").manifest
+    build = ROOT / "data" / "warehouse" / args.source / f"{marts.mart_database}.duckdb"
     target = copy_marts(
         build,
-        Path("data/agent", args.source),
+        ROOT / "data" / "agent" / args.source,
         database=marts.mart_database,
         schema=marts.mart_schema,
     )

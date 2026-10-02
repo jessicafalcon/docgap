@@ -88,9 +88,13 @@ class Marts:
     database: str
     schema: str
     tables: Mapping[str, Mapping[str, str]]
-    documented: frozenset[str]
+    column_descriptions: Mapping[str, str]
     table_descriptions: Mapping[str, str] = field(default_factory=dict[str, str])
-    column_descriptions: Mapping[str, str] = field(default_factory=dict[str, str])
+
+    @property
+    def documented(self) -> frozenset[str]:
+        """The FQNs of the columns with a description."""
+        return frozenset(self.column_descriptions)
 
     def fqns(self) -> list[str]:
         """Every mart column as `DATABASE.SCHEMA.TABLE.COLUMN`, sorted."""
@@ -192,9 +196,8 @@ def _marts(parsed: _Manifest, config: ManifestConfig) -> Marts:
         config.mart_database,
         config.mart_schema,
         tables,
-        frozenset(column_descriptions),
-        table_descriptions,
         column_descriptions,
+        table_descriptions,
     )
 
 

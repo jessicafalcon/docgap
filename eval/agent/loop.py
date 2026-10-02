@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 from anthropic.types import Message
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, JsonValue, NonNegativeInt, PositiveInt, model_validator
 
-from docgap.artifacts import write_atomic
 from docgap.config import AgentConfig
-from docgap.grade import Result
+from docgap.grade import Outcome, Result
 from docgap.llm import LlmClient, TransientError
 from docgap.log import EventLog
-from docgap.models import GradeReason, ModelSettings
+from docgap.models import CONTRACT_CONFIG, CallSite, GradeReason, ModelSettings, Qid, RunId
 from eval.agent.tools import FINAL_ANSWER, AgentTools, TranspileError, tool_definitions
 from eval.agent.warehouse import SqlError, SqlTimeout
 
@@ -26,15 +26,15 @@ __all__ = [
     "ErrorCause",
     "Question",
     "Transcript",
+    "call_site",
     "run_agent",
     "system_prompt",
 ]
 
-# Names the system prompt and the tool definitions together: change either, and
-# this changes, so no cached response is replayed under a prompt it never saw.
+# The name of the system prompt and the tool definitions together: the version the
+# protocol freezes at the tag and each transcript records. Change either text and this
+# changes too; `call_site` hashes both, and a test pins the hash to this version.
 PROMPT_VERSION = "agent-1"
-
-type Outcome = Result | Literal[GradeReason.ERROR, GradeReason.TIMEOUT]
 
 
 def system_prompt(max_tool_calls: int) -> str:
@@ -73,30 +73,48 @@ class Question:
 class Transcript(BaseModel):
     """One agent run as it happened: the conversation, the final SQL and how it ended."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = CONTRACT_CONFIG
 
-    run_id: str
-    qid: str
-    repetition: int
-    # The call site's settings as sent: the pilot's candidate, or `[call_sites.agent]`.
-    model: str
-    sampling: dict[str, str | int | float | bool]
-    prompt_version: str
+    run_id: RunId
+    qid: Qid
+    repetition: PositiveInt
+    # The call site as it ran: the pilot's candidate, or `[call_sites.agent]`.
+    call_site: CallSite
     # Attempts made; more than one only after an infrastructure failure.
-    attempts: int
+    attempts: PositiveInt
     # The Messages API conversation, the tool results and their SQL included.
     messages: list[JsonValue]
-    tool_calls: int
+    tool_calls: NonNegativeInt
     final_sql: str | None
     outcome: Literal["result", "error", "timeout"]
     error_cause: ErrorCause | None
     error_detail: str | None
-    result_rows: int | None
+    result_rows: NonNegativeInt | None
 
-    def save(self, path: Path) -> None:
-        """Write the transcript as JSON, atomically."""
-        text = self.model_dump_json(indent=1).encode()
-        write_atomic(path, lambda sink: sink.write(text))
+    @model_validator(mode="after")
+    def _cause_iff_error(self) -> Self:
+        if (self.error_cause is None) == (self.outcome == "error"):
+            raise ValueError("an error run has a cause and any other run has none")
+        if (self.result_rows is None) == (self.outcome == "result"):
+            raise ValueError("a run with a result counts its rows and any other run has none")
+        return self
+
+
+def call_site(site: ModelSettings, config: AgentConfig) -> CallSite:
+    """The agent's call site as it runs: the model's settings and the prompt it sends."""
+    prompt = {
+        "system": system_prompt(config.max_tool_calls),
+        "tools": tool_definitions(
+            row_cap=config.row_cap, timeout_seconds=config.statement_timeout_seconds
+        ),
+    }
+    digest = hashlib.sha256(json.dumps(prompt, sort_keys=True).encode()).hexdigest()
+    return CallSite(
+        model=site.model,
+        sampling=site.sampling,
+        prompt_version=PROMPT_VERSION,
+        prompt_sha256=digest,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +166,10 @@ def _blocks(message: Message) -> list[JsonValue]:
     return [block.model_dump(mode="json", exclude_none=True) for block in message.content]
 
 
+def _label(outcome: Outcome) -> Literal["result", "error", "timeout"]:
+    return "result" if isinstance(outcome, Result) else outcome.value
+
+
 def _since(started: float) -> int:
     return round((time.monotonic() - started) * 1000)
 
@@ -157,21 +179,21 @@ def _finish(context: _Context, final_sql: str) -> _End:
     try:
         result = context.tools.run_final(final_sql)
     except TranspileError as error:
-        end = _error(ErrorCause.TRANSPILE, str(error))
+        end = _End(GradeReason.ERROR, final_sql, ErrorCause.TRANSPILE, str(error))
     except SqlError as error:
-        end = _error(ErrorCause.SQL, str(error))
+        end = _End(GradeReason.ERROR, final_sql, ErrorCause.SQL, str(error))
     except SqlTimeout as error:
-        end = _End(GradeReason.TIMEOUT, detail=str(error))
+        end = _End(GradeReason.TIMEOUT, final_sql, detail=str(error))
     else:
-        end = _End(result)
+        end = _End(result, final_sql)
     context.log.event(
         "agent",
         context.item,
         "final_sql",
         duration_ms=_since(started),
-        outcome=end.outcome if isinstance(end.outcome, GradeReason) else "result",
+        outcome=_label(end.outcome),
     )
-    return _End(end.outcome, final_sql, end.cause, end.detail)
+    return end
 
 
 def _attempt(context: _Context, conversation: _Conversation) -> _End:
@@ -271,7 +293,9 @@ def run_agent(
             end = _attempt(context, conversation)
             break
         except TransientError as error:
-            log.event("agent", context.item, "run_attempt_failed", exception_type=str(error))
+            log.event(
+                "agent", context.item, "run_attempt_failed", exception_type=error.exception_type
+            )
             if attempts == config.run_attempts:
                 end = _error(ErrorCause.INFRASTRUCTURE, str(error))
                 break
@@ -280,14 +304,12 @@ def run_agent(
         run_id=run_id,
         qid=question.qid,
         repetition=repetition,
-        model=site.model,
-        sampling=site.sampling,
-        prompt_version=PROMPT_VERSION,
+        call_site=call_site(site, config),
         attempts=attempts,
         messages=conversation.messages,
         tool_calls=conversation.tool_calls,
         final_sql=end.final_sql,
-        outcome="result" if isinstance(outcome, Result) else outcome.value,
+        outcome=_label(outcome),
         error_cause=end.cause,
         error_detail=end.detail,
         result_rows=len(outcome.rows) if isinstance(outcome, Result) else None,

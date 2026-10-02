@@ -51,6 +51,8 @@ ACTORS = {"AGENT_READER": Actor.AGENT}
 MARTS_CONFIG = ManifestConfig(mart_database="ANALYTICS", mart_schema="MARTS")
 MARTS = load_marts(MANIFEST.read_bytes(), MARTS_CONFIG)
 GOLDEN = Path(__file__).resolve().parent / "golden"
+# A DuckDB query that runs for minutes: no test waits for it to finish.
+SLOW_SQL = "SELECT sum(a.range * b.range) FROM range(100000000) a, range(1000) b"
 SETUP = "0" * 64
 
 

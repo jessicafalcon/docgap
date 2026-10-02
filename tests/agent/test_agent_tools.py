@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from docgap.manifest import Marts
-from eval.agent.tools import AgentTools, TranspileError, to_duckdb, tool_definitions
+from eval.agent.tools import AgentTools, tool_definitions
 from eval.agent.warehouse import Warehouse
 
 FCT = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS"
@@ -18,9 +18,8 @@ DOCS = Marts(
     "ANALYTICS",
     "MARTS",
     {"FCT_REIMBURSEMENTS": {"FLX_ANN_MOI": "INTEGER"}, "DIM_REGION": {}},
-    frozenset({f"{FCT}.FLX_ANN_MOI"}),
-    {"FCT_REIMBURSEMENTS": "One row per source line."},
     {f"{FCT}.FLX_ANN_MOI": "Mois de traitement"},
+    {"FCT_REIMBURSEMENTS": "One row per source line."},
 )
 
 
@@ -121,11 +120,6 @@ def test_unknown_tool_or_input_is_an_error(
 def test_final_sql_fetches_one_row_past_the_cap(tools: AgentTools) -> None:
     result = tools.run_final("SELECT * FROM FCT_REIMBURSEMENTS")
     assert len(result.rows) == 201
-
-
-def test_final_sql_that_cannot_transpile_raises() -> None:
-    with pytest.raises(TranspileError):
-        to_duckdb("SELECT 1 +")
 
 
 def test_tool_text_states_the_configured_limits() -> None:

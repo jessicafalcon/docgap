@@ -48,7 +48,6 @@ def test_descriptions_are_read_for_the_agent() -> None:
         "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLX_ANN_MOI": "Processing month, YYYYMM.",
         "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PAI_MNT": "Amount paid, in euros.",
     }
-    assert set(marts.column_descriptions) == marts.documented
     # A blank model description is no description, as for a column.
     assert marts.table_descriptions == {
         "DIM_PRESTATION": "dim_prestation model",

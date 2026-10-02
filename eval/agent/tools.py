@@ -29,8 +29,8 @@ FINAL_ANSWER = "final_answer"
 def tool_definitions(*, row_cap: int, timeout_seconds: int) -> list[JsonValue]:
     """The tools as the Messages API takes them: the three tools, then the final answer.
 
-    Keep in sync with `AgentTools.call`. The text is part of the prompt, so a change
-    here is a new `PROMPT_VERSION` in `loop.py`.
+    Keep in sync with `AgentTools.call`. The text is part of the prompt the protocol
+    freezes, so a change here is a new `PROMPT_VERSION` in `loop.py`.
     """
     return [
         {

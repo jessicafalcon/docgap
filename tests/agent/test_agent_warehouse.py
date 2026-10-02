@@ -6,12 +6,11 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from conftest import SLOW_SQL
 
 from eval.agent.warehouse import SqlError, SqlTimeout, Warehouse
 
 ROOT = Path(__file__).resolve().parents[2]
-# A query that runs for minutes: no test waits for it to finish.
-SLOW = "SELECT sum(a.range * b.range) FROM range(100000000) a, range(1000) b"
 
 
 @pytest.fixture
@@ -63,10 +62,12 @@ def test_fetch_stops_at_the_row_limit(warehouse: Warehouse) -> None:
 
 def test_long_query_is_interrupted_and_the_next_one_runs(agent_db: Path) -> None:
     warehouse = Warehouse(agent_db, database="ANALYTICS", schema="MARTS", timeout_seconds=0.2)
-    with pytest.raises(SqlTimeout, match=r"0\.2 s"):
-        warehouse.query(SLOW, 10)
-    assert warehouse.query("SELECT 1", 10)[1].rows == ((1,),)
-    warehouse.close()
+    try:
+        with pytest.raises(SqlTimeout, match=r"0\.2 s"):
+            warehouse.query(SLOW_SQL, 10)
+        assert warehouse.query("SELECT 1", 10)[1].rows == ((1,),)
+    finally:
+        warehouse.close()
 
 
 def test_a_file_not_named_for_the_database_is_refused(agent_db: Path, tmp_path: Path) -> None:
