@@ -99,6 +99,12 @@ def test_unknown_key_is_rejected(path: tuple[str, ...]) -> None:
         ("actors", "AGENT_READER", "robot"),
         ("actors", "agent_reader", "agent"),
         ("call_sites", "drafter", {"model": "", "sampling": {}}),
+        # Its spend would go uncounted.
+        ("call_sites", "drafter", {"model": "claude-unpriced", "sampling": {}}),
+        ("llm", "max_retries", -1),
+        ("llm", "max_spend_usd", 0),
+        ("pilot", "models", ["claude-opus-5-5", "claude-opus-5-5"]),
+        ("pilot", "models", ["claude-opus-5-5"]),
     ],
 )
 def test_wrong_type_or_range_is_rejected(section: str, key: str, value: object) -> None:

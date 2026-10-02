@@ -12,6 +12,7 @@ from pydantic import (
     Field,
     NonNegativeFloat,
     NonNegativeInt,
+    PositiveFloat,
     PositiveInt,
     RootModel,
     Strict,
@@ -24,6 +25,7 @@ from docgap.models import (
     Identifier,
     Key,
     ModelSettings,
+    NonEmptyStr,
     Probability,
     RoleName,
     canonical_sha256,
@@ -36,7 +38,10 @@ __all__ = [
     "DocgapConfig",
     "EvidenceConfig",
     "GateConfig",
+    "LlmConfig",
     "ManifestConfig",
+    "PilotConfig",
+    "Price",
     "RankConfig",
     "SeedsConfig",
     "SnapshotConfig",
@@ -114,6 +119,36 @@ class AgentConfig(_Section):
     row_cap: PositiveInt
 
 
+class Price(_Section):
+    """A model's rates in USD per million tokens."""
+
+    # Positive, so no model escapes the spend limit.
+    input: PositiveFloat
+    output: PositiveFloat
+
+
+class LlmConfig(_Section):
+    """Every model call's timeout and retries, and the run's call and spend budget."""
+
+    timeout_seconds: PositiveFloat
+    max_retries: NonNegativeInt
+    max_calls: PositiveInt
+    max_spend_usd: PositiveFloat
+    prices: dict[NonEmptyStr, Price]
+
+
+class PilotConfig(_Section):
+    """The pilot's two candidate agent models."""
+
+    models: Annotated[list[NonEmptyStr], Field(min_length=2, max_length=2)]
+
+    @model_validator(mode="after")
+    def _distinct(self) -> Self:
+        if len(set(self.models)) != len(self.models):
+            raise ValueError("the pilot compares two different models")
+        return self
+
+
 class CallSitesConfig(RootModel[dict[Key, ModelSettings]]):
     """Call site name to its model settings."""
 
@@ -131,7 +166,18 @@ class DocgapConfig(_Section):
     gate: GateConfig
     seeds: SeedsConfig
     agent: AgentConfig
+    llm: LlmConfig
+    pilot: PilotConfig
     call_sites: CallSitesConfig
+
+    @model_validator(mode="after")
+    def _every_model_priced(self) -> Self:
+        # An unpriced model would spend outside the budget.
+        models = {site.model for site in self.call_sites.root.values()} | set(self.pilot.models)
+        unpriced = sorted(models - set(self.llm.prices))
+        if unpriced:
+            raise ValueError(f"no price in [llm.prices] for {unpriced}")
+        return self
 
     def section_sha256(self) -> dict[str, str]:
         """Hash each section's validated values, the entries of `RunSetup.config`.
