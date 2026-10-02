@@ -64,6 +64,7 @@ run_attempts = 3
 # 408, 409, 429 and 5xx, with backoff honouring Retry-After, `max_retries` times. The
 # timeout is the SDK's own estimate for the largest reply a call site asks for without
 # streaming: 3,600 s × 16,000 tokens (the agent's `max_tokens`) / 128,000 = 450 s.
+# Both are frozen at `preregistered`: they decide which agent runs end as `error`.
 timeout_seconds = 450
 max_retries = 2
 # Per process, over live calls only: a cache hit costs nothing, and a resumed run

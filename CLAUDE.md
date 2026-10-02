@@ -165,7 +165,8 @@ code is lost to the next session, and the review agents treat it as a finding.
 - **A new skill, agent, hook or slash command:** add it here, with when to invoke
   it. A `docgap` command is product behaviour, and the README documents it.
 - **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
-  the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
+  the agent (model, prompt version, 8 tool calls, `[agent]` limits, and the model
+  calls' `[llm] timeout_seconds` and `max_retries`), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, the mart
   columns' `meta.sensitivity` tags, seeds, `[actors]`, `[manifest]`, the history
   window, the every-column docs text and its script, and the model and prompt

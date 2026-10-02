@@ -61,8 +61,11 @@ columns the two sets share.
    `row_count_mismatch`.
 4. **Infrastructure failures.** An API error left after the retry policy, or an
    unavailable warehouse, is not an agent outcome: it is not cached, and the run
-   repeats. After 3 attempts the run fails with reason `error`, and the results
-   report the count per arm.
+   repeats. The retry policy is `[llm]`'s: each model call times out after
+   `timeout_seconds` (450 s), and a connection error, a timeout, 408, 409, 429 or
+   5xx is retried `max_retries` (2) times. After `[agent] run_attempts` (3)
+   attempts the run fails with reason `error`, and the results report the count
+   per arm (ADR 0028).
 
 ## What "correct" means
 
