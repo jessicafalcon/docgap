@@ -41,12 +41,14 @@ protocol never set, and there is no neutral one. Option 3 is a 400 on Opus 5.5.
 Option 4 makes every reply JSON, the turns that call tools included, which a
 tool loop doesn't need.
 
-The loop counts `list_tables`, `describe` and `run_sql` calls, parallel ones each
-counted; `final_answer` is the answer, not a call. Calls past the 8th are refused
+The loop counts every tool call but `final_answer`, which is the answer: parallel
+calls each count, and so does a call to an unknown tool or with malformed input,
+which gets an error result. Calls past the 8th are refused
 with an error result, the 8th call's results end with "That was your last tool
 call. Call final_answer now.", and a reply after that without `final_answer` ends
 the run as `error`, cause `no_final_answer`. So does a reply that stops for any
-other reason (`end_turn`, `max_tokens`, `refusal`). `max_tokens` is 16,000 for
+other reason (`end_turn`, `max_tokens`, `refusal`), except one cut at the context
+window, cause `context_exceeded` (ADR 0029). `max_tokens` is 16,000 for
 both, room for Opus 5.5's thinking and the size the SDK sends without streaming.
 The loop is append-only: every reply goes back as returned, thinking blocks
 included, and nothing earlier is edited, as Opus 5.5's thinking check requires.

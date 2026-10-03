@@ -175,7 +175,9 @@ class AgentTools:
                         {
                             "name": column,
                             "type": data_type,
-                            "description": self._docs.column_descriptions.get(f"{prefix}.{column}"),
+                            "description": self._docs.column_descriptions.get(
+                                f"{prefix}.{column.upper()}"
+                            ),
                         }
                         for column, data_type in columns
                     ],

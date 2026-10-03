@@ -6,10 +6,10 @@
 
 ## Context and Problem Statement
 
-An agent run whose model call fails after the retry policy is repeated, and after
-3 attempts it fails as `error` (protocol "Runs" item 4). The policy is set by
-`[llm] timeout_seconds` (450 s) and `max_retries` (2), and the attempts by
-`[agent] run_attempts` (3). Together they decide which runs end as `error`, so they
+An agent run's model call that fails after the retry policy is made again, and the
+run's 3rd failed call ends it as `error` (protocol "Runs" item 4, ADR 0029). The
+policy is set by `[llm] timeout_seconds` (450 s) and `max_retries` (2), and the
+attempts by `[agent] run_attempts` (3). Together they decide which runs end as `error`, so they
 move accuracy. The setup hash keeps them equal across the arms of one session, but
 nothing stopped them changing between the `preregistered` tag and the baseline.
 Should they be frozen with the agent?

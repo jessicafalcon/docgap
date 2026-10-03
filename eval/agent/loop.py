@@ -14,7 +14,7 @@ from pydantic import BaseModel, JsonValue, NonNegativeInt, PositiveInt, model_va
 
 from docgap.config import AgentConfig
 from docgap.grade import Outcome, Result
-from docgap.llm import LlmClient, TransientError
+from docgap.llm import ContextExceeded, LlmClient, TransientError
 from docgap.log import EventLog
 from docgap.models import CONTRACT_CONFIG, CallSite, GradeReason, ModelSettings, Qid, RunId
 from eval.agent.tools import FINAL_ANSWER, AgentTools, TranspileError, tool_definitions
@@ -59,6 +59,8 @@ class ErrorCause(StrEnum):
     MALFORMED_ANSWER = "malformed_answer"
     TRANSPILE = "transpile"
     SQL = "sql"
+    # The conversation outgrew the model's context window (ADR 0029).
+    CONTEXT_EXCEEDED = "context_exceeded"
     INFRASTRUCTURE = "infrastructure"
 
 
@@ -80,8 +82,8 @@ class Transcript(BaseModel):
     repetition: PositiveInt
     # The call site as it ran: the pilot's candidate, or `[call_sites.agent]`.
     call_site: CallSite
-    # Attempts made; more than one only after an infrastructure failure.
-    attempts: PositiveInt
+    # Model calls that failed after the retries and were sent again.
+    failed_calls: NonNegativeInt
     # The Messages API conversation, the tool results and their SQL included.
     messages: list[JsonValue]
     tool_calls: NonNegativeInt
@@ -154,10 +156,11 @@ class _Context:
 
 @dataclass(slots=True)
 class _Conversation:
-    """One attempt's messages and tool calls, kept when a model call fails mid-run."""
+    """The run's messages so far, its tool calls and its failed model calls."""
 
     messages: list[JsonValue]
     tool_calls: int = 0
+    failed_calls: int = 0
 
 
 def _blocks(message: Message) -> list[JsonValue]:
@@ -196,7 +199,38 @@ def _finish(context: _Context, final_sql: str) -> _End:
     return end
 
 
-def _attempt(context: _Context, conversation: _Conversation) -> _End:
+def _ask(
+    context: _Context, conversation: _Conversation, settings: dict[str, JsonValue]
+) -> Message | _End:
+    """Send the conversation so far, sending it again after an infrastructure failure.
+
+    The conversation is kept, so no tool query runs twice: on Snowflake a repeated
+    query would count twice toward usage. The run's `run_attempts`-th failed call
+    ends it as `error`.
+    """
+    while True:
+        try:
+            return context.llm.complete(
+                context.site,
+                {**settings, "messages": list(conversation.messages)},
+                prompt_version=PROMPT_VERSION,
+                draw=context.repetition,
+                stage="agent",
+                item=context.item,
+            )
+        except TransientError as error:
+            conversation.failed_calls += 1
+            context.log.event(
+                "agent", context.item, "model_call_repeated", exception_type=error.exception_type
+            )
+            if conversation.failed_calls >= context.config.run_attempts:
+                return _error(ErrorCause.INFRASTRUCTURE, error.exception_type)
+        except ContextExceeded:
+            # One text, live or replayed: the API's message isn't cached.
+            return _error(ErrorCause.CONTEXT_EXCEEDED, "the input is past the context window")
+
+
+def _converse(context: _Context, conversation: _Conversation) -> _End:
     """Run the conversation until a final answer or the end of the tool budget."""
     messages = conversation.messages
     limit = context.config.max_tool_calls
@@ -209,15 +243,12 @@ def _attempt(context: _Context, conversation: _Conversation) -> _End:
         ),
     }
     while True:
-        message = context.llm.complete(
-            context.site,
-            {**settings, "messages": list(messages)},
-            prompt_version=PROMPT_VERSION,
-            draw=context.repetition,
-            stage="agent",
-            item=context.item,
-        )
+        message = _ask(context, conversation, settings)
+        if isinstance(message, _End):
+            return message
         messages.append({"role": "assistant", "content": _blocks(message)})
+        if message.stop_reason == "model_context_window_exceeded":
+            return _error(ErrorCause.CONTEXT_EXCEEDED, "the reply reached the context window")
         if message.stop_reason != "tool_use":
             return _error(
                 ErrorCause.NO_FINAL_ANSWER, f"stopped with stop_reason {message.stop_reason}"
@@ -277,35 +308,28 @@ def run_agent(
     """Answer one question once with the call site's model, and run the final SQL it gives.
 
     A model call that fails after the retries is an infrastructure failure, not the
-    agent's: the run starts over, replaying the calls the cache holds, and after
-    `config.run_attempts` attempts it ends as `error`.
+    agent's: the call is sent again, and the run's `config.run_attempts`-th failed
+    call ends it as `error` (protocol "Runs" item 4).
 
     Raises:
+        ValueError: the call site sets sampling; the agent runs at each model's defaults.
         CacheMiss: offline, and the cache lacks a call.
         BudgetExhausted: the run's call or spend limit is reached.
     """
+    if site.sampling:
+        raise ValueError(
+            f"the agent sends no sampling settings (ADR 0027): {sorted(site.sampling)}"
+        )
     context = _Context(question, repetition, site, llm, tools, config, log)
-    attempts = 0
-    while True:
-        attempts += 1
-        conversation = _Conversation([{"role": "user", "content": question.text}])
-        try:
-            end = _attempt(context, conversation)
-            break
-        except TransientError as error:
-            log.event(
-                "agent", context.item, "run_attempt_failed", exception_type=error.exception_type
-            )
-            if attempts == config.run_attempts:
-                end = _error(ErrorCause.INFRASTRUCTURE, str(error))
-                break
+    conversation = _Conversation([{"role": "user", "content": question.text}])
+    end = _converse(context, conversation)
     outcome = end.outcome
     transcript = Transcript(
         run_id=run_id,
         qid=question.qid,
         repetition=repetition,
         call_site=call_site(site, config),
-        attempts=attempts,
+        failed_calls=conversation.failed_calls,
         messages=conversation.messages,
         tool_calls=conversation.tool_calls,
         final_sql=end.final_sql,
@@ -320,6 +344,6 @@ def run_agent(
         "run_done",
         outcome=transcript.outcome,
         error_cause=end.cause,
-        attempts=attempts,
+        failed_calls=conversation.failed_calls,
     )
     return AgentRun(transcript, outcome)

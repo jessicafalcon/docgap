@@ -6,9 +6,10 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from conftest import SLOW_SQL
+from conftest import AGENT_MARTS, SLOW_SQL
 
-from eval.agent.warehouse import SqlError, SqlTimeout, Warehouse
+from docgap.manifest import Marts
+from eval.agent.warehouse import SqlError, SqlTimeout, Warehouse, copy_marts
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -38,6 +39,8 @@ def test_list_of_tables_holds_the_marts_only(warehouse: Warehouse) -> None:
         f"SELECT * FROM read_csv('{ROOT / 'docgap.toml'}')",
         f"ATTACH '{ROOT / 'build.duckdb'}' AS other",
         "SET enable_external_access = true",
+        # A setting the next run would inherit.
+        "SET threads = 1",
     ],
 )
 def test_a_file_read_fails(warehouse: Warehouse, sql: str) -> None:
@@ -74,3 +77,16 @@ def test_a_file_not_named_for_the_database_is_refused(agent_db: Path, tmp_path: 
     other = agent_db.rename(tmp_path / "OTHER.duckdb")
     with pytest.raises(ValueError, match=r"ANALYTICS\.duckdb"):
         Warehouse(other, database="ANALYTICS", schema="MARTS", timeout_seconds=60)
+
+
+def test_a_second_copy_replaces_the_first(agent_db: Path) -> None:
+    build = agent_db.parents[1] / "build" / "ANALYTICS.duckdb"
+    assert copy_marts(build, agent_db.parent, AGENT_MARTS) == agent_db
+    assert sorted(path.name for path in agent_db.parent.iterdir()) == ["ANALYTICS.duckdb"]
+
+
+def test_a_mart_missing_from_the_build_fails_the_copy(agent_db: Path, tmp_path: Path) -> None:
+    build = agent_db.parents[1] / "build" / "ANALYTICS.duckdb"
+    marts = Marts("ANALYTICS", "MARTS", {**AGENT_MARTS.tables, "DIM_NEW": {}}, {})
+    with pytest.raises(ValueError, match="DIM_NEW"):
+        copy_marts(build, tmp_path / "other", marts)

@@ -15,7 +15,7 @@ from pydantic import JsonValue, ValidationError
 
 from docgap.config import AgentConfig, LlmConfig, Price, load_config
 from docgap.grade import Result
-from docgap.llm import Budget, LlmClient, ResponseCache, TransientError
+from docgap.llm import Budget, ContextExceeded, LlmClient, ResponseCache, TransientError
 from docgap.log import EventLog
 from docgap.manifest import Marts
 from docgap.models import GradeReason, ModelSettings
@@ -101,6 +101,7 @@ class Harness:
         *,
         repetition: int = 1,
         docs: Marts | None = None,
+        site: ModelSettings | None = None,
     ) -> AgentRun:
         llm_config = LlmConfig(
             timeout_seconds=5,
@@ -117,7 +118,7 @@ class Harness:
             QUESTION,
             repetition,
             run_id="r1",
-            site=ModelSettings(model=MODEL, sampling={}),
+            site=site or ModelSettings(model=MODEL, sampling={}),
             llm=llm,
             tools=tools,
             config=CONFIG,
@@ -141,7 +142,7 @@ def test_final_answer_is_run_and_the_run_is_transcribed(harness: Harness) -> Non
     run = harness.run(model)
     assert run.outcome == Result(1, ((300,),))
     transcript = run.transcript
-    assert (transcript.outcome, transcript.tool_calls, transcript.attempts) == ("result", 2, 1)
+    assert (transcript.outcome, transcript.tool_calls, transcript.failed_calls) == ("result", 2, 0)
     assert (transcript.final_sql, transcript.result_rows, transcript.error_cause) == (
         COUNT,
         1,
@@ -230,25 +231,76 @@ def test_final_answer_past_the_timeout_is_a_timeout(agent_db: Path, tmp_path: Pa
     assert (run.transcript.outcome, run.transcript.error_cause) == ("timeout", None)
 
 
-def test_infrastructure_failure_repeats_the_run_from_the_cache(harness: Harness) -> None:
+def test_infrastructure_failure_sends_the_failed_call_again(harness: Harness) -> None:
     model = ScriptedModel(
-        _reply(_use("list_tables")),
+        _reply(_use("run_sql", sql="SELECT 1")),
         TransientError("InternalServerError"),
         _reply(_use("final_answer", final_sql=COUNT)),
     )
     run = harness.run(model)
     assert run.outcome == Result(1, ((300,),))
-    # The second attempt replays the first call from the cache.
-    assert (run.transcript.attempts, len(model.requests)) == (2, 3)
+    assert (run.transcript.failed_calls, len(model.requests)) == (1, 3)
+    # The failed call is sent again unchanged, and the query before it ran once only.
+    assert model.requests[1] == model.requests[2]
+    assert harness.log.getvalue().count('"tool":"run_sql"') == 1
 
 
-def test_three_infrastructure_failures_end_as_error(harness: Harness) -> None:
-    model = ScriptedModel(*(TransientError("APIConnectionError") for _ in range(3)))
+def test_third_failed_call_ends_the_run_as_error(harness: Harness) -> None:
+    model = ScriptedModel(
+        TransientError("APIConnectionError"),
+        _reply(_use("list_tables")),
+        TransientError("APIConnectionError"),
+        TransientError("APITimeoutError"),
+    )
     run = harness.run(model)
     assert run.outcome is GradeReason.ERROR
     transcript = run.transcript
-    assert (transcript.error_cause, transcript.attempts) == (ErrorCause.INFRASTRUCTURE, 3)
-    assert transcript.error_detail == "APIConnectionError"
+    assert (transcript.error_cause, transcript.failed_calls) == (ErrorCause.INFRASTRUCTURE, 3)
+    assert transcript.error_detail == "APITimeoutError"
+
+
+def test_input_past_the_context_window_is_an_error_that_replays(harness: Harness) -> None:
+    model = ScriptedModel(_reply(_use("list_tables")), ContextExceeded("prompt is too long"))
+    online = harness.run(model)
+    assert online.outcome is GradeReason.ERROR
+    assert online.transcript.error_cause is ErrorCause.CONTEXT_EXCEEDED
+    # The overflow is cached like a reply, so an offline rerun reproduces it.
+    assert harness.run(None).transcript == online.transcript
+
+
+def test_reply_cut_at_the_context_window_is_an_error(harness: Harness) -> None:
+    cut = _reply({"type": "text", "text": "Let me"}, stop="model_context_window_exceeded")
+    run = harness.run(ScriptedModel(cut))
+    assert run.transcript.error_cause is ErrorCause.CONTEXT_EXCEEDED
+
+
+def test_thinking_blocks_go_back_unchanged(harness: Harness) -> None:
+    thinking: JsonValue = {"type": "thinking", "thinking": "", "signature": "c2lnbmF0dXJl"}
+    model = ScriptedModel(
+        _reply(thinking, _use("list_tables")), _reply(_use("final_answer", final_sql=COUNT))
+    )
+    harness.run(model)
+    sent = model.requests[1]["messages"]
+    assert isinstance(sent, list)
+    assistant = sent[1]
+    assert isinstance(assistant, dict)
+    content = assistant["content"]
+    assert isinstance(content, list)
+    assert content[0] == thinking
+
+
+def test_final_answer_beside_a_tool_call_ends_the_run(harness: Harness) -> None:
+    reply = _reply(_use("run_sql", sql="SELECT 1"), _use("final_answer", final_sql=COUNT))
+    run = harness.run(ScriptedModel(reply))
+    assert run.outcome == Result(1, ((300,),))
+    # The other call is neither run nor counted.
+    assert run.transcript.tool_calls == 0
+    assert '"tool":"run_sql"' not in harness.log.getvalue()
+
+
+def test_call_site_with_sampling_is_refused(harness: Harness) -> None:
+    with pytest.raises(ValueError, match="ADR 0027"):
+        harness.run(ScriptedModel(), site=ModelSettings(model=MODEL, sampling={"temperature": 0}))
 
 
 def test_repetition_is_in_the_cache_key_and_the_arm_is_not(harness: Harness) -> None:

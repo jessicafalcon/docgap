@@ -56,7 +56,8 @@ max_tool_calls = 8
 # Output tokens per model call, thinking included: room for Opus 5.5's adaptive
 # thinking, and the non-streaming size the SDK accepts without a warning.
 max_tokens = 16000
-# Attempts at a run whose model call failed after the retries; then it is `error`.
+# Model calls failed after the `[llm]` retries are made again, the conversation kept;
+# a run's 3rd failed call ends it as `error` (ADR 0029).
 run_attempts = 3
 
 [llm]

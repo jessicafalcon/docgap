@@ -12,6 +12,7 @@ import duckdb
 
 from docgap.config import load_config
 from docgap.grade import Result
+from docgap.manifest import Marts, read_marts
 
 __all__ = ["SqlError", "SqlTimeout", "Warehouse", "copy_marts"]
 
@@ -30,40 +31,44 @@ def _quoted(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-def copy_marts(build: Path, out_dir: Path, *, database: str, schema: str) -> Path:
-    """Copy the mart tables of a dbt build into `<out_dir>/<database>.duckdb`.
+def copy_marts(build: Path, out_dir: Path, marts: Marts) -> Path:
+    """Copy the manifest's mart tables from a dbt build into `<out_dir>/<database>.duckdb`.
 
-    DuckDB names a database after its file, so the copy resolves the agent's
-    `ANALYTICS.MARTS` names only as `ANALYTICS.duckdb` (ADR 0026). Table names are
-    uppercased, as Snowflake stores dbt's unquoted model names. The copy is built
-    beside the target and renamed over it, so a crash never leaves half a warehouse.
+    The tables are the manifest's, not every table in the build's schema: dbt never
+    drops the table of a renamed or deleted model, and a stale one would reach the
+    agent undocumented. DuckDB names a database after its file, so the copy resolves
+    the agent's `ANALYTICS.MARTS` names only as `ANALYTICS.duckdb` (ADR 0026). Table
+    names are uppercased, as Snowflake stores dbt's unquoted model names. The copy is
+    built beside the target and renamed over it, so a crash never leaves half a
+    warehouse.
 
     Raises:
-        ValueError: the build holds no table in the schema.
+        ValueError: a mart table is missing from the build.
     """
-    target = out_dir / f"{database}.duckdb"
+    target = out_dir / f"{marts.database}.duckdb"
     staging = out_dir / f".tmp-{os.getpid()}"
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)
+    schema = _quoted(marts.schema)
     try:
         with duckdb.connect(staging / target.name) as con:
             con.execute(f"ATTACH {_literal(build)} AS build (READ_ONLY)")
-            tables = [
-                name
+            built = {
+                name.upper(): name
                 for (name,) in con.execute(
                     "SELECT table_name FROM information_schema.tables"
                     " WHERE table_catalog = 'build' AND upper(table_schema) = ?"
-                    " AND table_type = 'BASE TABLE' ORDER BY table_name",
-                    [schema],
+                    " AND table_type = 'BASE TABLE'",
+                    [marts.schema],
                 ).fetchall()
-            ]
-            if not tables:
-                raise ValueError(f"{build}: no table in schema {schema}")
-            con.execute(f"CREATE SCHEMA {_quoted(schema)}")
-            for name in tables:
+            }
+            if missing := sorted(set(marts.tables) - set(built)):
+                raise ValueError(f"{build}: no table for the marts {missing}")
+            con.execute(f"CREATE SCHEMA {schema}")
+            for table in sorted(marts.tables):
                 con.execute(
-                    f"CREATE TABLE {_quoted(schema)}.{_quoted(name.upper())}"
-                    f" AS FROM build.{_quoted(schema)}.{_quoted(name)}"
+                    f"CREATE TABLE {schema}.{_quoted(table)}"
+                    f" AS FROM build.{schema}.{_quoted(built[table])}"
                 )
             con.execute("DETACH build")
         (staging / target.name).replace(target)
@@ -87,7 +92,13 @@ class Warehouse:
     def __init__(self, path: Path, *, database: str, schema: str, timeout_seconds: float) -> None:
         if path.stem != database:
             raise ValueError(f"{path}: the file must be named {database}.duckdb")
-        self._con = duckdb.connect(path, read_only=True, config={"enable_external_access": False})
+        # A locked configuration refuses every `SET`, so no run's SQL changes a
+        # setting the next run inherits.
+        self._con = duckdb.connect(
+            path,
+            read_only=True,
+            config={"enable_external_access": False, "lock_configuration": True},
+        )
         self._database = database
         self._schema = schema
         self._timeout_seconds = timeout_seconds
@@ -141,22 +152,20 @@ class Warehouse:
             raise SqlError(str(error)) from None
         finally:
             timer.cancel()
+            # An interrupt already firing finishes before the cursor closes.
+            timer.join()
             cursor.close()
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Build the agent's marts-only database from a dbt build's `ANALYTICS.duckdb`."""
+    """Build the agent's marts-only database from a dbt build and its manifest."""
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument("source", choices=["sample", "fixture"])
     args = parser.parse_args(argv)
-    marts = load_config(ROOT / "docgap.toml").manifest
-    build = ROOT / "data" / "warehouse" / args.source / f"{marts.mart_database}.duckdb"
-    target = copy_marts(
-        build,
-        ROOT / "data" / "agent" / args.source,
-        database=marts.mart_database,
-        schema=marts.mart_schema,
-    )
+    config = load_config(ROOT / "docgap.toml").manifest
+    marts, _ = read_marts(ROOT / "warehouse" / "dbt" / "target" / "manifest.json", config)
+    build = ROOT / "data" / "warehouse" / args.source / f"{marts.database}.duckdb"
+    target = copy_marts(build, ROOT / "data" / "agent" / args.source, marts)
     print(f"wrote {target}")
 
 
