@@ -75,10 +75,13 @@ max_retries = 2
 # its manifest recorded (ADR 0031). A call that would start with either limit reached is refused,
 # and the run stops. A failed call counts as a call but adds no spend, since the API
 # reports no usage for it. One pilot pass makes at most 2 models × 72 runs × 9 calls
-# = 1,296 calls, about $17 at the rates the brief estimates; the rest of the call limit
-# is room for calls that fail and are made again.
+# = 1,296 calls; the rest of the call limit is room for calls that fail and are made
+# again. The spend limit is twice what pass 1's smoke run projects for a pass from each
+# model's costliest run ($0.042 on Haiku 4.5, $0.118 on Sonnet 5.5, counted), since its
+# two questions were the shortest kind. The pass's input hashes leave both limits out,
+# so a pass stopped by one resumes in place after a raise.
 max_calls = 1400
-max_spend_usd = 45
+max_spend_usd = 25
 
 # USD per million tokens, from the provider's price list (checked 2026-10-03). Cache
 # reads are charged at the input rate and cache writes at twice it, bounds that never
