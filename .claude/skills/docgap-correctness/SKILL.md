@@ -53,6 +53,8 @@ outputs and run manifest. In `src/docgap/` outside `llm/` and `cli.py`:
 - Secrets live in `.env` locally (gitignored, from the committed `.env.example`)
   and in GitHub Actions secrets in CI; never in the repo, Terraform state or a
   config file. A command that needs one loads it with `uv run --env-file .env`.
+- `.env.example` lists every variable `.env` holds, with an empty value and a
+  comment on what needs it. A variable added to `.env` is added to it in the same change.
 - Code reads a secret from the environment through the SDK or driver that uses it,
   never from a CLI argument, which shell history and `ps` keep.
 - A secret never reaches disk or output: not in logs, the event log, transcripts,
