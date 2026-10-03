@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from collections.abc import Mapping
@@ -52,7 +53,8 @@ def build_manifest(out: Path, docs: Mapping[str, str] | None, project: Path = DB
 
     One path builds both configurations' manifests, the descriptions their only
     difference, so `describe()` reads each the same way (ADR 0025). `dbt parse`
-    opens no database. The copy is built beside `out` and its manifest renamed over
+    opens no database. Each node's `root_path` is dropped, since it names the
+    temporary copy. The copy is built beside `out` and its manifest renamed over
     it, so a crash never leaves half a file.
 
     Raises:
@@ -66,7 +68,8 @@ def build_manifest(out: Path, docs: Mapping[str, str] | None, project: Path = DB
         shutil.copytree(project, copy, ignore=shutil.ignore_patterns("target", "logs"))
         if docs is not None:
             path = copy / _MARTS_YAML
-            path.write_text(document_columns(path.read_text(), docs))
+            text = document_columns(path.read_text(encoding="utf-8"), docs)
+            path.write_text(text, encoding="utf-8")
         # dbt leaves `invoke`'s keyword arguments untyped; none are passed.
         result = dbtRunner().invoke(  # pyright: ignore[reportUnknownMemberType]
             [
@@ -82,7 +85,14 @@ def build_manifest(out: Path, docs: Mapping[str, str] | None, project: Path = DB
         )  # fmt: skip
         if not result.success:
             raise RuntimeError(f"dbt parse failed: {result.exception}")
-        (staging / "target" / "manifest.json").replace(out)
+        built = staging / "target" / "manifest.json"
+        manifest = json.loads(built.read_bytes())
+        # A node's `root_path` is the temporary copy's absolute path: it names the
+        # local checkout and means nothing once the copy is gone.
+        for node in manifest["nodes"].values():
+            node.pop("root_path", None)
+        built.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+        built.replace(out)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return out

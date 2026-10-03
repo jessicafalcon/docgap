@@ -69,7 +69,8 @@ run_attempts = 3
 timeout_seconds = 450
 max_retries = 2
 # Per process, over live calls only: a cache hit costs nothing, and a resumed run
-# starts again from zero. A call that would start with either limit reached is refused,
+# starts again from zero, except a pilot pass, which starts from the calls and spend
+# its manifest recorded (ADR 0031). A call that would start with either limit reached is refused,
 # and the run stops. A failed call counts as a call but adds no spend, since the API
 # reports no usage for it. One pilot pass makes at most 2 models × 72 runs × 9 calls
 # = 1,296 calls, about $30 at the rates the brief estimates; the rest of the call limit
