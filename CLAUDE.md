@@ -212,7 +212,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/pilot-runner` (Phase 3 PR 3b), in review.
+- **Open PRs:** none; `feat/offline-pilot` (Phase 3 PR 3c) is in progress.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -253,11 +253,11 @@ Update after every PR and merge, in the same change. A new session resumes from 
     - **3a:** `feat/pilot-questions`, merged (#24). The 12 pilot questions with gold
       SQL and typed gold results, the every-column docs (label, a newline, then
       the comment) and the full-docs manifest built by `dbt parse`.
-    - **3b:** `feat/pilot-runner`, in review. The runner, offline with a fake transport, and
-      the decision record on which pilot passes count (ADR 0031), as the brief's
-      pilot step owes them.
-    - **3c:** `feat/offline-pilot`. The live pass, after my go-ahead, smoke run
-      first; the fixtures, and the decision records on the model and on `SELECT *`.
-- **Next step:** after `feat/pilot-runner` merges, `feat/offline-pilot`. Before
-  3c, the account's rate limits for Opus 5.5 are checked. `feat/loader-snowflake`
-  still lands before the go/no-go.
+    - **3b:** `feat/pilot-runner`, merged (#25). The runner, offline with a fake
+      transport, and the decision record on which pilot passes count (ADR 0031).
+    - **3c:** `feat/offline-pilot`, in progress. The live pass, after my go-ahead,
+      smoke run first; the fixtures, and the decision records on the model and on
+      `SELECT *`.
+- **Next step:** finish `feat/offline-pilot`: check the account's rate limits for
+  Opus 5.5, run the smoke run, set `[llm] max_spend_usd` from its cost per run,
+  and continue pass 1. `feat/loader-snowflake` still lands before the go/no-go.
