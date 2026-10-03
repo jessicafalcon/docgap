@@ -2,19 +2,30 @@
 
 from __future__ import annotations
 
-import json
-
+import code_list_seeds
 import pytest
 
-from eval.column_docs import DOCS, build, column_docs, mart_columns, variable_texts
+from eval.column_docs import (
+    CODE_LIST_SHEET,
+    DICTIONARY,
+    DOCS,
+    VARIABLE_SHEET,
+    build,
+    column_docs,
+    variable_texts,
+)
 
 
 def test_the_docs_regenerate_byte_identically_from_the_dictionary() -> None:
     assert build() == DOCS.read_bytes()
 
 
-def test_every_mart_column_has_text_and_no_other_column_does() -> None:
-    assert sorted(json.loads(DOCS.read_text())) == mart_columns()
+def test_the_docs_read_the_dictionary_the_seeds_read() -> None:
+    assert (DICTIONARY, VARIABLE_SHEET, CODE_LIST_SHEET) == (
+        code_list_seeds.DICTIONARY,
+        code_list_seeds.VARIABLE_SHEET,
+        code_list_seeds.SHEET,
+    )
 
 
 def test_a_column_the_dictionary_lacks_fails() -> None:

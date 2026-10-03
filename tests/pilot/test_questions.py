@@ -6,6 +6,7 @@ from collections import Counter
 from decimal import Decimal
 from pathlib import Path
 
+import duckdb
 import pyarrow as pa
 import pytest
 import sqlglot
@@ -13,14 +14,14 @@ from pydantic import ValidationError
 from sqlglot import exp
 
 from docgap.config import load_config
-from docgap.grade import MAX_COLUMNS, check
+from docgap.grade import check
 from eval.agent.tools import to_duckdb
+from eval.agent.warehouse import connect_marts
 from eval.questions import (
     PILOT_GOLD,
     PILOT_QUESTIONS,
     Category,
     GoldQuestion,
-    connect,
     gold_result,
     load_questions,
     read_gold,
@@ -52,9 +53,8 @@ def test_every_question_has_stored_gold_and_nothing_else_does() -> None:
 @pytest.mark.parametrize("question", QUESTIONS, ids=lambda question: question.id)
 def test_stored_gold_is_gradable(question: GoldQuestion) -> None:
     gold = read_gold(PILOT_GOLD / f"{question.id}.parquet")
-    assert gold.width <= MAX_COLUMNS
     assert 0 < len(gold.rows) <= ROW_CAP
-    # The grader accepts every value, and the result matches itself.
+    # The grader accepts the width and every value, and the result matches itself.
     assert check(gold, gold, ordered=question.ordered) is None
 
 
@@ -75,6 +75,10 @@ def test_an_unknown_category_fails(tmp_path: Path) -> None:
         load_questions(path)
 
 
+def _connect(agent_db: Path) -> duckdb.DuckDBPyConnection:
+    return connect_marts(agent_db, database="ANALYTICS", schema="MARTS")
+
+
 def _question(sql: str) -> GoldQuestion:
     return GoldQuestion(id="Q1", category=Category.REGION, text="t", gold_sql=sql, ordered=False)
 
@@ -88,12 +92,12 @@ def _question(sql: str) -> GoldQuestion:
     ],
 )
 def test_gold_breaking_a_protocol_rule_fails(agent_db: Path, sql: str, error: str) -> None:
-    with connect(agent_db, schema="MARTS") as con, pytest.raises(ValueError, match=error):
+    with _connect(agent_db) as con, pytest.raises(ValueError, match=error):
         gold_result(con, _question(sql), max_rows=200)
 
 
 def test_gold_reads_nothing_outside_the_agent_database(agent_db: Path) -> None:
-    with connect(agent_db, schema="MARTS") as con, pytest.raises(Exception, match="disabled"):
+    with _connect(agent_db) as con, pytest.raises(Exception, match="disabled"):
         gold_result(con, _question("SELECT * FROM read_csv('docgap.toml')"), max_rows=200)
 
 

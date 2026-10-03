@@ -12,11 +12,13 @@ from pathlib import Path
 import yaml
 from dbt.cli.main import dbtRunner
 
+from eval.column_docs import DOCS, MARTS_YAML
+
 __all__ = ["DBT_PROJECT", "build_manifest", "document_columns"]
 
 ROOT = Path(__file__).resolve().parents[1]
 DBT_PROJECT = ROOT / "warehouse" / "dbt"
-_MARTS_YAML = Path("models") / "marts" / "_marts__models.yml"
+_MARTS_YAML = MARTS_YAML.relative_to(DBT_PROJECT)
 
 
 def document_columns(marts_yaml: str, docs: Mapping[str, str]) -> str:
@@ -95,7 +97,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     docs = None
     if args.configuration == "full_docs":
-        docs = json.loads((ROOT / "eval" / "column_docs.json").read_text())
+        docs = json.loads(DOCS.read_text())
     out = ROOT / "data" / "pilot" / args.configuration / "manifest.json"
     print(f"wrote {build_manifest(out, docs)}")
 

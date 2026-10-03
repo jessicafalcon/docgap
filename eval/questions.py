@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterator
 from enum import StrEnum
 from pathlib import Path
 
@@ -22,14 +23,14 @@ from docgap.artifacts import write_atomic
 from docgap.config import load_config
 from docgap.grade import MAX_COLUMNS, Result, check
 from docgap.models import CONTRACT_CONFIG, NonEmptyStr, Qid
-from eval.agent.tools import to_duckdb
+from eval.agent.tools import TranspileError, to_duckdb
+from eval.agent.warehouse import connect_marts
 
 __all__ = [
     "PILOT_GOLD",
     "PILOT_QUESTIONS",
     "Category",
     "GoldQuestion",
-    "connect",
     "gold_result",
     "load_questions",
     "read_gold",
@@ -86,16 +87,6 @@ def load_questions(path: Path) -> list[GoldQuestion]:
     return parsed.questions
 
 
-def connect(database: Path, *, schema: str) -> duckdb.DuckDBPyConnection:
-    """Open an agent database read-only with file access off, as the agent's warehouse does.
-
-    Gold SQL then reads the marts alone, the protocol's rule, since nothing else is there.
-    """
-    con = duckdb.connect(database, read_only=True, config={"enable_external_access": False})
-    con.execute(f'USE "{database.stem}"."{schema}"')
-    return con
-
-
 def gold_result(
     con: duckdb.DuckDBPyConnection, question: GoldQuestion, *, max_rows: int
 ) -> pa.Table:
@@ -140,50 +131,54 @@ def read_gold(path: Path) -> Result:
         return to_result(file.read())  # pyright: ignore[reportUnknownMemberType]
 
 
-def _gold(check_only: bool) -> int:
+def _gold_results(source: str) -> Iterator[tuple[GoldQuestion, pa.Table | Exception]]:
+    """Run each pilot gold query on a source's agent database: its result or its failure."""
     config = load_config(ROOT / "docgap.toml")
-    database = ROOT / "data" / "agent" / "sample" / f"{config.manifest.mart_database}.duckdb"
-    questions = load_questions(PILOT_QUESTIONS)
-    PILOT_GOLD.mkdir(exist_ok=True)
+    database, schema = config.manifest.mart_database, config.manifest.mart_schema
+    path = ROOT / "data" / "agent" / source / f"{database}.duckdb"
+    with connect_marts(path, database=database, schema=schema) as con:
+        for question in load_questions(PILOT_QUESTIONS):
+            try:
+                yield question, gold_result(con, question, max_rows=config.agent.row_cap)
+            except (ValueError, TranspileError, duckdb.Error) as error:
+                yield question, error
+
+
+def _gold(check_only: bool) -> int:
     failed = 0
-    with connect(database, schema=config.manifest.mart_schema) as con:
-        for question in questions:
-            table = gold_result(con, question, max_rows=config.agent.row_cap)
-            path = PILOT_GOLD / f"{question.id}.parquet"
-            if not check_only:
-                write_gold(table, path)
-            elif not path.exists():
-                print(f"{question.id}: no stored gold")
-                failed += 1
-            elif (
-                reason := check(to_result(table), read_gold(path), ordered=question.ordered)
-            ) is not None:
-                print(f"{question.id}: {reason.value}")
-                failed += 1
-    stale = sorted({path.stem for path in PILOT_GOLD.glob("*.parquet")} - {q.id for q in questions})
-    if stale:
+    qids: list[str] = []
+    if not check_only:
+        PILOT_GOLD.mkdir(exist_ok=True)
+    for question, table in _gold_results("sample"):
+        qids.append(question.id)
+        path = PILOT_GOLD / f"{question.id}.parquet"
+        problem = None
+        if isinstance(table, Exception):
+            problem = f"{type(table).__name__}: {table}"
+        elif not check_only:
+            write_gold(table, path)
+        elif not path.exists():
+            problem = "no stored gold"
+        elif reason := check(to_result(table), read_gold(path), ordered=question.ordered):
+            problem = reason.value
+        if problem is not None:
+            print(f"{question.id}: {problem}")
+            failed += 1
+    if stale := sorted({path.stem for path in PILOT_GOLD.glob("*.parquet")} - set(qids)):
         print(f"gold with no question: {stale}")
         failed += 1
-    print(
-        f"{len(questions)} gold results {'checked' if check_only else 'written'}, {failed} failed"
-    )
+    print(f"{len(qids)} gold results {'checked' if check_only else 'written'}, {failed} failed")
     return failed
 
 
 def _check(source: str) -> int:
-    config = load_config(ROOT / "docgap.toml")
-    database = ROOT / "data" / "agent" / source / f"{config.manifest.mart_database}.duckdb"
-    questions = load_questions(PILOT_QUESTIONS)
     failed = 0
-    with connect(database, schema=config.manifest.mart_schema) as con:
-        for question in questions:
-            try:
-                table = gold_result(con, question, max_rows=config.agent.row_cap)
-            except (ValueError, duckdb.Error) as error:
-                print(f"{question.id}: {type(error).__name__}: {error}")
-                failed += 1
-            else:
-                print(f"{question.id}: {table.num_rows} rows x {table.num_columns} columns")
+    for question, table in _gold_results(source):
+        if isinstance(table, Exception):
+            print(f"{question.id}: {type(table).__name__}: {table}")
+            failed += 1
+        else:
+            print(f"{question.id}: {table.num_rows} rows x {table.num_columns} columns")
     return failed
 
 

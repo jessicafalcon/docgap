@@ -14,7 +14,7 @@ from docgap.config import load_config
 from docgap.grade import Result
 from docgap.manifest import Marts, read_marts
 
-__all__ = ["SqlError", "SqlTimeout", "Warehouse", "copy_marts"]
+__all__ = ["SqlError", "SqlTimeout", "Warehouse", "connect_marts", "copy_marts"]
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -81,6 +81,28 @@ def _literal(path: Path) -> str:
     return "'" + str(path).replace("'", "''") + "'"
 
 
+def connect_marts(path: Path, *, database: str, schema: str) -> duckdb.DuckDBPyConnection:
+    """Open a marts copy read-only, with file access off and the configuration locked.
+
+    The connection reads the marts unqualified. The agent's warehouse and the gold
+    SQL open the copy through here, so gold reads exactly what the agent can.
+
+    Raises:
+        ValueError: the file isn't named for the database it holds.
+    """
+    if path.stem != database:
+        raise ValueError(f"{path}: the file must be named {database}.duckdb")
+    # A locked configuration refuses every `SET`, so no run's SQL changes a setting
+    # the next run inherits.
+    con = duckdb.connect(
+        path,
+        read_only=True,
+        config={"enable_external_access": False, "lock_configuration": True},
+    )
+    con.execute(f"USE {_quoted(database)}.{_quoted(schema)}")
+    return con
+
+
 class Warehouse:
     """A read-only connection to the marts copy, with DuckDB's file access off.
 
@@ -90,15 +112,7 @@ class Warehouse:
     """
 
     def __init__(self, path: Path, *, database: str, schema: str, timeout_seconds: float) -> None:
-        if path.stem != database:
-            raise ValueError(f"{path}: the file must be named {database}.duckdb")
-        # A locked configuration refuses every `SET`, so no run's SQL changes a
-        # setting the next run inherits.
-        self._con = duckdb.connect(
-            path,
-            read_only=True,
-            config={"enable_external_access": False, "lock_configuration": True},
-        )
+        self._con = connect_marts(path, database=database, schema=schema)
         self._database = database
         self._schema = schema
         self._timeout_seconds = timeout_seconds

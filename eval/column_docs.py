@@ -22,8 +22,11 @@ import openpyxl
 import yaml
 
 __all__ = [
+    "CODE_LIST_SHEET",
+    "DICTIONARY",
     "DOCS",
     "MARTS_YAML",
+    "VARIABLE_SHEET",
     "build",
     "column_docs",
     "label_texts",
@@ -33,7 +36,7 @@ __all__ = [
 ]
 
 ROOT = Path(__file__).resolve().parents[1]
-# Keep in sync with loader/code_list_seeds.py, which reads the same file and sheets.
+# The seeds read the same file and sheets; a test checks the names agree.
 DICTIONARY = ROOT / "eval" / "reference" / "2024_descriptif-variables_open-damir-base-complete.xlsx"
 VARIABLE_SHEET = "OPEN DAMIR"
 CODE_LIST_SHEET = "MOD OPEN DAMIR"
@@ -70,11 +73,10 @@ def variable_texts(rows: Iterable[Sequence[object]]) -> dict[str, str]:
         name = _text(row[columns[_NAME]]) if len(row) > columns[_NAME] else None
         if name is None:
             continue
-        cells = [
+        label, comment = (
             _text(row[columns[key]]) if len(row) > columns[key] else None
             for key in (_LABEL, _COMMENT)
-        ]
-        label, comment = cells
+        )
         if label is None:
             raise ValueError(f"{VARIABLE_SHEET}: {name} has no label")
         if name in texts:
@@ -134,23 +136,15 @@ def render(docs: Mapping[str, str]) -> bytes:
     return (json.dumps(dict(sorted(docs.items())), ensure_ascii=False, indent=2) + "\n").encode()
 
 
-def _sheet_rows(sheet: str, dictionary: Path) -> list[tuple[object, ...]]:
-    workbook = openpyxl.load_workbook(dictionary, read_only=True, data_only=True)
-    try:
-        return [tuple(row) for row in workbook[sheet].iter_rows(values_only=True)]
-    finally:
-        workbook.close()
-
-
 def build(dictionary: Path = DICTIONARY, marts_yaml: Path = MARTS_YAML) -> bytes:
     """Return the docs file's bytes, read from the dictionary and the marts YAML."""
-    return render(
-        column_docs(
-            mart_columns(marts_yaml),
-            variable_texts(_sheet_rows(VARIABLE_SHEET, dictionary)),
-            label_texts(_sheet_rows(CODE_LIST_SHEET, dictionary)),
-        )
-    )
+    workbook = openpyxl.load_workbook(dictionary, read_only=True, data_only=True)
+    try:
+        variables = variable_texts(workbook[VARIABLE_SHEET].iter_rows(values_only=True))
+        labels = label_texts(workbook[CODE_LIST_SHEET].iter_rows(values_only=True))
+    finally:
+        workbook.close()
+    return render(column_docs(mart_columns(marts_yaml), variables, labels))
 
 
 def main() -> None:
