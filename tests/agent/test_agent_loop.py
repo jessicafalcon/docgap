@@ -40,7 +40,7 @@ COUNT = "SELECT COUNT(*) FROM FCT_REIMBURSEMENTS"
 FCT = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS"
 _ids = itertools.count(1)
 ROOT = Path(__file__).resolve().parents[2]
-PROMPT_SHA256 = "60aa5a7e468cd3a349513363bd504d1b49ed4df90d47776c5c76a7ff44bf5130"
+PROMPT_SHA256 = "b98b368046aec315913359dc1810817a60be6156edfec2a66cfd9ca1f5a5dea6"
 
 
 def _docs(text: str | None) -> Marts:
@@ -347,8 +347,8 @@ def test_transcript_records_the_call_site_as_it_ran(harness: Harness) -> None:
 
 
 def test_prompt_version_names_the_prompt_text() -> None:
-    # The hash of the system prompt and the tool definitions under the committed
-    # `[agent]` limits. A change to either text fails here: give it a new
+    # The hash of every request key but the conversation, under the committed
+    # `[agent]` limits. A change to any of them fails here: give it a new
     # `PROMPT_VERSION`, then update the hash.
     config = load_config(ROOT / "docgap.toml").agent
     site = call_site(ModelSettings(model=MODEL, sampling={}), config)

@@ -241,9 +241,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
   - **PR 2a:** `feat/llm-client`, merged (#21). A minimal `llm/` (one client, cache,
     timeout, retries, the call and spend budget), the JSON-lines event log, and
     `[llm]` and `[pilot]` in `docgap.toml`.
-  - **PR 2b:** `feat/agent-loop`, merged (#22); its follow-up
-    `feat/agent-prompt-cache` caches the agent's prompt prefix, in review. `eval/agent/` on
+  - **PR 2b:** `feat/agent-loop`, merged (#22). `eval/agent/` on
     DuckDB; the decision record on what the agent sends at default settings.
+    Its follow-up, `feat/agent-prompt-cache`, caches the agent's prompt prefix, in review.
   - **PR 3:** `feat/offline-pilot`. 12 pilot questions, the every-column docs,
     the run, and the decision records on the model and on `SELECT *`.
   - **PR 4:** `feat/load-full-duckdb`. The three full months into DuckDB after
