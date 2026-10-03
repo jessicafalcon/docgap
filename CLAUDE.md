@@ -208,7 +208,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/agent-prompt-cache`, a follow-up to #22, in review.
+- **Open PRs:** `feat/pilot-questions` (Phase 3 PR 3a), in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -243,14 +243,28 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `[llm]` and `[pilot]` in `docgap.toml`.
   - **PR 2b:** `feat/agent-loop`, merged (#22). `eval/agent/` on
     DuckDB; the decision record on what the agent sends at default settings.
-    Its follow-up, `feat/agent-prompt-cache`, caches the agent's prompt prefix, in review.
-  - **PR 3:** `feat/offline-pilot`. 12 pilot questions, the every-column docs,
-    the run, and the decision records on the model and on `SELECT *`.
+    Its follow-up, `feat/agent-prompt-cache`, merged (#23), caches the agent's
+    prompt prefix (ADR 0030).
+  - **PR 3**, split in three (approved after `devils-advocate`):
+    - **3a:** `feat/pilot-questions`, in review. The 12 pilot questions with gold
+      SQL and typed gold results, the every-column docs (label, a newline, then
+      the comment) and the full-docs manifest built by `dbt parse`.
+    - **3b:** `feat/pilot-runner`. The runner, offline with a fake transport: runs
+      ordered repetition, then question, then configuration, so a budget stop
+      leaves every configuration partly run; a `--limit` smoke mode; the budget
+      seeded across a resume. Its decision record: a pass stopped by a harness
+      fault (a permanent API error, the budget) is void and doesn't count toward the
+      two reruns; a pass that completes always counts.
+    - **3c:** `feat/offline-pilot`. The live pass, after my go-ahead: a smoke run
+      first (1–2 questions × 4 configurations, repetition 1), `[llm] max_spend_usd`
+      set from its counted cost per run, then the rest of the same pass. The
+      fixtures, and the decision records on the model and on `SELECT *`.
   - **PR 4:** `feat/load-full-duckdb`. The three full months into DuckDB after
     the `sources.lock` check; any time before PR 5.
   - **PR 5:** `feat/questions`. The 40 questions and gold SQL, checked on the
     full data.
   - **PR 6:** `feat/baseline-docs`. The lock, the baseline YAML and the frozen
     manifest, merged after PR 5 (ADR 0021).
-- **Next step:** after `feat/agent-prompt-cache` merges, `feat/offline-pilot`. `feat/loader-snowflake` still
-  lands before the go/no-go.
+- **Next step:** after `feat/pilot-questions` merges, `feat/pilot-runner`. Before
+  3c, the account's rate limits for Opus 5.5 are checked. `feat/loader-snowflake`
+  still lands before the go/no-go.
