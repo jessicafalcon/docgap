@@ -21,9 +21,10 @@ questions:
   - id: P02
     category: pharmacy_dental
     text: >-
-      For care by dental surgeons, what was the total amount charged, before any
-      reimbursement, in each processing month? Return the month as a number in
-      YYYYMM form and the amount, in month order.
+      For care whose executing provider's activity is recorded as dental surgery,
+      what was the total amount charged, before any reimbursement, in each
+      processing month? Return the month as a number in YYYYMM form and the amount,
+      in month order.
     ordered: true
     gold_sql: |
       SELECT FLX_ANN_MOI, SUM(FLT_PAI_MNT)
