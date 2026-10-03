@@ -29,3 +29,8 @@ runs/
 # offline sample cut from them (tracked by loader/sample.lock)
 data/
 .hypothesis/
+
+# What a killed pilot process leaves in a pass's committed directory: a write's
+# temporary file, or a dbt manifest's staging copy
+fixtures/pilot/**/*.tmp-*
+fixtures/pilot/**/.tmp-*/

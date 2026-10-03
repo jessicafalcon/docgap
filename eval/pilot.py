@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -65,6 +66,7 @@ __all__ = [
     "configurations",
     "grade_run",
     "input_hashes",
+    "lock_pass",
     "plan",
     "run_pass",
 ]
@@ -76,6 +78,15 @@ PILOT_DIR = ROOT / "fixtures" / "pilot"
 WORK_DIR = ROOT / "data" / "pilot"
 # The protocol's repetitions per question per configuration ("Runs" item 2).
 REPETITIONS = 3
+# The code that shapes what the agent reads and how a run is graded: the tools'
+# output, the transpiler, the model calls' error handling, the grader, and the
+# locked dependency versions. A resumed pass refuses a change to any of them.
+CODE = (
+    *sorted((ROOT / "eval" / "agent").glob("*.py")),
+    *sorted((ROOT / "src" / "docgap" / "llm").glob("*.py")),
+    ROOT / "src" / "docgap" / "grade.py",
+    ROOT / "uv.lock",
+)
 
 TRANSCRIPT = "transcript.json"
 GRADE = "grade.json"
@@ -239,6 +250,7 @@ def input_hashes(
         "sample_lock": SAMPLE_LOCK,
         **{f"manifest.{docs}": path for docs, path in manifests.items()},
         **{f"gold.{question.id}": PILOT_GOLD / f"{question.id}.parquet" for question in questions},
+        **{f"code.{path.relative_to(ROOT).as_posix()}": path for path in CODE},
     }
     hashes = {name: _file_sha256(path) for name, path in files.items()}
     # `max_calls` and `max_spend_usd` may rise after the smoke run, within the pass;
@@ -354,7 +366,8 @@ def run_pass(
         agent = run_agent(
             Question(question.id, question.text),
             run.repetition,
-            run_id=run_id,
+            # Names the configuration, so a transcript read apart from its path still says it.
+            run_id=f"{run_id}.{run.configuration.name}",
             site=ModelSettings(model=run.configuration.model, sampling={}),
             llm=llm,
             tools=inputs.tools[run.configuration.docs],
@@ -423,7 +436,7 @@ def run_pass(
     return manifest
 
 
-def _lock(work: Path) -> Path:
+def lock_pass(work: Path) -> Path:
     """Claim the pass for this process, so two processes never write the same runs.
 
     The lock sits in the gitignored work directory, so one a killed process leaves
@@ -440,7 +453,7 @@ def _lock(work: Path) -> Path:
         raise FileExistsError(
             f"{lock}: another process runs this pass, or one was killed; delete it if none runs"
         ) from None
-    os.write(descriptor, f"{os.getpid()}\n".encode())
+    os.write(descriptor, f"{os.getpid()} {socket.gethostname()}\n".encode())
     os.close(descriptor)
     return lock
 
@@ -459,7 +472,7 @@ def main(argv: list[str] | None = None) -> None:
     work = WORK_DIR / f"pass-{args.pass_number}"
     run_id = f"pilot-{args.pass_number}"
     try:
-        lock = _lock(work)
+        lock = lock_pass(work)
     except FileExistsError as error:
         sys.exit(str(error))
     try:

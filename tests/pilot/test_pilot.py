@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import itertools
+import uuid
 from collections.abc import Iterator, Mapping
 from decimal import Decimal
 from pathlib import Path
@@ -32,6 +33,7 @@ from eval.pilot import (
     RunGrade,
     grade_run,
     input_hashes,
+    lock_pass,
     plan,
     run_pass,
 )
@@ -193,6 +195,7 @@ def test_a_pass_writes_and_grades_every_run(pilot: Pilot) -> None:
     run = pilot.out / "model-b.full_docs" / "P02.r3"
     transcript = Transcript.model_validate_json((run / "transcript.json").read_bytes())
     assert (transcript.qid, transcript.repetition, transcript.outcome) == ("P02", 3, "result")
+    assert transcript.run_id == "pilot-1.model-b.full_docs"
     recorded = RunGrade.model_validate_json((run / "grade.json").read_bytes())
     assert recorded.grade is not None
     assert recorded.grade.reason is GradeReason.ROW_COUNT_MISMATCH
@@ -251,14 +254,24 @@ def test_a_value_the_grader_refuses_is_a_harness_error(
     assert not rows.exists()
 
 
-def test_an_integer_parquet_cannot_store_is_a_harness_error(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("value", "error"),
+    [
+        (uuid.UUID(int=1), "TypeError: cannot grade a value of type UUID"),
+        # The grader takes it; Parquet can't store it.
+        (2**70, "OverflowError"),
+    ],
+)
+def test_a_value_the_harness_cannot_keep_is_a_harness_error(
+    tmp_path: Path, value: object, error: str
+) -> None:
     rows = tmp_path / "rows.parquet"
-    outcome = Result(1, ((2**70,),))
+    outcome = Result(1, ((value,),))
 
     recorded = grade_run(_transcript(1), outcome, GOLD["P01"], ordered=False, rows=rows)
 
     assert recorded.harness_error is not None
-    assert recorded.harness_error.startswith("OverflowError")
+    assert recorded.harness_error.startswith(error)
     assert not rows.exists()
 
 
@@ -323,6 +336,30 @@ def test_a_permanent_api_error_stops_the_pass(pilot: Pilot) -> None:
     assert pilot.made() == []
 
 
+def test_an_unexpected_error_saves_the_calls_counted_and_propagates(pilot: Pilot) -> None:
+    pilot.run(FakeModel(RIGHT), limit=1)
+
+    with pytest.raises(RuntimeError, match="connection pool broke"):
+        pilot.run(FakeModel(RIGHT, RuntimeError("connection pool broke")))
+
+    manifest = PilotManifest.model_validate_json((pilot.out / "manifest.json").read_bytes())
+    assert manifest.status is PassStatus.IN_PROGRESS
+    # The first run's call, and the second run's call that failed.
+    assert manifest.model_calls == 2
+    assert manifest.stops == []
+
+
+def test_a_second_process_is_refused_by_the_lock(tmp_path: Path) -> None:
+    lock = lock_pass(tmp_path / "work")
+
+    with pytest.raises(FileExistsError, match="another process runs this pass"):
+        lock_pass(tmp_path / "work")
+
+    pid, host = lock.read_text().split()
+    assert pid.isdigit()
+    assert host
+
+
 def test_a_resume_refuses_other_inputs(pilot: Pilot) -> None:
     pilot.run(FakeModel(RIGHT), limit=1)
 
@@ -356,6 +393,24 @@ def test_the_input_hashes_ignore_the_budget_but_not_the_timeout(
         return input_hashes(changed, manifests=manifests, agent_db=agent_db, questions=questions)
 
     base = hashes(config.llm)
+    assert {key.split(".", 1)[0] for key in base} == {
+        "agent_db",
+        "call_site",
+        "code",
+        "column_docs",
+        "config",
+        "gold",
+        "manifest",
+        "questions",
+        "sample_lock",
+    }
+    assert {key for key in base if key.startswith(("config.", "call_site."))} == {
+        "config.agent",
+        "config.llm",
+        "config.pilot",
+        *(f"call_site.{model}" for model in config.pilot.models),
+    }
+    assert {"code.src/docgap/grade.py", "code.eval/agent/loop.py", "code.uv.lock"} <= set(base)
     assert base == hashes(config.llm.model_copy(update={"max_calls": 1, "max_spend_usd": 1.0}))
     assert base != hashes(config.llm.model_copy(update={"timeout_seconds": 1.0}))
     assert {f"gold.{q.id}" for q in questions} <= set(base)
