@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
-import json
 import os
 import shutil
 from collections.abc import Mapping
@@ -12,7 +10,7 @@ from pathlib import Path
 import yaml
 from dbt.cli.main import dbtRunner
 
-from eval.column_docs import DOCS, MARTS_YAML
+from eval.column_docs import MARTS_YAML
 
 __all__ = ["DBT_PROJECT", "build_manifest", "document_columns"]
 
@@ -88,19 +86,3 @@ def build_manifest(out: Path, docs: Mapping[str, str] | None, project: Path = DB
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return out
-
-
-def main(argv: list[str] | None = None) -> None:
-    """Build the no-docs or the full-docs manifest under data/pilot/."""
-    parser = argparse.ArgumentParser(description=main.__doc__)
-    parser.add_argument("configuration", choices=["no_docs", "full_docs"])
-    args = parser.parse_args(argv)
-    docs = None
-    if args.configuration == "full_docs":
-        docs = json.loads(DOCS.read_text())
-    out = ROOT / "data" / "pilot" / args.configuration / "manifest.json"
-    print(f"wrote {build_manifest(out, docs)}")
-
-
-if __name__ == "__main__":
-    main()

@@ -7,17 +7,21 @@ uv run python -m eval.questions check fixture    # every gold query runs on a so
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections.abc import Iterator
 from enum import StrEnum
+from itertools import pairwise
 from pathlib import Path
 
 import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
+import sqlglot
 import yaml
 from pydantic import BaseModel
+from sqlglot import exp
 
 from docgap.artifacts import write_atomic
 from docgap.config import load_config
@@ -27,13 +31,19 @@ from eval.agent.tools import TranspileError, to_duckdb
 from eval.agent.warehouse import connect_marts
 
 __all__ = [
+    "DATA_LOCK_KEY",
+    "GOLD_SQL_KEY",
     "PILOT_GOLD",
     "PILOT_QUESTIONS",
     "Category",
     "GoldQuestion",
+    "gold_problems",
+    "gold_provenance",
     "gold_result",
     "load_questions",
+    "query_problems",
     "read_gold",
+    "sha256",
     "to_result",
     "write_gold",
 ]
@@ -41,6 +51,11 @@ __all__ = [
 ROOT = Path(__file__).resolve().parents[1]
 PILOT_QUESTIONS = ROOT / "eval" / "pilot_questions.yml"
 PILOT_GOLD = ROOT / "eval" / "pilot_gold"
+SAMPLE_LOCK = ROOT / "loader" / "sample.lock"
+
+# Parquet schema metadata naming what a stored gold result was computed from.
+GOLD_SQL_KEY = b"docgap.gold_sql_sha256"
+DATA_LOCK_KEY = b"docgap.data_lock_sha256"
 
 
 class Category(StrEnum):
@@ -87,14 +102,52 @@ def load_questions(path: Path) -> list[GoldQuestion]:
     return parsed.questions
 
 
+def sha256(data: str | bytes) -> str:
+    """Hash text or bytes, as a stored gold result records its inputs."""
+    return hashlib.sha256(data.encode() if isinstance(data, str) else data).hexdigest()
+
+
+def _check_ties(con: duckdb.DuckDBPyConnection, question: GoldQuestion) -> None:
+    """Refuse an order the gold SQL leaves to chance: tied keys in an ordered result, or a
+    `LIMIT` cutting through a tie.
+
+    The query runs again without its `LIMIT`, its `ORDER BY` keys added as columns, so
+    the rows the cut leaves out are seen too.
+    """
+    tree = sqlglot.parse_one(question.gold_sql, read="snowflake")
+    order, limit = tree.args.get("order"), tree.args.get("limit")
+    if order is None:
+        if question.ordered or limit is not None:
+            raise ValueError(f"{question.id}: an ordered or limited result needs an ORDER BY")
+        return
+    if not question.ordered and limit is None:
+        return
+    if not isinstance(tree, exp.Select):
+        raise ValueError(f"{question.id}: ties are checked on a plain SELECT only")
+    keys = [key.this.copy() for key in order.expressions]
+    probe = tree.copy()
+    probe.set("limit", None)
+    for i, key in enumerate(keys):
+        probe = probe.select(exp.alias_(key, f"_docgap_key_{i}"), copy=False)
+    rows = con.execute(to_duckdb(probe.sql(dialect="snowflake"))).fetchall()
+    ranked = [row[-len(keys) :] for row in rows]
+    count = int(limit.expression.this) if limit is not None else len(ranked)
+    if question.ordered and any(a == b for a, b in pairwise(ranked[:count])):
+        raise ValueError(f"{question.id}: two rows tie on the ORDER BY keys")
+    if count < len(ranked) and ranked[count - 1] == ranked[count]:
+        raise ValueError(f"{question.id}: the LIMIT cuts through a tie")
+
+
 def gold_result(
     con: duckdb.DuckDBPyConnection, question: GoldQuestion, *, max_rows: int
 ) -> pa.Table:
     """Run a question's gold SQL, transpiled to DuckDB, and return its result with its types.
 
+    An unordered result is sorted, so a second run stores the same rows in the same order.
+
     Raises:
         ValueError: the result breaks a protocol rule: more than `MAX_COLUMNS` columns,
-            more than `max_rows` rows, or a list or a struct.
+            more than `max_rows` rows, a list or a struct, or an order left to chance.
         TranspileError: sqlglot can't transpile the gold SQL.
         duckdb.Error: the gold SQL fails.
     """
@@ -106,7 +159,15 @@ def gold_result(
     types = zip(table.column_names, table.schema.types, strict=True)
     if nested := [name for name, type_ in types if pa.types.is_nested(type_)]:
         raise ValueError(f"{question.id}: columns holding a list or a struct: {nested}")
-    return table
+    _check_ties(con, question)
+    if question.ordered:
+        return table
+    # By position, then back to the result's names: two columns may share a name.
+    positions = [str(i) for i in range(table.num_columns)]
+    by_position = table.rename_columns(positions)
+    return by_position.sort_by([(name, "ascending") for name in positions]).rename_columns(  # pyright: ignore[reportUnknownMemberType]
+        table.column_names
+    )
 
 
 def to_result(table: pa.Table) -> Result:
@@ -119,9 +180,12 @@ def to_result(table: pa.Table) -> Result:
     return Result(table.num_columns, tuple(zip(*columns, strict=True)))
 
 
-def write_gold(table: pa.Table, path: Path) -> None:
-    """Store a gold result as Parquet, whole or not at all."""
-    write_atomic(path, lambda sink: pq.write_table(table, sink))  # pyright: ignore[reportUnknownMemberType, reportUnknownLambdaType]
+def write_gold(table: pa.Table, path: Path, *, gold_sql: str, data_lock: bytes) -> None:
+    """Store a gold result as Parquet, whole or not at all, with the hashes of its SQL and data."""
+    stored = table.replace_schema_metadata(
+        {GOLD_SQL_KEY: sha256(gold_sql), DATA_LOCK_KEY: sha256(data_lock)}
+    )
+    write_atomic(path, lambda sink: pq.write_table(stored, sink))  # pyright: ignore[reportUnknownMemberType, reportUnknownLambdaType]
 
 
 def read_gold(path: Path) -> Result:
@@ -131,55 +195,70 @@ def read_gold(path: Path) -> Result:
         return to_result(file.read())  # pyright: ignore[reportUnknownMemberType]
 
 
-def _gold_results(source: str) -> Iterator[tuple[GoldQuestion, pa.Table | Exception]]:
-    """Run each pilot gold query on a source's agent database: its result or its failure."""
-    config = load_config(ROOT / "docgap.toml")
-    database, schema = config.manifest.mart_database, config.manifest.mart_schema
-    path = ROOT / "data" / "agent" / source / f"{database}.duckdb"
-    with connect_marts(path, database=database, schema=schema) as con:
-        for question in load_questions(PILOT_QUESTIONS):
-            try:
-                yield question, gold_result(con, question, max_rows=config.agent.row_cap)
-            except (ValueError, TranspileError, duckdb.Error) as error:
-                yield question, error
+def gold_provenance(path: Path) -> dict[bytes, bytes]:
+    """The hashes a stored gold result records: its SQL's and its data lock's."""
+    metadata = pq.read_schema(path).metadata or {}  # pyright: ignore[reportUnknownMemberType]
+    return {key: metadata[key] for key in (GOLD_SQL_KEY, DATA_LOCK_KEY) if key in metadata}
 
 
-def _gold(check_only: bool) -> int:
-    failed = 0
-    qids: list[str] = []
-    if not check_only:
-        PILOT_GOLD.mkdir(exist_ok=True)
-    for question, table in _gold_results("sample"):
-        qids.append(question.id)
-        path = PILOT_GOLD / f"{question.id}.parquet"
-        problem = None
-        if isinstance(table, Exception):
-            problem = f"{type(table).__name__}: {table}"
-        elif not check_only:
-            write_gold(table, path)
+def _run(
+    con: duckdb.DuckDBPyConnection, questions: list[GoldQuestion], row_cap: int
+) -> Iterator[tuple[GoldQuestion, pa.Table | str]]:
+    for question in questions:
+        try:
+            yield question, gold_result(con, question, max_rows=row_cap)
+        except (ValueError, TranspileError, duckdb.Error) as error:
+            yield question, f"{type(error).__name__}: {error}"
+
+
+def gold_problems(
+    con: duckdb.DuckDBPyConnection,
+    questions: list[GoldQuestion],
+    gold_dir: Path,
+    *,
+    row_cap: int,
+    data_lock: bytes,
+    write: bool,
+) -> list[str]:
+    """Run every gold query, then store its result or compare it with the stored one.
+
+    A failing query is reported and the next one runs. Compared, a result must match
+    its stored rows, and the stored file must record this SQL and this data lock.
+    """
+    problems: list[str] = []
+    if write:
+        gold_dir.mkdir(parents=True, exist_ok=True)
+    for question, table in _run(con, questions, row_cap):
+        path = gold_dir / f"{question.id}.parquet"
+        expected = {
+            GOLD_SQL_KEY: sha256(question.gold_sql).encode(),
+            DATA_LOCK_KEY: sha256(data_lock).encode(),
+        }
+        if isinstance(table, str):
+            problems.append(f"{question.id}: {table}")
+        elif write:
+            write_gold(table, path, gold_sql=question.gold_sql, data_lock=data_lock)
         elif not path.exists():
-            problem = "no stored gold"
+            problems.append(f"{question.id}: no stored gold")
+        elif gold_provenance(path) != expected:
+            problems.append(f"{question.id}: stored from other SQL or other data")
         elif reason := check(to_result(table), read_gold(path), ordered=question.ordered):
-            problem = reason.value
-        if problem is not None:
-            print(f"{question.id}: {problem}")
-            failed += 1
-    if stale := sorted({path.stem for path in PILOT_GOLD.glob("*.parquet")} - set(qids)):
-        print(f"gold with no question: {stale}")
-        failed += 1
-    print(f"{len(qids)} gold results {'checked' if check_only else 'written'}, {failed} failed")
-    return failed
+            problems.append(f"{question.id}: {reason.value}")
+    stored = {path.stem for path in gold_dir.glob("*.parquet")}
+    if stale := sorted(stored - {question.id for question in questions}):
+        problems.append(f"gold with no question: {stale}")
+    return problems
 
 
-def _check(source: str) -> int:
-    failed = 0
-    for question, table in _gold_results(source):
-        if isinstance(table, Exception):
-            print(f"{question.id}: {type(table).__name__}: {table}")
-            failed += 1
-        else:
-            print(f"{question.id}: {table.num_rows} rows x {table.num_columns} columns")
-    return failed
+def query_problems(
+    con: duckdb.DuckDBPyConnection, questions: list[GoldQuestion], *, row_cap: int
+) -> list[str]:
+    """Run every gold query and report each one that fails or breaks a protocol rule."""
+    return [
+        f"{question.id}: {table}"
+        for question, table in _run(con, questions, row_cap)
+        if isinstance(table, str)
+    ]
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -191,8 +270,27 @@ def main(argv: list[str] | None = None) -> None:
     run = commands.add_parser("check", help="run every gold query on a source's agent database")
     run.add_argument("source", choices=["sample", "fixture"])
     args = parser.parse_args(argv)
-    failed = _gold(args.check) if args.command == "gold" else _check(args.source)
-    sys.exit(1 if failed else 0)
+    config = load_config(ROOT / "docgap.toml")
+    database, schema = config.manifest.mart_database, config.manifest.mart_schema
+    source = "sample" if args.command == "gold" else args.source
+    path = ROOT / "data" / "agent" / source / f"{database}.duckdb"
+    questions = load_questions(PILOT_QUESTIONS)
+    with connect_marts(path, database=database, schema=schema) as con:
+        if args.command == "gold":
+            problems = gold_problems(
+                con,
+                questions,
+                PILOT_GOLD,
+                row_cap=config.agent.row_cap,
+                data_lock=SAMPLE_LOCK.read_bytes(),
+                write=not args.check,
+            )
+        else:
+            problems = query_problems(con, questions, row_cap=config.agent.row_cap)
+    for problem in problems:
+        print(problem)
+    print(f"{len(questions)} gold queries on {source}, {len(problems)} problems")
+    sys.exit(1 if problems else 0)
 
 
 if __name__ == "__main__":

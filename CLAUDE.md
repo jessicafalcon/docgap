@@ -50,7 +50,7 @@ the file is the current standard, and memory of it may be stale.
 | **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` and `uv run python -m eval.column_docs` | They rewrite the code-list seeds in `warehouse/dbt/seeds/` and the every-column docs in `eval/column_docs.json`; until they run, the byte-identity tests fail |
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`) | It copies the build's marts alone into the agent's database (ADR 0026) |
-| **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold`, then `gold --check` | It runs the gold SQL on `data/agent/sample/` and stores each result typed in `eval/pilot_gold/`; CI runs every gold query on the fixture |
+| **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. CI runs every gold query on the fixture |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -75,8 +75,10 @@ after any fix, step 1 always runs again.
 
 1. `uv run pytest` and `uv run pre-commit run --all-files` are green. If `infra/`
    changed: `terraform fmt -check && terraform validate`. If `warehouse/`,
-   `loader/` or `fixtures/damir/` changed: what CI runs, `dbt build` over the
-   fixture and `uv run docgap lint`.
+   `loader/`, `fixtures/damir/` or `eval/pilot_questions.yml` changed: what CI
+   runs, `dbt build` over the fixture, `uv run docgap lint`, then
+   `uv run python -m eval.agent.warehouse fixture` and
+   `uv run python -m eval.questions check fixture`.
 2. Cleanup review with the four `/simplify` angles (reuse, simplification,
    efficiency, altitude), sized by what the PR changes; fix or answer the findings:
    - **Docs only** (every changed path is `*.md`): skip it; the auditor in step 3
@@ -250,22 +252,10 @@ Update after every PR and merge, in the same change. A new session resumes from 
     - **3a:** `feat/pilot-questions`, in review. The 12 pilot questions with gold
       SQL and typed gold results, the every-column docs (label, a newline, then
       the comment) and the full-docs manifest built by `dbt parse`.
-    - **3b:** `feat/pilot-runner`. The runner, offline with a fake transport: runs
-      ordered repetition, then question, then configuration, so a budget stop
-      leaves every configuration partly run; a `--limit` smoke mode; the budget
-      seeded across a resume. Its decision record: a pass stopped by a harness
-      fault (a permanent API error, the budget) is void and doesn't count toward the
-      two reruns; a pass that completes always counts.
-    - **3c:** `feat/offline-pilot`. The live pass, after my go-ahead: a smoke run
-      first (1–2 questions × 4 configurations, repetition 1), `[llm] max_spend_usd`
-      set from its counted cost per run, then the rest of the same pass. The
-      fixtures, and the decision records on the model and on `SELECT *`.
-  - **PR 4:** `feat/load-full-duckdb`. The three full months into DuckDB after
-    the `sources.lock` check; any time before PR 5.
-  - **PR 5:** `feat/questions`. The 40 questions and gold SQL, checked on the
-    full data.
-  - **PR 6:** `feat/baseline-docs`. The lock, the baseline YAML and the frozen
-    manifest, merged after PR 5 (ADR 0021).
+    - **3b:** `feat/pilot-runner`. The runner, offline with a fake transport, and
+      the decision record on a void pass, as the brief's pilot step owes them.
+    - **3c:** `feat/offline-pilot`. The live pass, after my go-ahead, smoke run
+      first; the fixtures, and the decision records on the model and on `SELECT *`.
 - **Next step:** after `feat/pilot-questions` merges, `feat/pilot-runner`. Before
   3c, the account's rate limits for Opus 5.5 are checked. `feat/loader-snowflake`
   still lands before the go/no-go.

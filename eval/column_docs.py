@@ -21,6 +21,8 @@ from pathlib import Path
 import openpyxl
 import yaml
 
+from docgap.artifacts import write_atomic
+
 __all__ = [
     "CODE_LIST_SHEET",
     "DICTIONARY",
@@ -99,12 +101,17 @@ def label_texts(rows: Iterable[Sequence[object]]) -> dict[str, str]:
     ...     (0, "SANS OBJET"),
     ... ])
     {'PRS_NAT_LIB': 'Libellé Nature de Prestation'}
+
+    Raises:
+        ValueError: a variable opens two lists.
     """
     texts: dict[str, str] = {}
     for row in rows:
         name = _text(row[0]) if row else None
         label = _text(row[1]) if len(row) > 1 else None
         if name is not None and label is not None:
+            if f"{name}_LIB" in texts:
+                raise ValueError(f"{CODE_LIST_SHEET}: a second code list for {name}")
             texts[f"{name}_LIB"] = label
     return texts
 
@@ -150,7 +157,7 @@ def build(dictionary: Path = DICTIONARY, marts_yaml: Path = MARTS_YAML) -> bytes
 def main() -> None:
     """Write the docs file beside this module."""
     content = build()
-    DOCS.write_bytes(content)
+    write_atomic(DOCS, lambda sink: sink.write(content))
     print(f"{DOCS.relative_to(ROOT).as_posix()}: {len(json.loads(content))} columns")
 
 

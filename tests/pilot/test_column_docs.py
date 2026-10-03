@@ -12,6 +12,7 @@ from eval.column_docs import (
     VARIABLE_SHEET,
     build,
     column_docs,
+    label_texts,
     variable_texts,
 )
 
@@ -52,3 +53,8 @@ def test_a_variable_text_wins_over_a_code_list_line_of_the_same_name() -> None:
 def test_a_malformed_variable_sheet_fails(rows: list[tuple[object, ...]], error: str) -> None:
     with pytest.raises(ValueError, match=error):
         variable_texts(rows)
+
+
+def test_a_variable_opening_two_code_lists_fails() -> None:
+    with pytest.raises(ValueError, match="a second code list for PRS_NAT"):
+        label_texts([("PRS_NAT", "Libellé"), (0, "SANS OBJET"), (None,), ("PRS_NAT", "Autre")])
