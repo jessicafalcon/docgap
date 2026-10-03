@@ -36,6 +36,7 @@ from eval.pilot import (
     lock_pass,
     plan,
     run_pass,
+    unfinished_passes,
 )
 from eval.questions import PILOT_QUESTIONS, Category, GoldQuestion, load_questions, read_gold
 
@@ -358,6 +359,26 @@ def test_a_second_process_is_refused_by_the_lock(tmp_path: Path) -> None:
     pid, host = lock.read_text().split()
     assert pid.isdigit()
     assert host
+
+
+def test_a_pass_that_made_a_run_holds_back_a_new_pass_until_completed(pilot: Pilot) -> None:
+    pass_2 = pilot.out.parent / "pass-2"
+    error = anthropic.AuthenticationError(
+        "invalid x-api-key",
+        response=httpx2.Response(401, request=httpx2.Request("POST", "https://api.anthropic.com")),
+        body=None,
+    )
+    # Stopped before its first run: void, so it holds nothing back.
+    pilot.run(FakeModel(RIGHT, error))
+    assert unfinished_passes(pilot.out.parent, pass_2) == []
+
+    pilot.run(FakeModel(RIGHT), limit=1)
+    assert unfinished_passes(pilot.out.parent, pass_2) == ["pass-1"]
+    # The pass itself may always resume.
+    assert unfinished_passes(pilot.out.parent, pilot.out) == []
+
+    pilot.run(FakeModel(RIGHT))
+    assert unfinished_passes(pilot.out.parent, pass_2) == []
 
 
 def test_a_resume_refuses_other_inputs(pilot: Pilot) -> None:

@@ -233,11 +233,12 @@ accuracy minus no-docs accuracy.
 3. **Kill criterion:** if neither model is eligible, change the setup (harder
    questions, more coded columns) and run the pilot again, at most twice;
    question difficulty is adjusted only here. If no model is eligible after the
-   third pass, that is the finding, and it is reported (ADR 0024). A pass a
-   harness fault stops (the `[llm]` budget, or a permanent API error) is resumed
-   in place; one never resumed to completion is void and doesn't count toward
-   the two reruns. A pass that completes always counts, and the pilot's decision
-   record reports every pass, a void one with its partial counts (ADR 0031).
+   third pass, that is the finding, and it is reported (ADR 0024). A pass counts
+   toward the two reruns once it has made a run, whatever stops it later; one a
+   harness fault (the `[llm]` budget, a permanent API error) stops before its
+   first run is void. A stopped or unfinished pass is resumed in place, and no
+   new pass starts while one that counts is unfinished. The pilot's decision
+   record reports every pass (ADR 0031).
 
 The four accuracies and the choice go in their own decision record. The model
 not chosen is reported under limits and doesn't run as an arm. The 15-point

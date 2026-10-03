@@ -69,6 +69,7 @@ __all__ = [
     "lock_pass",
     "plan",
     "run_pass",
+    "unfinished_passes",
 ]
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -217,6 +218,23 @@ class PilotManifest(BaseModel):
         if self.status is PassStatus.STOPPED and not self.stops:
             raise ValueError("a stopped pass records why")
         return self
+
+    def counts(self) -> bool:
+        """Whether the pass counts toward the two reruns: once it has made a run (ADR 0031)."""
+        return any(counts.runs for counts in self.configurations.values())
+
+
+def unfinished_passes(pilot_dir: Path, current: Path) -> list[str]:
+    """The passes other than `current` that count and aren't completed: no new pass starts
+    while one is left, so a partial result can't be set aside for a fresh pass (ADR 0031)."""
+    unfinished: list[str] = []
+    for path in sorted(pilot_dir.glob(f"pass-*/{MANIFEST}")):
+        if path.parent == current:
+            continue
+        manifest = PilotManifest.model_validate_json(path.read_bytes())
+        if manifest.counts() and manifest.status is not PassStatus.COMPLETED:
+            unfinished.append(path.parent.name)
+    return unfinished
 
 
 @dataclass(frozen=True, slots=True)
@@ -461,7 +479,8 @@ def lock_pass(work: Path) -> Path:
 def main(argv: list[str] | None = None) -> None:
     """Run or resume one pilot pass on the offline sample, with live model calls."""
     parser = argparse.ArgumentParser(description=main.__doc__)
-    # A void pass counts toward no rerun (ADR 0031), so a fourth pass directory may exist.
+    # A pass that made no run is void and counts toward no rerun (ADR 0031), so a
+    # fourth pass directory may exist.
     parser.add_argument("--pass", dest="pass_number", type=int, required=True)
     parser.add_argument("--limit", type=int, help="make the pass's first N runs only: a smoke run")
     args = parser.parse_args(argv)
@@ -471,6 +490,8 @@ def main(argv: list[str] | None = None) -> None:
     out_dir = PILOT_DIR / f"pass-{args.pass_number}"
     work = WORK_DIR / f"pass-{args.pass_number}"
     run_id = f"pilot-{args.pass_number}"
+    if unfinished := unfinished_passes(PILOT_DIR, out_dir):
+        sys.exit(f"resume {unfinished} to completion first: a pass that made a run counts")
     try:
         lock = lock_pass(work)
     except FileExistsError as error:
