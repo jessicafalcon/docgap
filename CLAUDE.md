@@ -51,7 +51,7 @@ the file is the current standard, and memory of it may be stale.
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`) | It copies the build's marts alone into the agent's database (ADR 0026) |
 | **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. CI runs every gold query on the fixture |
-| **A pilot pass** runs live (after my go-ahead) | `uv run python -m eval.pilot --pass N --limit 8` first, the smoke run; then the same command without `--limit` | It resumes a pass in place, skipping written runs and starting the budget from its manifest; a changed input makes it refuse. A pass counts once it has made a run, and no new `N` starts while one that counts is unfinished (ADR 0031) |
+| **A pilot pass** runs live (after my go-ahead) | `uv run python -m eval.pilot --pass N --limit 8` first, the smoke run; then the same command without `--limit` | Commit and push `fixtures/pilot/pass-N/` after every process, the smoke run's included. It resumes a pass in place, skipping written runs and starting the budget from its manifest; a changed input makes it refuse. A pass counts once it has made a run, and no new `N` starts while one that counts is unfinished, or once three count (ADR 0031) |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -254,7 +254,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
       SQL and typed gold results, the every-column docs (label, a newline, then
       the comment) and the full-docs manifest built by `dbt parse`.
     - **3b:** `feat/pilot-runner`, in review. The runner, offline with a fake transport, and
-      the decision record on a void pass, as the brief's pilot step owes them.
+      the decision record on which pilot passes count (ADR 0031), as the brief's
+      pilot step owes them.
     - **3c:** `feat/offline-pilot`. The live pass, after my go-ahead, smoke run
       first; the fixtures, and the decision records on the model and on `SELECT *`.
 - **Next step:** after `feat/pilot-runner` merges, `feat/offline-pilot`. Before

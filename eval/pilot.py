@@ -17,6 +17,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from importlib import metadata
 from pathlib import Path
 from typing import Self
 
@@ -66,10 +67,10 @@ __all__ = [
     "configurations",
     "grade_run",
     "input_hashes",
-    "lock_pass",
+    "lock_pilot",
     "plan",
+    "refuse_pass",
     "run_pass",
-    "unfinished_passes",
 ]
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,15 +80,20 @@ PILOT_DIR = ROOT / "fixtures" / "pilot"
 WORK_DIR = ROOT / "data" / "pilot"
 # The protocol's repetitions per question per configuration ("Runs" item 2).
 REPETITIONS = 3
+# The first pass and at most two reruns (ADR 0024).
+MAX_PASSES = 3
 # The code that shapes what the agent reads and how a run is graded: the tools'
-# output, the transpiler, the model calls' error handling, the grader, and the
-# locked dependency versions. A resumed pass refuses a change to any of them.
+# output, the transpiler, the manifest reader behind `describe`, the model calls'
+# error handling and the grader. A resumed pass refuses a change to any of them.
 CODE = (
     *sorted((ROOT / "eval" / "agent").glob("*.py")),
     *sorted((ROOT / "src" / "docgap" / "llm").glob("*.py")),
     ROOT / "src" / "docgap" / "grade.py",
-    ROOT / "uv.lock",
+    ROOT / "src" / "docgap" / "manifest.py",
 )
+# The installed packages a run goes through, by version: not all of `uv.lock`, so a
+# dependency no run uses, added mid-pass, can't strand a pass that counts (ADR 0031).
+PACKAGES = ("anthropic", "duckdb", "httpx2", "pyarrow", "pydantic", "sqlglot")
 
 TRANSCRIPT = "transcript.json"
 GRADE = "grade.json"
@@ -219,22 +225,33 @@ class PilotManifest(BaseModel):
             raise ValueError("a stopped pass records why")
         return self
 
-    def counts(self) -> bool:
-        """Whether the pass counts toward the two reruns: once it has made a run (ADR 0031)."""
-        return any(counts.runs for counts in self.configurations.values())
+
+def _made_a_run(directory: Path) -> bool:
+    return any(directory.glob(f"*/*/{TRANSCRIPT}"))
 
 
-def unfinished_passes(pilot_dir: Path, current: Path) -> list[str]:
-    """The passes other than `current` that count and aren't completed: no new pass starts
-    while one is left, so a partial result can't be set aside for a fresh pass (ADR 0031)."""
-    unfinished: list[str] = []
-    for path in sorted(pilot_dir.glob(f"pass-*/{MANIFEST}")):
-        if path.parent == current:
-            continue
-        manifest = PilotManifest.model_validate_json(path.read_bytes())
-        if manifest.counts() and manifest.status is not PassStatus.COMPLETED:
-            unfinished.append(path.parent.name)
-    return unfinished
+def _completed(directory: Path) -> bool:
+    path = directory / MANIFEST
+    return (
+        path.exists()
+        and PilotManifest.model_validate_json(path.read_bytes()).status is PassStatus.COMPLETED
+    )
+
+
+def refuse_pass(pilot_dir: Path, current: Path) -> str | None:
+    """Say why the pass in `current` may not run, or return None.
+
+    A pass counts once it has written a run, read from its transcripts so a crash
+    before its first manifest still counts. No other pass runs while one that
+    counts is unfinished, so a partial result can't be set aside for a fresh pass,
+    and no new pass starts once three count (ADRs 0024, 0031).
+    """
+    counting = [d for d in sorted(pilot_dir.glob("pass-*")) if d != current and _made_a_run(d)]
+    if unfinished := [d.name for d in counting if not _completed(d)]:
+        return f"resume {unfinished} to completion first: a pass that made a run counts"
+    if not _made_a_run(current) and len(counting) >= MAX_PASSES:
+        return f"{len(counting)} passes count already, the first and two reruns (ADR 0024)"
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,6 +288,8 @@ def input_hashes(
         **{f"code.{path.relative_to(ROOT).as_posix()}": path for path in CODE},
     }
     hashes = {name: _file_sha256(path) for name, path in files.items()}
+    versions = "\n".join(f"{name}=={metadata.version(name)}" for name in PACKAGES)
+    hashes["packages"] = hashlib.sha256(versions.encode()).hexdigest()
     # `max_calls` and `max_spend_usd` may rise after the smoke run, within the pass;
     # the timeout, the retries and the prices decide outcomes and costs, and may not.
     llm = config.llm.model_dump(mode="json", exclude={"max_calls", "max_spend_usd"})
@@ -454,8 +473,9 @@ def run_pass(
     return manifest
 
 
-def lock_pass(work: Path) -> Path:
-    """Claim the pass for this process, so two processes never write the same runs.
+def lock_pilot(work_dir: Path) -> Path:
+    """Claim the pilot for this process: one pass at a time, so two processes never write
+    the same runs, and two new passes never both get past `refuse_pass`.
 
     The lock sits in the gitignored work directory, so one a killed process leaves
     is never committed.
@@ -463,13 +483,13 @@ def lock_pass(work: Path) -> Path:
     Raises:
         FileExistsError: another process holds the lock, or a killed one left it.
     """
-    lock = work / ".lock"
-    work.mkdir(parents=True, exist_ok=True)
+    lock = work_dir / ".lock"
+    work_dir.mkdir(parents=True, exist_ok=True)
     try:
         descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
         raise FileExistsError(
-            f"{lock}: another process runs this pass, or one was killed; delete it if none runs"
+            f"{lock}: another process runs the pilot, or one was killed; delete it if none runs"
         ) from None
     os.write(descriptor, f"{os.getpid()} {socket.gethostname()}\n".encode())
     os.close(descriptor)
@@ -490,15 +510,15 @@ def main(argv: list[str] | None = None) -> None:
     out_dir = PILOT_DIR / f"pass-{args.pass_number}"
     work = WORK_DIR / f"pass-{args.pass_number}"
     run_id = f"pilot-{args.pass_number}"
-    if unfinished := unfinished_passes(PILOT_DIR, out_dir):
-        sys.exit(f"resume {unfinished} to completion first: a pass that made a run counts")
     try:
-        lock = lock_pass(work)
+        lock = lock_pilot(WORK_DIR)
     except FileExistsError as error:
         sys.exit(str(error))
     try:
+        if refusal := refuse_pass(PILOT_DIR, out_dir):
+            sys.exit(refusal)
         questions = load_questions(PILOT_QUESTIONS)
-        docs_text: dict[str, str] = json.loads(DOCS.read_text())
+        docs_text: dict[str, str] = json.loads(DOCS.read_text(encoding="utf-8"))
         manifests: dict[Docs, Path] = {}
         for docs in Docs:
             manifests[docs] = out_dir / "dbt" / f"{docs}.json"
@@ -523,6 +543,7 @@ def main(argv: list[str] | None = None) -> None:
                 for docs, path in manifests.items()
             }
             inputs = PilotInputs(questions, gold, config.pilot.models, tools, hashes)
+            work.mkdir(parents=True, exist_ok=True)
             with (work / "events.jsonl").open("a") as sink:
                 log = EventLog(sink, run_id)
                 llm = LlmClient(

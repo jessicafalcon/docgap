@@ -234,10 +234,10 @@ accuracy minus no-docs accuracy.
    questions, more coded columns) and run the pilot again, at most twice;
    question difficulty is adjusted only here. If no model is eligible after the
    third pass, that is the finding, and it is reported (ADR 0024). A pass counts
-   toward the two reruns once it has made a run, whatever stops it later; one a
-   harness fault (the `[llm]` budget, a permanent API error) stops before its
-   first run is void. A stopped or unfinished pass is resumed in place, and no
-   new pass starts while one that counts is unfinished. The pilot's decision
+   toward the two reruns once it has made a run, whatever stops it later; a pass
+   that has made no run is void, whatever stopped it. A pass a harness fault (the
+   `[llm]` budget, a permanent API error) stops, or one left unfinished, is
+   resumed in place, and no new pass starts while one that counts is unfinished. The pilot's decision
    record reports every pass (ADR 0031).
 
 The four accuracies and the choice go in their own decision record. The model

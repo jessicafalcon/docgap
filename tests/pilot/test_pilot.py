@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import itertools
+import shutil
 import uuid
 from collections.abc import Iterator, Mapping
 from decimal import Decimal
@@ -33,10 +34,10 @@ from eval.pilot import (
     RunGrade,
     grade_run,
     input_hashes,
-    lock_pass,
+    lock_pilot,
     plan,
+    refuse_pass,
     run_pass,
-    unfinished_passes,
 )
 from eval.questions import PILOT_QUESTIONS, Category, GoldQuestion, load_questions, read_gold
 
@@ -351,10 +352,10 @@ def test_an_unexpected_error_saves_the_calls_counted_and_propagates(pilot: Pilot
 
 
 def test_a_second_process_is_refused_by_the_lock(tmp_path: Path) -> None:
-    lock = lock_pass(tmp_path / "work")
+    lock = lock_pilot(tmp_path / "work")
 
-    with pytest.raises(FileExistsError, match="another process runs this pass"):
-        lock_pass(tmp_path / "work")
+    with pytest.raises(FileExistsError, match="another process runs the pilot"):
+        lock_pilot(tmp_path / "work")
 
     pid, host = lock.read_text().split()
     assert pid.isdigit()
@@ -362,23 +363,44 @@ def test_a_second_process_is_refused_by_the_lock(tmp_path: Path) -> None:
 
 
 def test_a_pass_that_made_a_run_holds_back_a_new_pass_until_completed(pilot: Pilot) -> None:
-    pass_2 = pilot.out.parent / "pass-2"
+    pilot_dir, pass_2 = pilot.out.parent, pilot.out.parent / "pass-2"
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
     error = anthropic.AuthenticationError(
-        "invalid x-api-key",
-        response=httpx2.Response(401, request=httpx2.Request("POST", "https://api.anthropic.com")),
-        body=None,
+        "invalid x-api-key", response=httpx2.Response(401, request=request), body=None
     )
     # Stopped before its first run: void, so it holds nothing back.
     pilot.run(FakeModel(RIGHT, error))
-    assert unfinished_passes(pilot.out.parent, pass_2) == []
+    assert refuse_pass(pilot_dir, pass_2) is None
 
-    pilot.run(FakeModel(RIGHT), limit=1)
-    assert unfinished_passes(pilot.out.parent, pass_2) == ["pass-1"]
-    # The pass itself may always resume.
-    assert unfinished_passes(pilot.out.parent, pilot.out) == []
+    # Stopped by the budget after runs (the 401's call counted too): it counts, and
+    # only it may run.
+    pilot.run(FakeModel(RIGHT), max_calls=2)
+    assert refuse_pass(pilot_dir, pass_2) == (
+        "resume ['pass-1'] to completion first: a pass that made a run counts"
+    )
+    assert refuse_pass(pilot_dir, pilot.out) is None
 
     pilot.run(FakeModel(RIGHT))
-    assert unfinished_passes(pilot.out.parent, pass_2) == []
+    assert refuse_pass(pilot_dir, pass_2) is None
+
+
+def test_a_pass_counts_from_its_first_transcript_with_no_manifest_yet(tmp_path: Path) -> None:
+    run = tmp_path / "pass-1" / "model-a.no_docs" / "P01.r1"
+    run.mkdir(parents=True)
+    (run / "transcript.json").write_text("{}")
+
+    assert refuse_pass(tmp_path, tmp_path / "pass-2") is not None
+
+
+def test_no_fourth_pass_starts_once_three_count(pilot: Pilot) -> None:
+    pilot.run(FakeModel(RIGHT))
+    for number in (2, 3):
+        shutil.copytree(pilot.out, pilot.out.parent / f"pass-{number}")
+
+    assert refuse_pass(pilot.out.parent, pilot.out.parent / "pass-4") == (
+        "3 passes count already, the first and two reruns (ADR 0024)"
+    )
+    assert refuse_pass(pilot.out.parent, pilot.out) is None
 
 
 def test_a_resume_refuses_other_inputs(pilot: Pilot) -> None:
@@ -422,6 +444,7 @@ def test_the_input_hashes_ignore_the_budget_but_not_the_timeout(
         "config",
         "gold",
         "manifest",
+        "packages",
         "questions",
         "sample_lock",
     }
@@ -431,7 +454,11 @@ def test_the_input_hashes_ignore_the_budget_but_not_the_timeout(
         "config.pilot",
         *(f"call_site.{model}" for model in config.pilot.models),
     }
-    assert {"code.src/docgap/grade.py", "code.eval/agent/loop.py", "code.uv.lock"} <= set(base)
+    assert {
+        "code.src/docgap/grade.py",
+        "code.src/docgap/manifest.py",
+        "code.eval/agent/loop.py",
+    } <= set(base)
     assert base == hashes(config.llm.model_copy(update={"max_calls": 1, "max_spend_usd": 1.0}))
     assert base != hashes(config.llm.model_copy(update={"timeout_seconds": 1.0}))
     assert {f"gold.{q.id}" for q in questions} <= set(base)

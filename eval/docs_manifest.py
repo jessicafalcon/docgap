@@ -68,7 +68,8 @@ def build_manifest(out: Path, docs: Mapping[str, str] | None, project: Path = DB
         shutil.copytree(project, copy, ignore=shutil.ignore_patterns("target", "logs"))
         if docs is not None:
             path = copy / _MARTS_YAML
-            path.write_text(document_columns(path.read_text(), docs))
+            text = document_columns(path.read_text(encoding="utf-8"), docs)
+            path.write_text(text, encoding="utf-8")
         # dbt leaves `invoke`'s keyword arguments untyped; none are passed.
         result = dbtRunner().invoke(  # pyright: ignore[reportUnknownMemberType]
             [

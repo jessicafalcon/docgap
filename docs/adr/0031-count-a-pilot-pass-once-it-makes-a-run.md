@@ -20,9 +20,9 @@ toward the two reruns?
 1. **Every pass started counts.** A 401 on the first call spends one of three passes.
 2. **A pass never completed is void.** A stopped pass may be resumed and then
    counts; one left stopped doesn't.
-3. **A pass counts once it makes a run.** Only a pass stopped before its first
-   run is void. A stopped or unfinished pass is resumed in place, and no new pass
-   starts while one that counts is unfinished.
+3. **A pass counts once it makes a run.** A pass that has made no run is void,
+   whatever stopped it. A stopped or unfinished pass is resumed in place, and no
+   new pass starts while one that counts is unfinished.
 
 ## Decision Outcome
 
@@ -33,9 +33,11 @@ changed setup would spend no rerun. Option 1 lets an expired key decide the
 pilot. The runner resumes a pass in place: it skips the runs written, starts the
 budget from the calls and spend the pass recorded, and refuses to resume on
 changed inputs (the questions, the gold, the docs, the agent database, the agent,
-client and grader code, the prompt, or the model calls' timeout, retries and
-prices). It refuses a new pass while an earlier one has made a run and isn't
-completed.
+client, manifest-reader and grader code, the versions of the packages a run goes
+through, the prompt, or the model calls' timeout, retries and prices). It counts
+a pass from its transcripts on disk, refuses a new pass while an earlier one has
+made a run and isn't completed, and starts none once three count. One lock
+covers the whole pilot, so two new passes can't start side by side.
 
 ### Consequences
 
@@ -46,6 +48,9 @@ completed.
 - Bad, because a fault that can't be fixed without changing a pass's inputs,
   such as a model withdrawn mid-pass, leaves a pass that counts and can't finish.
   Starting another then needs a decision record superseding this one.
+- Bad, because the runner reads the working tree: a pass directory deleted
+  before it is committed leaves no trace. Each process's output is committed and
+  pushed before the next starts, the smoke run's included.
 - Bad, because the count of calls is written after each run, and a process
   killed hard mid-run loses that run's count: at most 11 calls (9 answered, 2
   failed) and their spend. Any Python exception saves the count first.
