@@ -16,12 +16,24 @@ CONFIG = ManifestConfig(mart_database="ANALYTICS", mart_schema="MARTS")
 
 
 @pytest.fixture(scope="module")
-def configurations(tmp_path_factory: pytest.TempPathFactory) -> tuple[Marts, Marts]:
+def manifests(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     out = tmp_path_factory.mktemp("manifests")
     docs = json.loads(DOCS.read_text())
-    no_docs, _ = read_marts(build_manifest(out / "no_docs.json", None), CONFIG)
-    full_docs, _ = read_marts(build_manifest(out / "full_docs.json", docs), CONFIG)
+    return build_manifest(out / "no_docs.json", None), build_manifest(out / "full_docs.json", docs)
+
+
+@pytest.fixture(scope="module")
+def configurations(manifests: tuple[Path, Path]) -> tuple[Marts, Marts]:
+    no_docs, full_docs = (read_marts(path, CONFIG)[0] for path in manifests)
     return no_docs, full_docs
+
+
+def test_a_manifest_names_no_absolute_path(manifests: tuple[Path, Path]) -> None:
+    # dbt's `root_path` would name the temporary copy, and a committed manifest the checkout.
+    for path in manifests:
+        text = path.read_text()
+        assert "root_path" not in text
+        assert '"/' not in text
 
 
 def test_no_docs_documents_no_column(configurations: tuple[Marts, Marts]) -> None:
