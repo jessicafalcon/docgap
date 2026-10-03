@@ -1,6 +1,17 @@
 {
   "model": "claude-opus-5-5",
   "effortLevel": "high",
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Edit(./.env)",
+      "Write(./.env)",
+      "Bash(cat .env)",
+      "Bash(cat ./.env)",
+      "Bash(source .env)",
+      "Bash(. .env)"
+    ]
+  },
   "env": {
     "CLAUDE_CODE_SUBAGENT_MODEL": "claude-opus-5-5",
     "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1",
