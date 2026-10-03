@@ -27,14 +27,16 @@ __all__ = [
     "Question",
     "Transcript",
     "call_site",
+    "request_settings",
     "run_agent",
     "system_prompt",
 ]
 
-# The name of the system prompt and the tool definitions together: the version the
-# protocol freezes at the tag and each transcript records. Change either text and this
-# changes too; `call_site` hashes both, and a test pins the hash to this version.
-PROMPT_VERSION = "agent-1"
+# The name of every request key but the conversation (the system prompt, the tools,
+# `max_tokens`, `cache_control`): the version the protocol freezes at the tag and each
+# transcript records. Change any of them and this changes too; `call_site` hashes
+# them, and a test pins the hash to this version.
+PROMPT_VERSION = "agent-2"
 
 
 def system_prompt(max_tool_calls: int) -> str:
@@ -102,15 +104,25 @@ class Transcript(BaseModel):
         return self
 
 
-def call_site(site: ModelSettings, config: AgentConfig) -> CallSite:
-    """The agent's call site as it runs: the model's settings and the prompt it sends."""
-    prompt = {
+def request_settings(config: AgentConfig) -> dict[str, JsonValue]:
+    """Every request key but `messages`: the same on each call of every run."""
+    return {
+        # Automatic prompt caching: changes the cost, never the reply (ADR 0030).
+        "cache_control": {"type": "ephemeral"},
+        "max_tokens": config.max_tokens,
         "system": system_prompt(config.max_tool_calls),
         "tools": tool_definitions(
             row_cap=config.row_cap, timeout_seconds=config.statement_timeout_seconds
         ),
     }
-    digest = hashlib.sha256(json.dumps(prompt, sort_keys=True).encode()).hexdigest()
+
+
+def call_site(site: ModelSettings, config: AgentConfig) -> CallSite:
+    """The agent's call site as it runs: the model's settings and what it sends besides
+    the conversation, hashed, so the run's setup covers every fixed request key."""
+    digest = hashlib.sha256(
+        json.dumps(request_settings(config), sort_keys=True).encode()
+    ).hexdigest()
     return CallSite(
         model=site.model,
         sampling=site.sampling,
@@ -234,14 +246,7 @@ def _converse(context: _Context, conversation: _Conversation) -> _End:
     """Run the conversation until a final answer or the end of the tool budget."""
     messages = conversation.messages
     limit = context.config.max_tool_calls
-    settings: dict[str, JsonValue] = {
-        "max_tokens": context.config.max_tokens,
-        "system": system_prompt(limit),
-        "tools": tool_definitions(
-            row_cap=context.config.row_cap,
-            timeout_seconds=context.config.statement_timeout_seconds,
-        ),
-    }
+    settings = request_settings(context.config)
     while True:
         message = _ask(context, conversation, settings)
         if isinstance(message, _End):

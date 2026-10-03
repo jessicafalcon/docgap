@@ -328,3 +328,18 @@ def test_context_overflow_is_cached_and_replays_offline(tmp_path: Path) -> None:
     offline, _ = _client(tmp_path, None, _config())
     with pytest.raises(ContextExceeded):
         _complete(offline)
+
+
+def test_request_keys_reach_the_http_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The agent's prompt-caching key travels through the SDK unchanged.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    bodies: list[object] = []
+
+    def record(request: httpx2.Request) -> httpx2.Response:
+        bodies.append(json.loads(request.content))
+        return httpx2.Response(200, json=_message())
+
+    http_client = anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(record))
+    send = anthropic_transport(_config(), http_client=http_client)
+    send(MODEL, {**PARAMS, "cache_control": {"type": "ephemeral"}})
+    assert bodies == [{"model": MODEL, **PARAMS, "cache_control": {"type": "ephemeral"}}]
