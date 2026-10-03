@@ -62,6 +62,12 @@ jobs:
         working-directory: warehouse/dbt
         run: uv run --frozen dbt build
       - run: uv run --frozen docgap lint
+      # Every gold query runs on the agent's marts-only copy of that build, so a wrong
+      # column or a read outside the marts fails here; its values are the sample's.
+      - name: Run the gold SQL on the fixture
+        run: |
+          uv run --frozen python -m eval.agent.warehouse fixture
+          uv run --frozen python -m eval.questions check fixture
 
       - name: Scan full history for secrets
         run: gitleaks git --redact --verbose .
