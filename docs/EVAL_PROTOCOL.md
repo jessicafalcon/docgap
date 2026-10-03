@@ -60,9 +60,13 @@ columns the two sets share.
    fetching at most 201 rows, so a result longer than any gold result fails as
    `row_count_mismatch`.
 4. **Infrastructure failures.** An API error left after the retry policy, or an
-   unavailable warehouse, is not an agent outcome: it is not cached, and the run
-   repeats. After 3 attempts the run fails with reason `error`, and the results
-   report the count per arm.
+   unavailable warehouse, is not an agent outcome: it is not cached, and the
+   failed call is made again with the conversation kept, so no tool query runs
+   twice under the run's tag. The retry policy is `[llm]`'s: each model call times
+   out after `timeout_seconds` (450 s), and a connection error, a timeout, 408,
+   409, 429 or 5xx is retried `max_retries` (2) times. A run's `[agent]
+   run_attempts`-th (3rd) failed call ends it with reason `error`, and the results
+   report the count per arm (ADRs 0028, 0029).
 
 ## What "correct" means
 
@@ -72,7 +76,7 @@ order, and the first that fails gives the reason code:
 
 | Check | Rule | Reason code |
 | --- | --- | --- |
-| The run produced a result | No final answer within 8 tool calls, a SQL error, or, offline, a final answer sqlglot can't transpile | `error` |
+| The run produced a result | No final answer within 8 tool calls, a reply that stops without one, a malformed final answer, a conversation past the model's context window, a SQL error, or, offline, a final answer sqlglot can't transpile | `error` |
 | | The statement timeout was reached | `timeout` |
 | Same shape | The result has exactly the gold's number of columns; names are ignored | `shape_mismatch` |
 | Same row count | Exactly the gold's number of rows | `row_count_mismatch` |

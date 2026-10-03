@@ -7,16 +7,18 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+import duckdb
 import pytest
 from pydantic import BaseModel
 
 from docgap.artifacts import canonical_lines, write_rows
 from docgap.config import ManifestConfig
-from docgap.manifest import load_marts
+from docgap.manifest import Marts, load_marts
 from docgap.models import Actor, ColumnUsage, QueryRecord, RankingScope, StageRecord
 from docgap.resolve import resolve
 from docgap.snapshot import SNAPSHOT_FILE, load_history, snapshot
 from docgap.usage import COLUMN_USAGE_FILE, usage
+from eval.agent.warehouse import copy_marts
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -49,6 +51,18 @@ ACTORS = {"AGENT_READER": Actor.AGENT}
 MARTS_CONFIG = ManifestConfig(mart_database="ANALYTICS", mart_schema="MARTS")
 MARTS = load_marts(MANIFEST.read_bytes(), MARTS_CONFIG)
 GOLDEN = Path(__file__).resolve().parent / "golden"
+# The marts of the agent's test warehouse: tables only, no descriptions.
+AGENT_MARTS = Marts(
+    "ANALYTICS",
+    "MARTS",
+    {
+        "FCT_REIMBURSEMENTS": {"FLX_ANN_MOI": "INTEGER", "BEN_RES_REG": "INTEGER"},
+        "DIM_REGION": {"BEN_RES_REG": "INTEGER", "BEN_RES_REG_LIB": "VARCHAR"},
+    },
+    {},
+)
+# A DuckDB query that runs for minutes: no test waits for it to finish.
+SLOW_SQL = "SELECT sum(a.range * b.range) FROM range(100000000) a, range(1000) b"
 SETUP = "0" * 64
 
 
@@ -97,3 +111,29 @@ def assert_golden(
         (directory / "counts.json").write_text(counts)
     assert lines == (directory / f"{artifact}.jsonl").read_bytes()
     assert counts == (directory / "counts.json").read_text()
+
+
+@pytest.fixture
+def agent_db(tmp_path: Path) -> Path:
+    """The agent's marts-only copy of a small dbt build, as `copy_marts` writes it.
+
+    The build holds the two mart tables `AGENT_MARTS` names, named as dbt names
+    them; a stale mart table no model builds any more and a staging table, both of
+    which the copy must leave out. The fact has 300 rows, past the agent's 200-row cap.
+    """
+    build = tmp_path / "build" / "ANALYTICS.duckdb"
+    build.parent.mkdir()
+    with duckdb.connect(build) as con:
+        con.execute("CREATE SCHEMA MARTS; CREATE SCHEMA STAGING")
+        con.execute(
+            "CREATE TABLE MARTS.fct_reimbursements AS SELECT (202501 + i % 3)::INTEGER AS FLX_ANN_MOI,"
+            " (i % 50)::INTEGER AS BEN_RES_REG, (i / 4)::DECIMAL(12, 2) AS PRS_PAI_MNT"
+            " FROM range(300) t(i)"
+        )
+        con.execute(
+            "CREATE TABLE MARTS.dim_region AS SELECT * FROM (VALUES (11, 'Ile-de-France'),"
+            " (24, 'Centre-Val de Loire')) v(BEN_RES_REG, BEN_RES_REG_LIB)"
+        )
+        con.execute("CREATE TABLE MARTS.dim_renamed AS SELECT 1 AS PRS_NAT")
+        con.execute("CREATE TABLE STAGING.stg_prestations AS SELECT 1 AS PRS_NAT")
+    return copy_marts(build, tmp_path / "agent", AGENT_MARTS)

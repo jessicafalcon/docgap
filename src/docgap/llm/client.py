@@ -15,7 +15,14 @@ from docgap.llm.cache import ResponseCache, cache_key
 from docgap.log import EventLog
 from docgap.models import ModelSettings
 
-__all__ = ["CacheMiss", "LlmClient", "TransientError", "Transport", "anthropic_transport"]
+__all__ = [
+    "CacheMiss",
+    "ContextExceeded",
+    "LlmClient",
+    "TransientError",
+    "Transport",
+    "anthropic_transport",
+]
 
 # Messages API parameters other than `model`, as JSON.
 type Params = Mapping[str, JsonValue]
@@ -40,15 +47,30 @@ class CacheMiss(Exception):
     """An offline run asked for a response the cache doesn't hold."""
 
 
+class ContextExceeded(Exception):
+    """The request's input is longer than the model's context window.
+
+    An outcome of the call, not an infrastructure failure: the same request always
+    fails the same way, so it is cached and replays offline like a response.
+    """
+
+
+# What the cache holds for a call that ended in `ContextExceeded`. No `Message` has a
+# `failure` key, so the two never mix.
+_CONTEXT_EXCEEDED: JsonValue = {"failure": "context_exceeded"}
+
+
 def anthropic_transport(
     config: LlmConfig, *, http_client: anthropic.DefaultHttpxClient | None = None
 ) -> Transport:
     """Send requests with the Anthropic SDK, under `[llm]`'s timeout and retries.
 
     The SDK retries a connection error, a timeout, 408, 409, 429 and 5xx with
-    backoff, honouring Retry-After; what is left raises `TransientError`. Any other
-    status is permanent and raises the SDK's error unchanged. `http_client` replaces
-    the SDK's own, for a proxy or a test double.
+    backoff, honouring Retry-After; what is left raises `TransientError`. A 400 for
+    an input past the context window raises `ContextExceeded`: the API answers it
+    "prompt is too long" on every model (Context windows docs, read 2026-10-03). Any
+    other status is permanent and raises the SDK's error unchanged. `http_client`
+    replaces the SDK's own, for a proxy or a test double.
     """
     client = anthropic.Anthropic(
         timeout=config.timeout_seconds, max_retries=config.max_retries, http_client=http_client
@@ -63,6 +85,11 @@ def anthropic_transport(
         except anthropic.APIStatusError as error:
             if error.status_code in _RETRIED_STATUS or error.status_code >= 500:
                 raise TransientError(type(error).__name__) from error
+            if (
+                isinstance(error, anthropic.BadRequestError)
+                and "prompt is too long" in error.message
+            ):
+                raise ContextExceeded(error.message) from error
             raise
         if not isinstance(message, Message):
             raise TypeError("messages.create returned no Message")
@@ -110,6 +137,8 @@ class LlmClient:
         Raises:
             ValueError: `params` sets a sampling key the call site also sets.
             CacheMiss: offline, and the cache doesn't hold this call.
+            ContextExceeded: the input is past the model's context window, now or
+                when the call was cached.
             BudgetExhausted: the run's call or spend limit is reached.
             TransientError: the call failed after the SDK's retries; nothing is cached.
         """
@@ -120,6 +149,10 @@ class LlmClient:
         state: JsonValue = {"params": request, "draw": draw}
         key = cache_key(model, prompt_version, state)
         cached = self._cache.get(key)
+        if cached == _CONTEXT_EXCEEDED:
+            self.cache_hits += 1
+            self._log.event(stage, item, "model_call", cache="hit", outcome="context_exceeded")
+            raise ContextExceeded(f"{stage} {item}: the input is past the context window")
         if cached is not None:
             try:
                 message = Message.model_validate(cached)
@@ -142,6 +175,18 @@ class LlmClient:
         try:
             response = self._transport(model, request)
             message = Message.model_validate(response)
+        except ContextExceeded:
+            # Reported with no usage, so nothing is charged.
+            self._cache.put(key, model, prompt_version, state, _CONTEXT_EXCEEDED)
+            self._log.event(
+                stage,
+                item,
+                "model_call",
+                duration_ms=_since(started),
+                cache="miss",
+                outcome="context_exceeded",
+            )
+            raise
         except Exception as error:
             # Logged, then raised unchanged: a transient failure for the caller to
             # repeat, anything else to stop the run.

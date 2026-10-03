@@ -10,7 +10,7 @@ the disagreement is a finding to fix.
 
 ```text
 src/docgap/        the tool: deterministic core + llm/ (the only model edge) + cli.py
-eval/              questions + gold SQL, test agent, reference dictionary (never read by src/)
+eval/              questions + gold SQL, test agent, reference dictionary (never read by src/ or eval/agent/)
 warehouse/dbt/     dbt project over Open DAMIR (Snowflake and DuckDB profiles)
 infra/             bootstrap.sql (ACCOUNTADMIN, once) + terraform/
 loader/            download, checksum, stage, COPY; offline sample and its DuckDB load; code-list seeds
@@ -49,6 +49,7 @@ the file is the current standard, and memory of it may be stale.
 | **Offline warehouse** needed and `data/warehouse/<source>/RAW.duckdb` is missing | `uv run python loader/load_duckdb.py sample` (or `fixture`, the CI fixture) | It checks each file against `loader/sample.lock` and its header against `loader/raw_prestations.sql`; a re-run loads nothing twice |
 | **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` | It rewrites the code-list seeds in `warehouse/dbt/seeds/`; until it runs, the byte-identity test fails |
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
+| **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`) | It copies the build's marts alone into the agent's database (ADR 0026) |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -164,7 +165,9 @@ code is lost to the next session, and the review agents treat it as a finding.
 - **A new skill, agent, hook or slash command:** add it here, with when to invoke
   it. A `docgap` command is product behaviour, and the README documents it.
 - **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
-  the agent (model, prompt version, 8 tool calls, `[agent]` limits), and the
+  the agent (model, prompt version, 8 tool calls, `[agent]` limits, the model
+  calls' `[llm] timeout_seconds` and `max_retries`, and `eval/agent/` itself, with
+  every text the model reads), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, the mart
   columns' `meta.sensitivity` tags, seeds, `[actors]`, `[manifest]`, the history
   window, the every-column docs text and its script, and the model and prompt
@@ -205,7 +208,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/llm-client`, Phase 3 PR 2a, in review.
+- **Open PRs:** `feat/agent-loop`, Phase 3 PR 2b, in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -235,10 +238,10 @@ Update after every PR and merge, in the same change. A new session resumes from 
     file access off (ADR 0026); `llm/` lands with the agent loop, with the spend
     budget and structured logs; row 4 is 7–13 evenings.
   - **PR 1:** `feat/grader`, merged (#20). `grade.py` on the existing `Grade` contracts.
-  - **PR 2a:** `feat/llm-client`, in review. A minimal `llm/` (one client, cache,
+  - **PR 2a:** `feat/llm-client`, merged (#21). A minimal `llm/` (one client, cache,
     timeout, retries, the call and spend budget), the JSON-lines event log, and
     `[llm]` and `[pilot]` in `docgap.toml`.
-  - **PR 2b:** `feat/agent-loop`, built, opens after 2a merges. `eval/agent/` on
+  - **PR 2b:** `feat/agent-loop`, in review. `eval/agent/` on
     DuckDB; the decision record on what the agent sends at default settings.
   - **PR 3:** `feat/offline-pilot`. 12 pilot questions, the every-column docs,
     the run, and the decision records on the model and on `SELECT *`.
@@ -248,5 +251,5 @@ Update after every PR and merge, in the same change. A new session resumes from 
     full data.
   - **PR 6:** `feat/baseline-docs`. The lock, the baseline YAML and the frozen
     manifest, merged after PR 5 (ADR 0021).
-- **Next step:** after PR 2a merges, rebase `feat/agent-loop` on `main` and open it.
-  `feat/loader-snowflake` still lands before the go/no-go.
+- **Next step:** after PR 2b merges, `feat/offline-pilot`. `feat/loader-snowflake` still
+  lands before the go/no-go.

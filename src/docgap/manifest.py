@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
@@ -58,6 +58,7 @@ class _Column(_Read):
 class _Node(_Read):
     resource_type: str
     unique_id: str
+    description: str = ""
     database: str | None = None
     # `schema` would shadow a BaseModel attribute.
     schema_: str | None = Field(default=None, alias="schema")
@@ -80,13 +81,20 @@ class Marts:
     """The mart relations: table name to column name to dbt data type, uppercased.
 
     `documented` holds the FQNs of the columns with a description; every other
-    column is "missing", the gaps `coverage` counts and `rank` ranks.
+    column is "missing", the gaps `coverage` counts and `rank` ranks. The texts are
+    what the test agent's `describe()` reads offline: tables by name, columns by FQN.
     """
 
     database: str
     schema: str
     tables: Mapping[str, Mapping[str, str]]
-    documented: frozenset[str]
+    column_descriptions: Mapping[str, str]
+    table_descriptions: Mapping[str, str] = field(default_factory=dict[str, str])
+
+    @property
+    def documented(self) -> frozenset[str]:
+        """The FQNs of the columns with a description."""
+        return frozenset(self.column_descriptions)
 
     def fqns(self) -> list[str]:
         """Every mart column as `DATABASE.SCHEMA.TABLE.COLUMN`, sorted."""
@@ -106,7 +114,7 @@ def _identifier(name: str, where: str) -> str:
         raise ValueError(f"{where}: {name!r} is not an unquoted identifier") from None
 
 
-def _mart_columns(node: _Node) -> tuple[dict[str, str], set[str]]:
+def _mart_columns(node: _Node) -> tuple[dict[str, str], dict[str, str]]:
     if node.resource_type != "model" or not node.config.contract.enforced:
         # The manifest lists only the columns declared in YAML; without an enforced
         # contract a column the model builds could be missing, and never be counted.
@@ -114,7 +122,7 @@ def _mart_columns(node: _Node) -> tuple[dict[str, str], set[str]]:
             f"{node.unique_id}: a mart relation must be a model with an enforced contract"
         )
     columns: dict[str, str] = {}
-    documented: set[str] = set()
+    described: dict[str, str] = {}
     for column in node.columns.values():
         where = f"{node.unique_id}.{column.name}"
         if column.quote and column.name != column.name.upper():
@@ -127,10 +135,10 @@ def _mart_columns(node: _Node) -> tuple[dict[str, str], set[str]]:
         columns[name] = column.data_type
         # Whitespace alone tells the agent nothing, so it counts as no description.
         if column.description.strip():
-            documented.add(name)
+            described[name] = column.description
     if not columns:
         raise ValueError(f"{node.unique_id}: no columns declared")
-    return columns, documented
+    return columns, described
 
 
 def _parse(manifest: bytes) -> _Manifest:
@@ -165,7 +173,8 @@ def _in_marts(node: _Node, config: ManifestConfig) -> bool:
 
 def _marts(parsed: _Manifest, config: ManifestConfig) -> Marts:
     tables: dict[str, dict[str, str]] = {}
-    documented: set[str] = set()
+    table_descriptions: dict[str, str] = {}
+    column_descriptions: dict[str, str] = {}
     for node in _nodes(parsed):
         if not _in_marts(node, config):
             continue
@@ -173,14 +182,23 @@ def _marts(parsed: _Manifest, config: ManifestConfig) -> Marts:
         if table in tables:
             raise ValueError(f"{node.unique_id}: a second relation named {table}")
         tables[table], described = _mart_columns(node)
-        documented.update(
-            _fqn(config.mart_database, config.mart_schema, table, column) for column in described
+        if node.description.strip():
+            table_descriptions[table] = node.description
+        column_descriptions.update(
+            (_fqn(config.mart_database, config.mart_schema, table, column), text)
+            for column, text in described.items()
         )
     if not tables:
         raise ValueError(
             f"dbt manifest: no relation in {config.mart_database}.{config.mart_schema}"
         )
-    return Marts(config.mart_database, config.mart_schema, tables, frozenset(documented))
+    return Marts(
+        config.mart_database,
+        config.mart_schema,
+        tables,
+        column_descriptions,
+        table_descriptions,
+    )
 
 
 def load_marts(manifest: bytes, config: ManifestConfig) -> Marts:

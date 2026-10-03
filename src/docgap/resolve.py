@@ -153,7 +153,7 @@ def resolve_query(
     Snowflake resolves them. A resolved reference is named by its column FQN.
     Also returns whether the outer query selects `*`, which reads every column.
 
-    >>> marts = Marts("ANALYTICS", "MARTS", {"T": {"A": "NUMBER", "B": "NUMBER"}}, frozenset())
+    >>> marts = Marts("ANALYTICS", "MARTS", {"T": {"A": "NUMBER", "B": "NUMBER"}}, {})
     >>> refs, star = resolve_query(
     ...     "WITH C AS (SELECT * FROM T) SELECT A FROM C WHERE Z = ?",
     ...     database="ANALYTICS", schema="MARTS", marts=marts)

@@ -113,10 +113,13 @@ class SeedsConfig(_Section):
 
 
 class AgentConfig(_Section):
-    """Limits on the test agent's `run_sql` tool, per call."""
+    """The test agent's limits: per `run_sql` call, per model call and per run."""
 
     statement_timeout_seconds: PositiveInt
     row_cap: PositiveInt
+    max_tool_calls: PositiveInt
+    max_tokens: PositiveInt
+    run_attempts: PositiveInt
 
 
 class Price(_Section):

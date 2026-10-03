@@ -19,6 +19,7 @@ from docgap.llm import (
     Budget,
     BudgetExhausted,
     CacheMiss,
+    ContextExceeded,
     LlmClient,
     ResponseCache,
     TransientError,
@@ -301,3 +302,29 @@ def test_cache_tokens_are_charged_at_bounds_that_never_undercount() -> None:
     )
     # $1 per million input tokens: 0.1 + 0.1 for reads + twice 0.1 for writes.
     assert budget.charge(MODEL, usage) == pytest.approx(0.4)
+
+
+def test_input_past_the_context_window_is_its_own_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    message = "prompt is too long: 250000 tokens > 200000 maximum"
+
+    def too_long(request: httpx2.Request) -> httpx2.Response:
+        error = {"type": "error", "error": {"type": "invalid_request_error", "message": message}}
+        return httpx2.Response(400, json=error)
+
+    http_client = anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(too_long))
+    send = anthropic_transport(_config(), http_client=http_client)
+    with pytest.raises(ContextExceeded, match="prompt is too long"):
+        send(MODEL, PARAMS)
+
+
+def test_context_overflow_is_cached_and_replays_offline(tmp_path: Path) -> None:
+    online, sink = _client(tmp_path, FakeTransport(ContextExceeded("too long")), _config())
+    with pytest.raises(ContextExceeded):
+        _complete(online)
+    # No usage is reported for it, so nothing is charged.
+    assert (online.budget.calls, online.budget.spend_usd) == (1, 0)
+    assert _events(sink)[0]["outcome"] == "context_exceeded"
+    offline, _ = _client(tmp_path, None, _config())
+    with pytest.raises(ContextExceeded):
+        _complete(offline)
