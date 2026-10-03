@@ -235,6 +235,10 @@ def _converse(context: _Context, conversation: _Conversation) -> _End:
     messages = conversation.messages
     limit = context.config.max_tool_calls
     settings: dict[str, JsonValue] = {
+        # Automatic prompt caching: a 5-minute breakpoint on the last block, moving
+        # forward as the conversation grows, so each turn reads the turns before it
+        # from the provider's cache. It changes the cost, never the reply (ADR 0030).
+        "cache_control": {"type": "ephemeral"},
         "max_tokens": context.config.max_tokens,
         "system": system_prompt(limit),
         "tools": tool_definitions(

@@ -156,12 +156,14 @@ def test_final_answer_is_run_and_the_run_is_transcribed(harness: Harness) -> Non
 
 
 def test_request_sends_default_settings_only(harness: Harness) -> None:
-    # No sampling, thinking, effort or tool choice: each model runs at its defaults (the
-    # agent's decision record), and the final answer is a tool the prompt asks for.
+    # No sampling, thinking, effort or tool choice: each model runs at its defaults
+    # (ADR 0027), and the final answer is a tool the prompt asks for. The one addition
+    # is automatic prompt caching, which changes the cost and never the reply (ADR 0030).
     model = ScriptedModel(_reply(_use("final_answer", final_sql=COUNT)))
     harness.run(model)
     request = model.requests[0]
-    assert sorted(request) == ["max_tokens", "messages", "system", "tools"]
+    assert sorted(request) == ["cache_control", "max_tokens", "messages", "system", "tools"]
+    assert request["cache_control"] == {"type": "ephemeral"}
     tools = request["tools"]
     assert isinstance(tools, list)
     assert [tool["name"] for tool in tools if isinstance(tool, dict)] == [
