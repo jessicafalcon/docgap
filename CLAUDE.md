@@ -47,9 +47,10 @@ the file is the current standard, and memory of it may be stale.
 | **Fresh clone** | `uv sync`, `uv run pre-commit install` (the pre-commit and commit-msg hooks); gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
 | **Offline data** needed (DuckDB work) and `data/sample/` is missing | `uv run python loader/offline_sample.py`, with the sources in `data/open_damir/` | It checks sources and outputs against the locks; `--update-lock` only under an ADR that supersedes 0013 |
 | **Offline warehouse** needed and `data/warehouse/<source>/RAW.duckdb` is missing | `uv run python loader/load_duckdb.py sample` (or `fixture`, the CI fixture) | It checks each file against `loader/sample.lock` and its header against `loader/raw_prestations.sql`; a re-run loads nothing twice |
-| **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` | It rewrites the code-list seeds in `warehouse/dbt/seeds/`; until it runs, the byte-identity test fails |
+| **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` and `uv run python -m eval.column_docs` | They rewrite the code-list seeds in `warehouse/dbt/seeds/` and the every-column docs in `eval/column_docs.json`; until they run, the byte-identity tests fail |
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`) | It copies the build's marts alone into the agent's database (ADR 0026) |
+| **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. CI runs every gold query on the fixture |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -74,8 +75,10 @@ after any fix, step 1 always runs again.
 
 1. `uv run pytest` and `uv run pre-commit run --all-files` are green. If `infra/`
    changed: `terraform fmt -check && terraform validate`. If `warehouse/`,
-   `loader/` or `fixtures/damir/` changed: what CI runs, `dbt build` over the
-   fixture and `uv run docgap lint`.
+   `loader/`, `fixtures/damir/` or `eval/pilot_questions.yml` changed: what CI
+   runs, `dbt build` over the fixture, `uv run docgap lint`, then
+   `uv run python -m eval.agent.warehouse fixture` and
+   `uv run python -m eval.questions check fixture`.
 2. Cleanup review with the four `/simplify` angles (reuse, simplification,
    efficiency, altitude), sized by what the PR changes; fix or answer the findings:
    - **Docs only** (every changed path is `*.md`): skip it; the auditor in step 3
@@ -208,7 +211,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/agent-prompt-cache`, a follow-up to #22, in review.
+- **Open PRs:** `feat/pilot-questions` (Phase 3 PR 3a), in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -243,14 +246,16 @@ Update after every PR and merge, in the same change. A new session resumes from 
     `[llm]` and `[pilot]` in `docgap.toml`.
   - **PR 2b:** `feat/agent-loop`, merged (#22). `eval/agent/` on
     DuckDB; the decision record on what the agent sends at default settings.
-    Its follow-up, `feat/agent-prompt-cache`, caches the agent's prompt prefix, in review.
-  - **PR 3:** `feat/offline-pilot`. 12 pilot questions, the every-column docs,
-    the run, and the decision records on the model and on `SELECT *`.
-  - **PR 4:** `feat/load-full-duckdb`. The three full months into DuckDB after
-    the `sources.lock` check; any time before PR 5.
-  - **PR 5:** `feat/questions`. The 40 questions and gold SQL, checked on the
-    full data.
-  - **PR 6:** `feat/baseline-docs`. The lock, the baseline YAML and the frozen
-    manifest, merged after PR 5 (ADR 0021).
-- **Next step:** after `feat/agent-prompt-cache` merges, `feat/offline-pilot`. `feat/loader-snowflake` still
-  lands before the go/no-go.
+    Its follow-up, `feat/agent-prompt-cache`, merged (#23), caches the agent's
+    prompt prefix (ADR 0030).
+  - **PR 3**, split in three (approved after `devils-advocate`):
+    - **3a:** `feat/pilot-questions`, in review. The 12 pilot questions with gold
+      SQL and typed gold results, the every-column docs (label, a newline, then
+      the comment) and the full-docs manifest built by `dbt parse`.
+    - **3b:** `feat/pilot-runner`. The runner, offline with a fake transport, and
+      the decision record on a void pass, as the brief's pilot step owes them.
+    - **3c:** `feat/offline-pilot`. The live pass, after my go-ahead, smoke run
+      first; the fixtures, and the decision records on the model and on `SELECT *`.
+- **Next step:** after `feat/pilot-questions` merges, `feat/pilot-runner`. Before
+  3c, the account's rate limits for Opus 5.5 are checked. `feat/loader-snowflake`
+  still lands before the go/no-go.

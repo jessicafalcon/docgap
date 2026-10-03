@@ -1,0 +1,173 @@
+# The offline pilot's 12 questions: two in each of the 40's six categories, under the
+# same rules (EVAL_PROTOCOL.md, "Questions"; ADR 0024). Gold SQL is Snowflake SQL over
+# ANALYTICS.MARTS; offline, the harness transpiles it to DuckDB (ADR 0014). Spend sums
+# the pre-filtered `FLT_` measures; a processing month is `FLX_ANN_MOI`, a care month
+# `SOI_ANN` and `SOI_MOI`, and the one care-month total is January 2025's (ADR 0012).
+# Gold results are the sample's, from `uv run python -m eval.questions gold`, stored
+# typed in eval/pilot_gold/. None of the 40 repeats an ID or a text from here.
+questions:
+  - id: P01
+    category: pharmacy_dental
+    text: >-
+      What was the total amount reimbursed at pharmacies in claims processed in
+      February 2025?
+    ordered: false
+    gold_sql: |
+      SELECT SUM(FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 50
+        AND FLX_ANN_MOI = 202502
+
+  - id: P02
+    category: pharmacy_dental
+    text: >-
+      For care whose executing provider's activity is recorded as dental surgery,
+      what was the total amount charged, before any reimbursement, in each
+      processing month? Return the month as a number in YYYYMM form and the amount,
+      in month order.
+    ordered: true
+    gold_sql: |
+      SELECT FLX_ANN_MOI, SUM(FLT_PAI_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 19
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
+
+  - id: P03
+    category: region
+    text: >-
+      Leaving out beneficiaries whose region of residence is unknown, which three
+      regions of residence had the highest amount reimbursed in claims processed in
+      January 2025? Return each region's name and the amount, highest first.
+    ordered: true
+    gold_sql: |
+      SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_REM_MNT) AS reimbursed
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_REGION AS r ON r.BEN_RES_REG = f.BEN_RES_REG
+      WHERE f.FLX_ANN_MOI = 202501
+        AND f.BEN_RES_REG <> 99
+      GROUP BY r.BEN_RES_REG_LIB
+      ORDER BY reimbursed DESC
+      LIMIT 3
+
+  - id: P04
+    category: region
+    text: >-
+      For each region of residence of the beneficiaries, unknown included, what was
+      the total amount reimbursed across all processing months? Return each region's
+      name and the amount.
+    ordered: false
+    gold_sql: |
+      SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_REGION AS r ON r.BEN_RES_REG = f.BEN_RES_REG
+      GROUP BY r.BEN_RES_REG_LIB
+
+  - id: P05
+    category: age_bracket
+    text: >-
+      How much was reimbursed for beneficiaries aged 80 and over in claims processed
+      in March 2025?
+    ordered: false
+    gold_sql: |
+      SELECT SUM(FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE AGE_BEN_SNDS = 80
+        AND FLX_ANN_MOI = 202503
+
+  - id: P06
+    category: age_bracket
+    text: >-
+      Leaving out beneficiaries of unknown age, what was the amount reimbursed for
+      each age bracket in claims processed in January 2025? Return each bracket's
+      name and the amount.
+    ordered: false
+    gold_sql: |
+      SELECT a.AGE_BEN_SNDS_LIB, SUM(f.FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_AGE_BRACKET AS a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS
+      WHERE f.FLX_ANN_MOI = 202501
+        AND f.AGE_BEN_SNDS <> 99
+      GROUP BY a.AGE_BEN_SNDS_LIB
+
+  - id: P07
+    category: provider_type
+    text: >-
+      Leaving out care whose executing provider's activity is not recorded, which
+      three provider activities had the highest amount reimbursed across all
+      processing months? Return each activity's name, highest first.
+    ordered: true
+    gold_sql: |
+      SELECT p.PSE_ACT_SNDS_LIB
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY AS p ON p.PSE_ACT_SNDS = f.PSE_ACT_SNDS
+      WHERE f.PSE_ACT_SNDS <> 0
+      GROUP BY p.PSE_ACT_SNDS_LIB
+      ORDER BY SUM(f.FLT_REM_MNT) DESC
+      LIMIT 3
+
+  - id: P08
+    category: provider_type
+    text: >-
+      How many acts did nurses perform in claims processed in February 2025?
+    ordered: false
+    gold_sql: |
+      SELECT SUM(FLT_ACT_QTE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 24
+        AND FLX_ANN_MOI = 202502
+
+  - id: P09
+    category: processing_month
+    text: >-
+      By how much did the total amount charged for care, before any reimbursement,
+      change from claims processed in January 2025 to claims processed in February
+      2025? Return February's total minus January's.
+    ordered: false
+    gold_sql: |
+      SELECT SUM(IFF(FLX_ANN_MOI = 202502, FLT_PAI_MNT, 0))
+        - SUM(IFF(FLX_ANN_MOI = 202501, FLT_PAI_MNT, 0))
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+
+  - id: P10
+    category: processing_month
+    text: >-
+      For each processing month, what was the total amount reimbursed, and how much
+      did it change from the month before? Return the month as a number in YYYYMM
+      form, the amount and the change (empty for the first month), in month order.
+    ordered: true
+    gold_sql: |
+      SELECT
+        FLX_ANN_MOI,
+        SUM(FLT_REM_MNT),
+        SUM(FLT_REM_MNT) - LAG(SUM(FLT_REM_MNT)) OVER (ORDER BY FLX_ANN_MOI)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
+
+  - id: P11
+    category: care_vs_processing
+    text: >-
+      What was the total amount reimbursed for care delivered in January 2025,
+      whatever month the claims were processed in?
+    ordered: false
+    gold_sql: |
+      SELECT SUM(FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+
+  - id: P12
+    category: care_vs_processing
+    text: >-
+      Of the amount reimbursed for care delivered in January 2025, how much was in
+      claims processed in each processing month? Return the processing month as a
+      number in YYYYMM form and the amount, in month order.
+    ordered: true
+    gold_sql: |
+      SELECT FLX_ANN_MOI, SUM(FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
