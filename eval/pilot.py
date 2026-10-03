@@ -153,7 +153,7 @@ class RunGrade(BaseModel):
     @model_validator(mode="after")
     def _one_of(self) -> Self:
         if (self.grade is None) == (self.harness_error is None):
-            raise ValueError("a run has a grade or a harness error, not both")
+            raise ValueError("a run has exactly one of a grade or a harness error")
         return self
 
 
@@ -275,7 +275,6 @@ def grade_run(
         if isinstance(outcome, Result):
             _write_result(outcome, rows)
     except (TypeError, OverflowError, pa.ArrowException) as error:
-        rows.unlink(missing_ok=True)
         return RunGrade(grade=None, harness_error=f"{type(error).__name__}: {error}")
     return RunGrade(grade=graded, harness_error=None)
 
@@ -283,52 +282,6 @@ def grade_run(
 def _write_json(model: BaseModel, path: Path) -> None:
     text = model.model_dump_json(indent=2) + "\n"
     write_atomic(path, lambda sink: sink.write(text.encode()))
-
-
-@dataclass(frozen=True, slots=True)
-class _Pass:
-    inputs: PilotInputs
-    llm: LlmClient
-    agent_config: AgentConfig
-    out_dir: Path
-    run_id: str
-    log: EventLog
-
-
-def _make(run: PlannedRun, context: _Pass) -> tuple[Transcript, RunGrade]:
-    """Make one run and write its rows, its grade, then its transcript, the commit marker."""
-    directory = context.out_dir / run.key
-    # A directory without a transcript is what a crash left: never trusted, made again.
-    shutil.rmtree(directory, ignore_errors=True)
-    question = run.question
-    agent = run_agent(
-        Question(question.id, question.text),
-        run.repetition,
-        run_id=context.run_id,
-        site=ModelSettings(model=run.configuration.model, sampling={}),
-        llm=context.llm,
-        tools=context.inputs.tools[run.configuration.docs],
-        config=context.agent_config,
-        log=context.log,
-    )
-    directory.mkdir(parents=True)
-    graded = grade_run(
-        agent.transcript,
-        agent.outcome,
-        context.inputs.gold[question.id],
-        ordered=question.ordered,
-        rows=directory / ROWS,
-    )
-    _write_json(graded, directory / GRADE)
-    _write_json(agent.transcript, directory / TRANSCRIPT)
-    context.log.event(
-        "pilot",
-        run.key,
-        "run_written",
-        passed=graded.grade is not None and graded.grade.passed,
-        harness_error=graded.harness_error is not None,
-    )
-    return agent.transcript, graded
 
 
 def _read(directory: Path) -> tuple[Transcript, RunGrade]:
@@ -390,8 +343,42 @@ def run_pass(
         for run in runs
         if (out_dir / run.key / TRANSCRIPT).exists()
     }
-    context = _Pass(inputs, llm, agent_config, out_dir, run_id, log)
     stopped = False
+
+    def make(run: PlannedRun) -> tuple[Transcript, RunGrade]:
+        """Make one run and write its rows, its grade, then its transcript, the commit marker."""
+        directory = out_dir / run.key
+        # A directory without a transcript is what a crash left: never trusted, made again.
+        shutil.rmtree(directory, ignore_errors=True)
+        question = run.question
+        agent = run_agent(
+            Question(question.id, question.text),
+            run.repetition,
+            run_id=run_id,
+            site=ModelSettings(model=run.configuration.model, sampling={}),
+            llm=llm,
+            tools=inputs.tools[run.configuration.docs],
+            config=agent_config,
+            log=log,
+        )
+        directory.mkdir(parents=True)
+        graded = grade_run(
+            agent.transcript,
+            agent.outcome,
+            inputs.gold[question.id],
+            ordered=question.ordered,
+            rows=directory / ROWS,
+        )
+        _write_json(graded, directory / GRADE)
+        _write_json(agent.transcript, directory / TRANSCRIPT)
+        log.event(
+            "pilot",
+            run.key,
+            "run_written",
+            passed=graded.grade is not None and graded.grade.passed,
+            harness_error=graded.harness_error is not None,
+        )
+        return agent.transcript, graded
 
     def save() -> PilotManifest:
         not_made = [run.key for run in runs if run.key not in made]
@@ -424,7 +411,7 @@ def run_pass(
             if run.key in made:
                 continue
             try:
-                made[run.key] = _make(run, context)
+                made[run.key] = make(run)
             except (BudgetExhausted, anthropic.APIStatusError) as error:
                 stopped = True
                 stops.append(f"{type(error).__name__}: {error}")
@@ -436,16 +423,23 @@ def run_pass(
     return manifest
 
 
-def _lock(out_dir: Path) -> Path:
-    """Claim the pass for this process, so two processes never write the same runs."""
-    lock = out_dir / ".lock"
-    out_dir.mkdir(parents=True, exist_ok=True)
+def _lock(work: Path) -> Path:
+    """Claim the pass for this process, so two processes never write the same runs.
+
+    The lock sits in the gitignored work directory, so one a killed process leaves
+    is never committed.
+
+    Raises:
+        FileExistsError: another process holds the lock, or a killed one left it.
+    """
+    lock = work / ".lock"
+    work.mkdir(parents=True, exist_ok=True)
     try:
         descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
-        sys.exit(
-            f"{lock} exists: another process runs this pass, or one was killed; delete it if none runs"
-        )
+        raise FileExistsError(
+            f"{lock}: another process runs this pass, or one was killed; delete it if none runs"
+        ) from None
     os.write(descriptor, f"{os.getpid()}\n".encode())
     os.close(descriptor)
     return lock
@@ -464,7 +458,10 @@ def main(argv: list[str] | None = None) -> None:
     out_dir = PILOT_DIR / f"pass-{args.pass_number}"
     work = WORK_DIR / f"pass-{args.pass_number}"
     run_id = f"pilot-{args.pass_number}"
-    lock = _lock(out_dir)
+    try:
+        lock = _lock(work)
+    except FileExistsError as error:
+        sys.exit(str(error))
     try:
         questions = load_questions(PILOT_QUESTIONS)
         docs_text: dict[str, str] = json.loads(DOCS.read_text())
@@ -492,7 +489,6 @@ def main(argv: list[str] | None = None) -> None:
                 for docs, path in manifests.items()
             }
             inputs = PilotInputs(questions, gold, config.pilot.models, tools, hashes)
-            work.mkdir(parents=True, exist_ok=True)
             with (work / "events.jsonl").open("a") as sink:
                 log = EventLog(sink, run_id)
                 llm = LlmClient(
@@ -520,7 +516,7 @@ def main(argv: list[str] | None = None) -> None:
         f"pass {args.pass_number}: {manifest.status}, {manifest.model_calls} model calls,"
         f" ${manifest.spend_usd:.2f} counted"
     )
-    if manifest.stops and manifest.status is PassStatus.STOPPED:
+    if manifest.status is PassStatus.STOPPED:
         print(f"stopped: {manifest.stops[-1]}")
     sys.exit(1 if manifest.status is PassStatus.STOPPED else 0)
 

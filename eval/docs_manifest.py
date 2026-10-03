@@ -90,7 +90,7 @@ def build_manifest(out: Path, docs: Mapping[str, str] | None, project: Path = DB
         # local checkout and means nothing once the copy is gone.
         for node in manifest["nodes"].values():
             node.pop("root_path", None)
-        built.write_text(json.dumps(manifest, ensure_ascii=False))
+        built.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
         built.replace(out)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
