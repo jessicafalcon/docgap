@@ -218,7 +218,7 @@ the tag (`CLAUDE.md` → "After `preregistered`"):
 
 The pilot runs the 12 pilot questions, 3 repetitions each, on DuckDB over the
 offline sample pinned by `loader/sample.lock` (ADR 0013), in four configurations:
-{Haiku 4.5, Opus 5.5} × {no column docs, every column documented from the
+{Haiku 4.5, Sonnet 5.5} × {no column docs, every column documented from the
 dictionary}. The every-column text is the dictionary's, verbatim and in French: it
 is the ceiling arm's text, and its locked half is the baseline's (ADR 0025). The
 agent writes Snowflake SQL, as in the trial, and the harness transpiles it to

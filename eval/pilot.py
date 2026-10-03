@@ -117,7 +117,7 @@ class Configuration:
 
     @property
     def name(self) -> str:
-        """The configuration's directory name, such as `claude-opus-5-5.full_docs`."""
+        """The configuration's directory name, such as `claude-sonnet-5-5.full_docs`."""
         return f"{self.model}.{self.docs}"
 
 
@@ -140,7 +140,7 @@ class PlannedRun:
 
     @property
     def key(self) -> str:
-        """The run's directory under the pass, such as `claude-opus-5-5.no_docs/P01.r1`."""
+        """The run's directory under the pass, such as `claude-sonnet-5-5.no_docs/P01.r1`."""
         return f"{self.configuration.name}/{self.question.id}.r{self.repetition}"
 
 

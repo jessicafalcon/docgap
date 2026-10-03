@@ -176,7 +176,7 @@ class _Conversation:
 
 
 def _blocks(message: Message) -> list[JsonValue]:
-    # Every block goes back as returned, thinking blocks included: Opus 5.5 checks
+    # Every block goes back as returned, thinking blocks included: Sonnet 5.5 checks
     # that the conversation before each of its thinking blocks is unchanged.
     return [block.model_dump(mode="json", exclude_none=True) for block in message.content]
 

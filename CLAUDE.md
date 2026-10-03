@@ -259,6 +259,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
     - **3c:** `feat/offline-pilot`, in progress. The live pass, after my go-ahead,
       smoke run first; the fixtures, and the decision records on the model and on
       `SELECT *`.
-- **Next step:** finish `feat/offline-pilot`: check the account's rate limits for
-  Opus 5.5, run the smoke run, set `[llm] max_spend_usd` from its cost per run,
-  and continue pass 1. `feat/loader-snowflake` still lands before the go/no-go.
+- **Next step:** finish `feat/offline-pilot`. The candidates are Haiku 4.5 and
+  Sonnet 5.5 (ADR 0032), and both models' rate limits are checked. Run the smoke
+  run, check it for replies cut at `max_tokens`, set `[llm] max_spend_usd` from its
+  cost per run, and continue pass 1. `feat/loader-snowflake` still lands before the go/no-go.
