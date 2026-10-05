@@ -12,6 +12,10 @@ questions:
       What was the total amount reimbursed at pharmacies in claims processed in
       February 2025?
     ordered: false
+    accept: [rem_by_type, rem_total]
+    rule_out:
+      care_month: processed in
+      prescriber: at pharmacies
     gold_sql: |
       SELECT SUM(FLT_REM_MNT)
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
@@ -26,6 +30,10 @@ questions:
       processing month? Return the month as a number in YYYYMM form and the amount,
       in month order.
     ordered: true
+    accept: [pai_by_type]
+    rule_out:
+      care_month: processing month
+      prescriber: executing provider
     gold_sql: |
       SELECT FLX_ANN_MOI, SUM(FLT_PAI_MNT)
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
@@ -40,6 +48,14 @@ questions:
       regions of residence had the highest amount reimbursed in claims processed in
       January 2025? Return each region's name and the amount, highest first.
     ordered: true
+    accept: [rem_by_type, rem_total]
+    rule_out:
+      care_month: processed in
+      region_ete_reg_cod: regions of residence
+      region_etp_reg_cod: regions of residence
+      region_exe_ins_reg: regions of residence
+      region_org_cle_reg: regions of residence
+      region_pre_ins_reg: regions of residence
     gold_sql: |
       SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_REM_MNT) AS reimbursed
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
@@ -57,6 +73,13 @@ questions:
       the total amount reimbursed across all processing months? Return each region's
       name and the amount.
     ordered: false
+    accept: [rem_by_type, rem_total]
+    rule_out:
+      region_ete_reg_cod: region of residence
+      region_etp_reg_cod: region of residence
+      region_exe_ins_reg: region of residence
+      region_org_cle_reg: region of residence
+      region_pre_ins_reg: region of residence
     gold_sql: |
       SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_REM_MNT)
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
@@ -69,6 +92,9 @@ questions:
       How much was reimbursed for beneficiaries aged 80 and over in claims processed
       in March 2025?
     ordered: false
+    accept: [rem_by_type, rem_total]
+    rule_out:
+      care_month: processed in
     gold_sql: |
       SELECT SUM(FLT_REM_MNT)
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
@@ -82,6 +108,9 @@ questions:
       each age bracket in claims processed in January 2025? Return each bracket's
       name and the amount.
     ordered: false
+    accept: [rem_by_type, rem_total]
+    rule_out:
+      care_month: processed in
     gold_sql: |
       SELECT a.AGE_BEN_SNDS_LIB, SUM(f.FLT_REM_MNT)
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
@@ -97,6 +126,8 @@ questions:
       three provider activities had the highest amount reimbursed across all
       processing months? Return each activity's name, highest first.
     ordered: true
+    rule_out:
+      prescriber: executing provider
     gold_sql: |
       SELECT p.PSE_ACT_SNDS_LIB
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
@@ -111,6 +142,10 @@ questions:
     text: >-
       How many acts did nurses perform in claims processed in February 2025?
     ordered: false
+    accept: [act_by_type]
+    rule_out:
+      care_month: processed in
+      prescriber: perform
     gold_sql: |
       SELECT SUM(FLT_ACT_QTE)
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
@@ -124,6 +159,9 @@ questions:
       change from claims processed in January 2025 to claims processed in February
       2025? Return February's total minus January's.
     ordered: false
+    accept: [pai_by_type]
+    rule_out:
+      care_month: processed in
     gold_sql: |
       SELECT SUM(IFF(FLX_ANN_MOI = 202502, FLT_PAI_MNT, 0))
         - SUM(IFF(FLX_ANN_MOI = 202501, FLT_PAI_MNT, 0))
@@ -136,6 +174,9 @@ questions:
       did it change from the month before? Return the month as a number in YYYYMM
       form, the amount and the change (empty for the first month), in month order.
     ordered: true
+    accept: [rem_by_type, rem_total]
+    rule_out:
+      care_month: processing month
     gold_sql: |
       SELECT
         FLX_ANN_MOI,
@@ -151,6 +192,9 @@ questions:
       What was the total amount reimbursed for care delivered in January 2025,
       whatever month the claims were processed in?
     ordered: false
+    accept: [rem_by_type, rem_total]
+    rule_out:
+      processing_month: care delivered in
     gold_sql: |
       SELECT SUM(FLT_REM_MNT)
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
@@ -164,6 +208,10 @@ questions:
       claims processed in each processing month? Return the processing month as a
       number in YYYYMM form and the amount, in month order.
     ordered: true
+    accept: [rem_by_type, rem_total]
+    rule_out:
+      care_month: processing month
+      processing_month: care delivered in
     gold_sql: |
       SELECT FLX_ANN_MOI, SUM(FLT_REM_MNT)
       FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
