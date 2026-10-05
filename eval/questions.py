@@ -2,6 +2,10 @@
 
 uv run python -m eval.questions gold [--check]   # the pilot's gold, on the sample
 uv run python -m eval.questions check fixture    # every gold query runs on a source
+
+Each question also declares the other readings of its gold SQL the full docs
+support, from the catalog in `SWAPS`: accepted, and stored beside the gold, or ruled
+out by a phrase in its text (protocol "Questions" item 5, ADR 0033).
 """
 
 from __future__ import annotations
@@ -10,7 +14,8 @@ import argparse
 import hashlib
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 from itertools import pairwise
 from pathlib import Path
@@ -20,8 +25,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlglot
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from sqlglot import exp
+from sqlglot.optimizer.scope import traverse_scope
 
 from docgap.artifacts import write_atomic
 from docgap.config import load_config
@@ -35,13 +41,17 @@ __all__ = [
     "GOLD_SQL_KEY",
     "PILOT_GOLD",
     "PILOT_QUESTIONS",
+    "SWAPS",
     "Category",
     "GoldQuestion",
+    "Swap",
+    "gold_files",
     "gold_problems",
     "gold_provenance",
     "gold_result",
     "load_questions",
     "query_problems",
+    "read_as",
     "read_gold",
     "sha256",
     "to_result",
@@ -69,8 +79,72 @@ class Category(StrEnum):
     CARE_VS_PROCESSING = "care_vs_processing"
 
 
+FACT = "FCT_REIMBURSEMENTS"
+
+
+@dataclass(frozen=True, slots=True)
+class Swap:
+    """Another reading of a gold query that the full docs support.
+
+    Each fact column in `replace` is read as its expression, and `where`, when set,
+    filters every SELECT holding a replaced column, as an agent's `WHERE` does: an
+    `IFF` inside the sum would keep a group with no row of the type, where a filter
+    drops it, and 8 of the sample's 113 care months have no type-0 row.
+    """
+
+    replace: Mapping[str, str]
+    where: str | None = None
+
+
+# The full docs' recipe for each `FLT_` measure: `PRS_` filtered on the reimbursement
+# type. The two differ on type 99, unknown, where `FLT_` is filled too (ADR 0033).
+_FILTERED = {
+    "rem_by_type": ("FLT_REM_MNT", "PRS_REM_MNT", "PRS_REM_TYP IN (0, 1)"),
+    "pai_by_type": ("FLT_PAI_MNT", "PRS_PAI_MNT", "PRS_REM_TYP = 0"),
+    "act_by_type": ("FLT_ACT_QTE", "PRS_ACT_QTE", "PRS_REM_TYP = 0"),
+    "dep_by_type": ("FLT_DEP_MNT", "PRS_DEP_MNT", "PRS_REM_TYP = 0"),
+}
+# Fact columns the docs tell apart and their names don't: one region per actor, and
+# the executing provider beside the prescribing one.
+_REGIONS = (
+    "BEN_RES_REG",
+    "EXE_INS_REG",
+    "PRE_INS_REG",
+    "ORG_CLE_REG",
+    "ETE_REG_COD",
+    "ETP_REG_COD",
+)
+_EXECUTING_PRESCRIBING = (
+    ("PSE_ACT_SNDS", "PSP_ACT_SNDS"),
+    ("PSE_SPE_SNDS", "PSP_SPE_SNDS"),
+    ("PSE_ACT_CAT", "PSP_ACT_CAT"),
+    ("PSE_STJ_SNDS", "PSP_STJ_SNDS"),
+    ("ETE_CAT_SNDS", "ETP_CAT_SNDS"),
+)
+_PROCESSING_TEXT = "CAST(FLX_ANN_MOI AS VARCHAR)"
+
+SWAPS: Mapping[str, Swap] = {
+    # Statutory and supplementary shares: the docs say `PRS_REM_MNT` sums unfiltered.
+    "rem_total": Swap({"FLT_REM_MNT": "PRS_REM_MNT"}),
+    **{name: Swap({flt: prs}, where) for name, (flt, prs, where) in _FILTERED.items()},
+    "care_month": Swap({"FLX_ANN_MOI": "CAST(SOI_ANN || SOI_MOI AS INT)"}),
+    "processing_month": Swap(
+        {
+            "SOI_ANN": f"SUBSTR({_PROCESSING_TEXT}, 1, 4)",
+            "SOI_MOI": f"SUBSTR({_PROCESSING_TEXT}, 5, 2)",
+        }
+    ),
+    "prescriber": Swap(dict(_EXECUTING_PRESCRIBING)),
+    "executor": Swap({p: e for e, p in _EXECUTING_PRESCRIBING}),
+    **{
+        f"region_{target.lower()}": Swap({r: target for r in _REGIONS if r != target})
+        for target in _REGIONS
+    },
+}
+
+
 class GoldQuestion(BaseModel):
-    """A question with its gold SQL, in Snowflake SQL over the marts."""
+    """A question with its gold SQL, in Snowflake SQL over the marts, and its other readings."""
 
     model_config = CONTRACT_CONFIG
 
@@ -80,6 +154,22 @@ class GoldQuestion(BaseModel):
     gold_sql: NonEmptyStr
     # Rows compare in order only when the question asks for one.
     ordered: bool
+    # Swaps whose result a run may give instead of the gold's, each stored beside it.
+    accept: tuple[str, ...] = ()
+    # Swaps the question's text rules out, each with the phrase that does.
+    rule_out: dict[str, NonEmptyStr] = {}
+
+    @model_validator(mode="after")
+    def _readings_are_declared_once(self) -> GoldQuestion:
+        declared = [*self.accept, *self.rule_out]
+        if unknown := sorted(set(declared) - SWAPS.keys()):
+            raise ValueError(f"{self.id}: no such swap {unknown}")
+        if twice := sorted({name for name in declared if declared.count(name) > 1}):
+            raise ValueError(f"{self.id}: swaps declared twice {twice}")
+        text = self.text.casefold()
+        if missing := sorted(n for n, p in self.rule_out.items() if p.casefold() not in text):
+            raise ValueError(f"{self.id}: the text lacks the phrase that rules out {missing}")
+        return self
 
 
 class _QuestionFile(BaseModel):
@@ -105,6 +195,70 @@ def load_questions(path: Path) -> list[GoldQuestion]:
 def sha256(data: str | bytes) -> str:
     """Hash text or bytes, as a stored gold result records its inputs."""
     return hashlib.sha256(data.encode() if isinstance(data, str) else data).hexdigest()
+
+
+def gold_files(question: GoldQuestion, gold_dir: Path) -> dict[str, Path]:
+    """The files holding a question's gold result and each accepted one, by file stem."""
+    stems = [question.id, *(f"{question.id}.{name}" for name in sorted(question.accept))]
+    return {stem: gold_dir / f"{stem}.parquet" for stem in stems}
+
+
+def read_as(sql: str, swap: Swap) -> str | None:
+    """Return the SQL read the swap's way, or None when it reads none of the swap's columns.
+
+    A column is the fact's when its qualifier names the fact, or when it is
+    unqualified in a SELECT whose one source is the fact.
+
+    >>> read_as("SELECT SUM(FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS", SWAPS["pai_by_type"])
+    'SELECT SUM(PRS_PAI_MNT) FROM FCT_REIMBURSEMENTS WHERE PRS_REM_TYP = 0'
+    >>> read_as("SELECT 1 FROM FCT_REIMBURSEMENTS", SWAPS["rem_total"]) is None
+    True
+
+    Raises:
+        ValueError: a column the swap replaces is unqualified in a SELECT with several sources.
+    """
+    tree = sqlglot.parse_one(sql, read="snowflake")
+    replaced: list[tuple[exp.Column, str]] = []
+    filtered: dict[int, tuple[exp.Select, str, str]] = {}
+    for scope in traverse_scope(tree):
+        facts = {
+            alias
+            for alias, source in scope.sources.items()
+            if isinstance(source, exp.Table) and source.name.upper() == FACT
+        }
+        for column in scope.columns:
+            if column.name.upper() not in swap.replace:
+                continue
+            if column.table:
+                if column.table not in facts:
+                    continue
+            elif not facts:
+                continue
+            elif len(scope.sources) > 1:
+                raise ValueError(f"qualify {column.name}: its SELECT reads several tables")
+            replaced.append((column, column.table))
+            if swap.where is not None and isinstance(scope.expression, exp.Select):
+                filtered[id(scope.expression)] = (scope.expression, column.table, swap.where)
+    if not replaced:
+        return None
+
+    def qualified(text: str, table: str) -> exp.Expr:
+        # The replacement reads the replaced column's table, under the same qualifier.
+        expression = sqlglot.parse_one(text, read="snowflake")
+        if table:
+            for column in expression.find_all(exp.Column):
+                column.set("table", exp.to_identifier(table))
+        return expression
+
+    for column, table in replaced:
+        expression = qualified(swap.replace[column.name.upper()], table)
+        # A projection keeps its name, which an `ORDER BY` may read.
+        if isinstance(column.parent, exp.Select) and column in column.parent.expressions:
+            expression = exp.alias_(expression, column.name)
+        column.replace(expression)
+    for select, table, where in filtered.values():
+        select.where(qualified(where, table), copy=False)
+    return tree.sql(dialect="snowflake")
 
 
 def _check_ties(con: duckdb.DuckDBPyConnection, question: GoldQuestion) -> None:
@@ -201,14 +355,64 @@ def gold_provenance(path: Path) -> dict[bytes, bytes]:
     return {key: metadata[key] for key in (GOLD_SQL_KEY, DATA_LOCK_KEY) if key in metadata}
 
 
-def _run(
-    con: duckdb.DuckDBPyConnection, questions: list[GoldQuestion], row_cap: int
-) -> Iterator[tuple[GoldQuestion, pa.Table | str]]:
-    for question in questions:
+def reading_problems(
+    con: duckdb.DuckDBPyConnection, question: GoldQuestion, gold: Result, *, stale_accepts: bool
+) -> list[str]:
+    """Report each swap that changes the gold's result and that the question doesn't
+    declare, and each declared swap that reads none of the gold SQL's columns.
+
+    With `stale_accepts`, an accepted swap that gives the gold's result is reported
+    too. Only on the sample: the fixture's few rows can tie readings the sample tells apart.
+    """
+    problems: list[str] = []
+    for name, swap in sorted(SWAPS.items()):
+        declared = name in question.accept or name in question.rule_out
         try:
-            yield question, gold_result(con, question, max_rows=row_cap)
+            sql = read_as(question.gold_sql, swap)
+            if sql is None:
+                if declared:
+                    problems.append(f"declares {name}, which reads none of its columns")
+                continue
+            reading = to_result(con.execute(to_duckdb(sql)).to_arrow_table())
         except (ValueError, TranspileError, duckdb.Error) as error:
-            yield question, f"{type(error).__name__}: {error}"
+            problems.append(f"{name}: {type(error).__name__}: {error}")
+            continue
+        same = check(reading, gold, ordered=question.ordered) is None
+        if not declared and not same:
+            problems.append(f"{name} changes the result: accept it, or rule it out in the text")
+        elif stale_accepts and same and name in question.accept:
+            problems.append(f"accepts {name}, which gives the gold's result")
+    return problems
+
+
+def _results(
+    con: duckdb.DuckDBPyConnection,
+    question: GoldQuestion,
+    *,
+    row_cap: int,
+    stale_accepts: bool,
+) -> tuple[dict[str, tuple[str, pa.Table]], list[str]]:
+    """Run a question's gold SQL and each accepted reading of it, and check its readings.
+
+    Returns each result to store with the SQL it ran, by file stem, and the problems found.
+    """
+    try:
+        gold = gold_result(con, question, max_rows=row_cap)
+    except (ValueError, TranspileError, duckdb.Error) as error:
+        return {}, [f"{question.id}: {type(error).__name__}: {error}"]
+    results = {question.id: (question.gold_sql, gold)}
+    found = reading_problems(con, question, to_result(gold), stale_accepts=stale_accepts)
+    problems = [f"{question.id}: {problem}" for problem in found]
+    for name in sorted(question.accept):
+        try:
+            sql = read_as(question.gold_sql, SWAPS[name])
+            if sql is None:  # Reported among the readings.
+                continue
+            reading = question.model_copy(update={"gold_sql": sql})
+            results[f"{question.id}.{name}"] = (sql, gold_result(con, reading, max_rows=row_cap))
+        except (ValueError, TranspileError, duckdb.Error) as error:
+            problems.append(f"{question.id}.{name}: {type(error).__name__}: {error}")
+    return results, problems
 
 
 def gold_problems(
@@ -220,32 +424,36 @@ def gold_problems(
     data_lock: bytes,
     write: bool,
 ) -> list[str]:
-    """Run every gold query, then store its result or compare it with the stored one.
+    """Run every gold query and its accepted readings, then store each result or compare
+    it with the stored one.
 
     A failing query is reported and the next one runs. Compared, a result must match
     its stored rows, and the stored file must record this SQL and this data lock.
+    Each question's readings are checked as on the sample (`reading_problems`).
     """
     problems: list[str] = []
     if write:
         gold_dir.mkdir(parents=True, exist_ok=True)
-    for question, table in _run(con, questions, row_cap):
-        path = gold_dir / f"{question.id}.parquet"
-        expected = {
-            GOLD_SQL_KEY: sha256(question.gold_sql).encode(),
-            DATA_LOCK_KEY: sha256(data_lock).encode(),
-        }
-        if isinstance(table, str):
-            problems.append(f"{question.id}: {table}")
-        elif write:
-            write_gold(table, path, gold_sql=question.gold_sql, data_lock=data_lock)
-        elif not path.exists():
-            problems.append(f"{question.id}: no stored gold")
-        elif gold_provenance(path) != expected:
-            problems.append(f"{question.id}: stored from other SQL or other data")
-        elif reason := check(to_result(table), read_gold(path), ordered=question.ordered):
-            problems.append(f"{question.id}: {reason.value}")
+    for question in questions:
+        results, found = _results(con, question, row_cap=row_cap, stale_accepts=True)
+        problems += found
+        for stem, (sql, table) in results.items():
+            path = gold_dir / f"{stem}.parquet"
+            expected = {
+                GOLD_SQL_KEY: sha256(sql).encode(),
+                DATA_LOCK_KEY: sha256(data_lock).encode(),
+            }
+            if write:
+                write_gold(table, path, gold_sql=sql, data_lock=data_lock)
+            elif not path.exists():
+                problems.append(f"{stem}: no stored gold")
+            elif gold_provenance(path) != expected:
+                problems.append(f"{stem}: stored from other SQL or other data")
+            elif reason := check(to_result(table), read_gold(path), ordered=question.ordered):
+                problems.append(f"{stem}: {reason.value}")
     stored = {path.stem for path in gold_dir.glob("*.parquet")}
-    if stale := sorted(stored - {question.id for question in questions}):
+    owned = {stem for question in questions for stem in gold_files(question, gold_dir)}
+    if stale := sorted(stored - owned):
         problems.append(f"gold with no question: {stale}")
     return problems
 
@@ -253,11 +461,12 @@ def gold_problems(
 def query_problems(
     con: duckdb.DuckDBPyConnection, questions: list[GoldQuestion], *, row_cap: int
 ) -> list[str]:
-    """Run every gold query and report each one that fails or breaks a protocol rule."""
+    """Run every gold query and its accepted readings, and report each one that fails or
+    breaks a protocol rule, and each reading a question leaves undeclared."""
     return [
-        f"{question.id}: {table}"
-        for question, table in _run(con, questions, row_cap)
-        if isinstance(table, str)
+        problem
+        for question in questions
+        for problem in _results(con, question, row_cap=row_cap, stale_accepts=False)[1]
     ]
 
 

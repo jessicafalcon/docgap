@@ -37,6 +37,7 @@ from eval.pilot import (
     lock_pilot,
     plan,
     refuse_pass,
+    regrade,
     run_pass,
 )
 from eval.questions import PILOT_QUESTIONS, Category, GoldQuestion, load_questions, read_gold
@@ -64,6 +65,8 @@ GOLD = {
     "P01": Result(1, ((300,),)),
     "P02": Result(2, ((11, "Ile-de-France"), (24, "Centre-Val de Loire"))),
 }
+# Half the lines: another reading P01 accepts.
+ACCEPTED = {"P01": [Result(1, ((150,),))], "P02": []}
 RIGHT = {COUNT.text: COUNT.gold_sql, REGIONS.text: REGIONS.gold_sql}
 HASHES = {"agent_db": "0" * 64}
 _ids = itertools.count(1)
@@ -140,7 +143,7 @@ class Pilot:
         )
         log = EventLog(self.log, "pilot-1")
         llm = LlmClient(model, ResponseCache(self.cache), Budget(config), log)
-        inputs = PilotInputs([COUNT, REGIONS], GOLD, MODELS, self.tools, hashes)
+        inputs = PilotInputs([COUNT, REGIONS], GOLD, ACCEPTED, MODELS, self.tools, hashes)
         return run_pass(
             inputs,
             llm=llm,
@@ -204,6 +207,31 @@ def test_a_pass_writes_and_grades_every_run(pilot: Pilot) -> None:
     assert read_gold(run / "rows.parquet") == Result(2, ((11, "Ile-de-France"),))
     # The full-docs run replays its no-docs twin's reply: the same first request.
     assert manifest.model_calls == 12
+
+
+def test_a_run_matching_an_accepted_result_passes(pilot: Pilot) -> None:
+    half = {**RIGHT, COUNT.text: "SELECT COUNT(*) / 2 FROM FCT_REIMBURSEMENTS"}
+    manifest = pilot.run(FakeModel(half))
+
+    assert [counts.passed for counts in manifest.configurations.values()] == [6, 6, 6, 6]
+
+
+def test_a_regrade_grades_the_stored_rows_against_the_current_results(pilot: Pilot) -> None:
+    # P02 answered with one region of the two: failed as run, passed once accepted.
+    wrong = {**RIGHT, REGIONS.text: "SELECT 11, 'Ile-de-France'"}
+    pilot.run(FakeModel(wrong))
+    one_region = {**ACCEPTED, "P02": [Result(2, ((11, "Ile-de-France"),))]}
+    reworded = COUNT.model_copy(update={"text": "How many lines are there?"})
+
+    as_run = regrade(pilot.out, [COUNT, REGIONS], GOLD, ACCEPTED)
+    accepted = regrade(pilot.out, [COUNT, REGIONS], GOLD, one_region)
+    # The runs never saw the reworded question, so they aren't graded on it.
+    on_reworded = regrade(pilot.out, [reworded, REGIONS], GOLD, one_region)
+
+    assert set(as_run.values()) == {(3, 6)}
+    assert set(accepted.values()) == {(6, 6)}
+    assert set(on_reworded.values()) == {(3, 3)}
+    assert len(as_run) == 4
 
 
 def test_a_smoke_run_makes_the_first_runs_in_every_configuration(pilot: Pilot) -> None:

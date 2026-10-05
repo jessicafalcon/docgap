@@ -2,6 +2,7 @@
 
 uv run python -m eval.pilot --pass 1 --limit 8   # a smoke run: the first 8 runs of pass 1
 uv run python -m eval.pilot --pass 1             # the rest of the pass
+uv run python -m eval.pilot --pass 1 --regrade   # grade a written pass again, no model call
 """
 
 from __future__ import annotations
@@ -50,8 +51,10 @@ from eval.questions import (
     PILOT_QUESTIONS,
     SAMPLE_LOCK,
     GoldQuestion,
+    gold_files,
     load_questions,
     read_gold,
+    to_result,
 )
 
 __all__ = [
@@ -70,6 +73,7 @@ __all__ = [
     "lock_pilot",
     "plan",
     "refuse_pass",
+    "regrade",
     "run_pass",
 ]
 
@@ -260,6 +264,8 @@ class PilotInputs:
 
     questions: Sequence[GoldQuestion]
     gold: Mapping[str, Result]
+    # Each question's accepted results, the other readings the docs support (ADR 0033).
+    accepted: Mapping[str, Sequence[Result]]
     models: Sequence[str]
     tools: Mapping[Docs, AgentTools]
     hashes: Mapping[str, str]
@@ -284,7 +290,11 @@ def input_hashes(
         "questions": PILOT_QUESTIONS,
         "sample_lock": SAMPLE_LOCK,
         **{f"manifest.{docs}": path for docs, path in manifests.items()},
-        **{f"gold.{question.id}": PILOT_GOLD / f"{question.id}.parquet" for question in questions},
+        **{
+            f"gold.{stem}": path
+            for question in questions
+            for stem, path in gold_files(question, PILOT_GOLD).items()
+        },
         **{f"code.{path.relative_to(ROOT).as_posix()}": path for path in CODE},
     }
     hashes = {name: _file_sha256(path) for name, path in files.items()}
@@ -311,7 +321,13 @@ def _write_result(result: Result, path: Path) -> None:
 
 
 def grade_run(
-    transcript: Transcript, outcome: Outcome, gold: Result, *, ordered: bool, rows: Path
+    transcript: Transcript,
+    outcome: Outcome,
+    gold: Result,
+    *,
+    ordered: bool,
+    rows: Path,
+    accepted: Sequence[Result] = (),
 ) -> RunGrade:
     """Grade a run, and store a final result's rows typed as Parquet at `rows`.
 
@@ -320,7 +336,14 @@ def grade_run(
     and the pass goes on.
     """
     try:
-        graded = grade(transcript.qid, transcript.repetition, outcome, gold, ordered=ordered)
+        graded = grade(
+            transcript.qid,
+            transcript.repetition,
+            outcome,
+            gold,
+            ordered=ordered,
+            accepted=accepted,
+        )
         if isinstance(outcome, Result):
             _write_result(outcome, rows)
     except (TypeError, OverflowError, pa.ArrowException) as error:
@@ -418,6 +441,7 @@ def run_pass(
             inputs.gold[question.id],
             ordered=question.ordered,
             rows=directory / ROWS,
+            accepted=inputs.accepted[question.id],
         )
         _write_json(graded, directory / GRADE)
         _write_json(agent.transcript, directory / TRANSCRIPT)
@@ -473,6 +497,50 @@ def run_pass(
     return manifest
 
 
+def regrade(
+    pass_dir: Path,
+    questions: Sequence[GoldQuestion],
+    gold: Mapping[str, Result],
+    accepted: Mapping[str, Sequence[Result]],
+) -> dict[str, tuple[int, int]]:
+    """Grade a written pass again from its stored rows, against the current gold and
+    accepted results: passed and graded runs per configuration.
+
+    A run with no result keeps its recorded grade. A run with a harness error, or one
+    asked a question whose text has changed since, isn't graded: a changed text asks
+    another question, which the runs never saw.
+    """
+    by_id = {question.id: question for question in questions}
+    counts: dict[str, tuple[int, int]] = {}
+    for configuration in sorted(path for path in pass_dir.iterdir() if path.is_dir()):
+        passed = graded = 0
+        for run in sorted(configuration.glob(f"*/{TRANSCRIPT}")):
+            transcript, recorded = _read(run.parent)
+            question = by_id.get(transcript.qid)
+            first = transcript.messages[0] if transcript.messages else None
+            asked = first.get("content") if isinstance(first, dict) else None
+            if recorded.grade is None or question is None or asked != question.text:
+                continue
+            graded += 1
+            if not (run.parent / ROWS).exists():
+                passed += recorded.grade.passed
+                continue
+            with pq.ParquetFile(run.parent / ROWS) as file:
+                outcome = to_result(file.read())  # pyright: ignore[reportUnknownMemberType]
+            regraded = grade(
+                transcript.qid,
+                transcript.repetition,
+                outcome,
+                gold[question.id],
+                ordered=question.ordered,
+                accepted=accepted[question.id],
+            )
+            passed += regraded.passed
+        if graded:
+            counts[configuration.name] = (passed, graded)
+    return counts
+
+
 def lock_pilot(work_dir: Path) -> Path:
     """Claim the pilot for this process: one pass at a time, so two processes never write
     the same runs, and two new passes never both get past `refuse_pass`.
@@ -503,6 +571,11 @@ def main(argv: list[str] | None = None) -> None:
     # fourth pass directory may exist.
     parser.add_argument("--pass", dest="pass_number", type=int, required=True)
     parser.add_argument("--limit", type=int, help="make the pass's first N runs only: a smoke run")
+    parser.add_argument(
+        "--regrade",
+        action="store_true",
+        help="grade a written pass again against the current gold; no model call, nothing written",
+    )
     args = parser.parse_args(argv)
     if args.pass_number < 1 or (args.limit is not None and args.limit < 1):
         parser.error("--pass and --limit must be at least 1")
@@ -510,6 +583,16 @@ def main(argv: list[str] | None = None) -> None:
     out_dir = PILOT_DIR / f"pass-{args.pass_number}"
     work = WORK_DIR / f"pass-{args.pass_number}"
     run_id = f"pilot-{args.pass_number}"
+    questions = load_questions(PILOT_QUESTIONS)
+    gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
+    accepted = {
+        q.id: [read_gold(path) for stem, path in gold_files(q, PILOT_GOLD).items() if stem != q.id]
+        for q in questions
+    }
+    if args.regrade:
+        for name, (passed, graded) in regrade(out_dir, questions, gold, accepted).items():
+            print(f"{name}: {passed}/{graded} passed, {100 * passed / graded:.1f}%")
+        return
     try:
         lock = lock_pilot(WORK_DIR)
     except FileExistsError as error:
@@ -517,7 +600,6 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if refusal := refuse_pass(PILOT_DIR, out_dir):
             sys.exit(refusal)
-        questions = load_questions(PILOT_QUESTIONS)
         docs_text: dict[str, str] = json.loads(DOCS.read_text(encoding="utf-8"))
         manifests: dict[Docs, Path] = {}
         for docs in Docs:
@@ -528,7 +610,6 @@ def main(argv: list[str] | None = None) -> None:
         database, schema = config.manifest.mart_database, config.manifest.mart_schema
         agent_db = ROOT / "data" / "agent" / "sample" / f"{database}.duckdb"
         hashes = input_hashes(config, manifests=manifests, agent_db=agent_db, questions=questions)
-        gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
         warehouse = Warehouse(
             agent_db,
             database=database,
@@ -542,7 +623,7 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 for docs, path in manifests.items()
             }
-            inputs = PilotInputs(questions, gold, config.pilot.models, tools, hashes)
+            inputs = PilotInputs(questions, gold, accepted, config.pilot.models, tools, hashes)
             work.mkdir(parents=True, exist_ok=True)
             with (work / "events.jsonl").open("a") as sink:
                 log = EventLog(sink, run_id)

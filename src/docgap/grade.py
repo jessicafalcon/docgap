@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Hashable
+from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
 from datetime import date, time
 from decimal import ROUND_HALF_EVEN, Context, Decimal
@@ -132,7 +132,18 @@ def grade(
     gold: Result,
     *,
     ordered: bool,
+    accepted: Sequence[Result] = (),
 ) -> Grade:
-    """Grade one agent run against its question's gold result."""
+    """Grade one agent run against its question's gold result and the results it accepts.
+
+    A run that matches an accepted result passes; one that matches none fails with
+    the gold's reason code.
+
+    >>> gold, other = Result(1, ((1,),)), Result(1, ((2,),))
+    >>> grade("Q1", 1, other, gold, ordered=False, accepted=[other]).passed
+    True
+    """
     reason = check(outcome, gold, ordered=ordered)
+    if reason is not None and any(check(outcome, a, ordered=ordered) is None for a in accepted):
+        reason = None
     return Grade(qid=qid, repetition=repetition, passed=reason is None, reason=reason)
