@@ -50,6 +50,23 @@ def test_two_pilot_questions_per_category() -> None:
     assert Counter(question.category for question in QUESTIONS) == dict.fromkeys(Category, 2)
 
 
+def _family(swap: str) -> str | None:
+    if swap.endswith("_month"):
+        return "month"
+    if swap.startswith("region_"):
+        return "region"
+    return "provider" if swap in {"prescriber", "executor"} else None
+
+
+@pytest.mark.parametrize("question", QUESTIONS, ids=lambda question: question.id)
+def test_each_question_settles_two_of_the_month_region_and_provider(
+    question: GoldQuestion,
+) -> None:
+    # Pass 2's level 1: pass 1's questions settled one at least (ADR 0033).
+    families = {_family(swap) for swap in question.rule_out} - {None}
+    assert len(families) >= 2
+
+
 @pytest.mark.parametrize("question", QUESTIONS, ids=lambda question: question.id)
 def test_gold_sql_reads_the_marts_only_and_transpiles(question: GoldQuestion) -> None:
     tree = sqlglot.parse_one(question.gold_sql, read="snowflake")
