@@ -259,7 +259,12 @@ Update after every PR and merge, in the same change. A new session resumes from 
     - **3c:** `feat/offline-pilot`, in progress. The live pass, after my go-ahead,
       smoke run first; the fixtures, and the decision records on the model and on
       `SELECT *`.
-- **Next step:** finish `feat/offline-pilot`. The candidates are Haiku 4.5 and
-  Sonnet 5.5 (ADR 0032), and both models' rate limits are checked. Run the smoke
-  run, check it for replies cut at `max_tokens`, set `[llm] max_spend_usd` from its
-  cost per run, and continue pass 1. `feat/loader-snowflake` still lands before the go/no-go.
+- **Next step:** pilot pass 1 is complete and pushed on `feat/offline-pilot` (no
+  PR yet): Haiku 4.5 13.9% → 58.3%, Sonnet 5.5 8.3% → 41.7%, $5.76 counted. Its
+  grades mostly record which spend measure the agent summed: every gold sums `FLT_`,
+  every question says only "amount reimbursed", and the full-docs text says
+  `PRS_REM_MNT` can be summed unfiltered. Decided: treat this as a question defect,
+  not accept pass 1's choice. Pass 2 names the measure in each question and makes
+  them harder, after an ADR and `devils-advocate` on the plan; one rerun remains
+  after it. The `SELECT *` record reads pass 1's traffic either way.
+  `feat/loader-snowflake` still lands before the go/no-go.
