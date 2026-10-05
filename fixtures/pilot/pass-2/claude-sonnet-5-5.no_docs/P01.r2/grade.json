@@ -1,0 +1,9 @@
+{
+  "grade": {
+    "qid": "P01",
+    "repetition": 2,
+    "passed": false,
+    "reason": "value_mismatch"
+  },
+  "harness_error": null
+}
