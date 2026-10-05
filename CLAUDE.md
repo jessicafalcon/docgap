@@ -51,7 +51,7 @@ the file is the current standard, and memory of it may be stale.
 | **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` and `uv run python -m eval.column_docs` | They rewrite the code-list seeds in `warehouse/dbt/seeds/` and the every-column docs in `eval/column_docs.json`; until they run, the byte-identity tests fail |
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`) | It copies the build's marts alone into the agent's database (ADR 0026) |
-| **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. CI runs every gold query on the fixture |
+| **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. Both fail on a reading of a gold query a question doesn't declare (ADR 0033). CI runs every gold query on the fixture |
 | **A pilot pass** runs live (after my go-ahead) | `uv run --env-file .env python -m eval.pilot --pass N --limit 8` first, the smoke run; then the same command without `--limit` | Commit and push `fixtures/pilot/pass-N/` after every process, the smoke run's included. It resumes a pass in place, skipping written runs and starting the budget from its manifest; a changed input makes it refuse. A pass counts once it has made a run, and no new `N` starts while one that counts is unfinished, or once three count (ADR 0031) |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
@@ -259,12 +259,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
     - **3c:** `feat/offline-pilot`, in progress. The live pass, after my go-ahead,
       smoke run first; the fixtures, and the decision records on the model and on
       `SELECT *`.
-- **Next step:** pilot pass 1 is complete and pushed on `feat/offline-pilot` (no
-  PR yet): Haiku 4.5 13.9% → 58.3%, Sonnet 5.5 8.3% → 41.7%, $5.76 counted. Its
-  grades mostly record which spend measure the agent summed: every gold sums `FLT_`,
-  every question says only "amount reimbursed", and the full-docs text says
-  `PRS_REM_MNT` can be summed unfiltered. Decided: treat this as a question defect,
-  not accept pass 1's choice. Pass 2 names the measure in each question and makes
-  them harder, after an ADR and `devils-advocate` on the plan; one rerun remains
-  after it. The `SELECT *` record reads pass 1's traffic either way.
-  `feat/loader-snowflake` still lands before the go/no-go.
+- **Next step:** pass 2's smoke run, `--pass 2 --limit 8`, after my go-ahead.
+  Pass 1 (Haiku 4.5 13.9% → 58.3%, Sonnet 5.5 8.3% → 41.7%, $5.76) counts, but its
+  gold rejected a reading the full docs support; regraded with `--pass 1 --regrade`
+  it gives 25.0% → 88.9% and 75.0% → 100%. Pass 2 runs as a disclosed deviation
+  (ADR 0033): each question names its measure, accepts the `PRS_` reading the docs
+  give (the `FLT_` measures are also filled on reimbursement type 99), and settles
+  at least two of the month, the region and the provider; `gold --check` fails on
+  an undeclared reading. ADR 0033 fixes what each pass 2 outcome leads to, pass 3
+  included. The blind check passed 12 of 12 (`eval/blind_check/`). Still owed in
+  this PR: the model decision record and the `SELECT *` record, which reads pass
+  1's traffic. `feat/loader-snowflake` still lands before the go/no-go.

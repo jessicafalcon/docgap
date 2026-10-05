@@ -37,8 +37,8 @@ questions:
     text: >-
       For care whose executing provider's activity is recorded as dental surgery,
       what was the amount charged, before any reimbursement, in each region where the
-      executing professional practises, in claims processed in January 2025? Return
-      each region's name and the amount.
+      executing professional practises, the unknown region included, in claims
+      processed in January 2025? Return each region's name and the amount.
     ordered: false
     accept: [pai_by_type]
     rule_out:

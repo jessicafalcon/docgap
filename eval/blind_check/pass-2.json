@@ -1,0 +1,58 @@
+{
+  "first": {
+    "P01": {
+      "notes": "Statutory share = FLT_REM_MNT (doc: prefiltered on PRS_REM_TYP 0 or 1, 'part legale'), summed unfiltered: 3,682,151.60. Pharmacies = executing activity PSE_ACT_SNDS 50. Considered PRS_REM_MNT with PRS_REM_TYP IN (0,1), as the PRS_REM_TYP doc suggests: 3,495,017.04. They differ because rows with PRS_REM_TYP = 99 (a code no doc explains) carry FLT_ values. This applies to every question (see summary). Rejected PRS_REM_MNT unfiltered, which adds the supplementary shares.",
+      "sql": "SELECT SUM(FLT_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 50 AND BEN_RES_REG = 11 AND FLX_ANN_MOI = 202502"
+    },
+    "P02": {
+      "notes": "Amount charged before any reimbursement = expenditure FLT_PAI_MNT (amount paid by the patient, the professional's fees). Region where the executing professional practises = EXE_INS_REG (not ETE_REG_COD, which is the establishment's region). 'Recorded as dental surgery' = PSE_ACT_SNDS 19 only. Rejected adding PSE_SPE_SNDS 36 (dentists coded as a medical specialty: 2,974 rows, all months), since the question says the activity is recorded as dental surgery. Minor ambiguity: the question neither excludes nor includes the unknown region (99 'Inconnu', 3.2M). Kept it, because 'each region' with no exclusion means every value present.",
+      "sql": "SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION r ON r.BEN_RES_REG = f.EXE_INS_REG WHERE f.PSE_ACT_SNDS = 19 AND f.FLX_ANN_MOI = 202501 GROUP BY r.BEN_RES_REG_LIB"
+    },
+    "P03": {
+      "notes": "Prescriber's region = PRE_INS_REG (not ETP_REG_COD, the prescribing establishment). Excluded 99 Inconnu (1.04M rows, by far the largest). Measure FLT_REM_MNT. Result: Ile-de-France, PACA et Corse, Auvergne-Rhone-Alpes. No real ambiguity beyond the cross-cutting measure choice.",
+      "sql": "SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_REM_MNT) AS amt FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION r ON r.BEN_RES_REG = f.PRE_INS_REG WHERE f.PRE_INS_REG <> 99 AND f.FLX_ANN_MOI = 202503 GROUP BY r.BEN_RES_REG_LIB ORDER BY amt DESC LIMIT 3"
+    },
+    "P04": {
+      "notes": "Region of the fund that settled = ORG_CLE_REG (organisme de liquidation). Care delivered = SOI_ANN/SOI_MOI = 2025/01, over all three processing months. Unknown (99) included, as asked. Joined DIM_REGION on the shared region code list. No real ambiguity.",
+      "sql": "SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_REM_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION r ON r.BEN_RES_REG = f.ORG_CLE_REG WHERE f.SOI_ANN = '2025' AND f.SOI_MOI = '01' GROUP BY r.BEN_RES_REG_LIB"
+    },
+    "P05": {
+      "notes": "Quantity of acts = FLT_ACT_QTE (the doc says to prefer quantity over the count FLT_ACT_NBR). Aged 80 and over = bracket 80 '80 ANS ET +'. Prescriber practising in IdF = PRE_INS_REG 11. Result 308,491. The PRS_ACT_QTE with PRS_REM_TYP = 0 reading gives 305,959.",
+      "sql": "SELECT SUM(FLT_ACT_QTE) FROM FCT_REIMBURSEMENTS WHERE AGE_BEN_SNDS = 80 AND PRE_INS_REG = 11 AND FLX_ANN_MOI = 202503"
+    },
+    "P06": {
+      "notes": "Fees billed above the agreed rate = depassement FLT_DEP_MNT. Rejected recomputing an LPP overrun as paid minus base, which the doc mentions only for products, not fees. Residence = BEN_RES_REG 84. Excluded age 99. Care month = SOI 2025/01, over all processing months. No real ambiguity.",
+      "sql": "SELECT a.AGE_BEN_SNDS_LIB, SUM(f.FLT_DEP_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_AGE_BRACKET a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS WHERE f.AGE_BEN_SNDS <> 99 AND f.BEN_RES_REG = 84 AND f.SOI_ANN = '2025' AND f.SOI_MOI = '01' GROUP BY a.AGE_BEN_SNDS_LIB"
+    },
+    "P07": {
+      "notes": "Prescriber activity = PSP_ACT_SNDS, labelled through DIM_PROVIDER_ACTIVITY (same code list). 'Not recorded' = 0 'NON RENSEIGNE'. Whether 99 'VALEUR INCONNUE' also counts as not recorded is unclear, but it ranks 5th, so the top 3 is the same either way: CHIRURGIE DENTAIRE, SAGE-FEMME, INFIRMIER. Measure FLT_PAI_MNT. Returns names only, as asked.",
+      "sql": "SELECT p.PSE_ACT_SNDS_LIB FROM FCT_REIMBURSEMENTS f JOIN DIM_PROVIDER_ACTIVITY p ON p.PSE_ACT_SNDS = f.PSP_ACT_SNDS WHERE f.PSP_ACT_SNDS <> 0 AND f.FLX_ANN_MOI = 202502 GROUP BY p.PSE_ACT_SNDS_LIB ORDER BY SUM(f.FLT_PAI_MNT) DESC LIMIT 3"
+    },
+    "P08": {
+      "notes": "Nurses performing = executing activity PSE_ACT_SNDS 24 'INFIRMIER' (not the prescriber PSP_ACT_SNDS). Quantity FLT_ACT_QTE: 185,798. PRS_ACT_QTE with PRS_REM_TYP = 0 gives 183,877. No other ambiguity.",
+      "sql": "SELECT SUM(FLT_ACT_QTE) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 24 AND BEN_RES_REG = 53 AND FLX_ANN_MOI = 202502"
+    },
+    "P09": {
+      "notes": "Executing professional's region = EXE_INS_REG 44. Feb minus Jan of FLT_PAI_MNT = 773,856.48. Rejected ETE_REG_COD (the establishment's region). No real ambiguity.",
+      "sql": "SELECT SUM(CASE WHEN FLX_ANN_MOI = 202502 THEN FLT_PAI_MNT ELSE 0 END) - SUM(CASE WHEN FLX_ANN_MOI = 202501 THEN FLT_PAI_MNT ELSE 0 END) FROM FCT_REIMBURSEMENTS WHERE EXE_INS_REG = 44 AND FLX_ANN_MOI IN (202501, 202502)"
+    },
+    "P10": {
+      "notes": "Pharmacies = PSE_ACT_SNDS 50. FLX_ANN_MOI is already YYYYMM. AGG_MONTHLY_SPEND_BY_CATEGORY gives identical monthly FLT_REM_MNT values. The first month's change is NULL. No real ambiguity.",
+      "sql": "SELECT FLX_ANN_MOI, SUM(FLT_REM_MNT) AS amt, SUM(FLT_REM_MNT) - LAG(SUM(FLT_REM_MNT)) OVER (ORDER BY FLX_ANN_MOI) AS change FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 50 GROUP BY FLX_ANN_MOI ORDER BY FLX_ANN_MOI"
+    },
+    "P11": {
+      "notes": "Prescriber practising in Pays de la Loire = PRE_INS_REG 52. Rejected ETP_REG_COD (the prescribing establishment). Care month SOI 2025/01, over all processing months. FLT_REM_MNT: 5,397,831.31. PRS_REM_MNT with PRS_REM_TYP IN (0,1) gives 5,219,841.63.",
+      "sql": "SELECT SUM(FLT_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE SOI_ANN = '2025' AND SOI_MOI = '01' AND PRE_INS_REG = 52"
+    },
+    "P12": {
+      "notes": "Executing activity PSE_ACT_SNDS 19 only, as in P02. Rejected PSE_SPE_SNDS 36. Care month SOI 2025/01, broken down by FLX_ANN_MOI. No real ambiguity.",
+      "sql": "SELECT FLX_ANN_MOI, SUM(FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS WHERE SOI_ANN = '2025' AND SOI_MOI = '01' AND PSE_ACT_SNDS = 19 GROUP BY FLX_ANN_MOI ORDER BY FLX_ANN_MOI"
+    }
+  },
+  "p02_reworded": {
+    "P02": {
+      "notes": "Chosen readings: the measure is FLT_PAI_MNT, the pre-filtered montant de la depense (what the patient pays, the professional's fees, before any reimbursement). The region is EXE_INS_REG (region of the executing professional's practice), labelled through DIM_REGION, which uses the same region code list. All 14 codes match, 99 = Inconnu is included, and there are no NULLs. The activity is PSE_ACT_SNDS = 19 (CHIRURGIE DENTAIRE). The month is FLX_ANN_MOI = 202501. The result has 14 rows totalling 19,469,480.43, which matches AGG_MONTHLY_SPEND_BY_CATEGORY for the month and activity. Rejected: unfiltered PRS_PAI_MNT (the docs say it double counts without a type filter); PRS_REM_BSE (reimbursement base, not the amount charged); FLT_DEP_MNT (overbilling only); BEN_RES_REG, ETE_REG_COD and ORG_CLE_REG (beneficiary, establishment or paying-fund region, not the professional's); widening to codes 53/54 or specialty 36 (the question says the activity is recorded as dental surgery, and 53/54 are absent from the data). Remaining ambiguity: PRS_PAI_MNT filtered on PRS_REM_TYP = 0, which the PRS_ doc prescribes, gives lower numbers than FLT_PAI_MNT (for example Inconnu 2,836,233.57 vs 3,222,178.18; total 18,437,522.05 vs 19,469,480.43). The gap comes from rows with PRS_REM_TYP = 99, where FLT_PAI_MNT is also populated. Both readings are defensible from the docs. I chose FLT_ because its doc names it as the ready-made pre-filtered spend measure.",
+      "sql": "SELECT r.BEN_RES_REG_LIB AS region, SUM(f.FLT_PAI_MNT) AS amount_charged FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS f JOIN ANALYTICS.MARTS.DIM_REGION r ON r.BEN_RES_REG = f.EXE_INS_REG WHERE f.FLX_ANN_MOI = 202501 AND f.PSE_ACT_SNDS = 19 GROUP BY r.BEN_RES_REG_LIB"
+    }
+  }
+}
