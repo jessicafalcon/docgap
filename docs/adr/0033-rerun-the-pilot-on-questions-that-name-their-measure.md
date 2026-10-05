@@ -61,12 +61,15 @@ Pass 1 counts toward the three passes; pass 2 is rerun 1 of 2. Its setup:
   run passes on the gold or on any accepted result. The `PRS_` filters above are
   accepted; `PRS_REM_MNT` unfiltered is ruled out by "statutory share".
   `resolve` reads the gold SQL alone.
-- **Harder by one rule, level 1:** besides the measure, every question needs one
-  more column choice the docs settle between siblings their names don't
-  separate: which region (the beneficiary's, the executing professional's, the
-  prescriber's, the paying fund's), the executing or prescribing provider, the
-  processing or care month, the fees above the agreed rate. Never a code value the docs don't
-  hold, and no harder SQL. Its strength was chosen with pass 1's results seen.
+- **Harder by one rule, level 1.** Beyond the measure, the catalog's column
+  choices fall in three families the docs settle and the names don't: the month
+  (processing or care), the region (the beneficiary's, the executing
+  professional's, the prescriber's, the paying fund's) and the provider
+  (executing or prescribing). At level *n*, each question's text rules out
+  readings in at least *n* + 1 families, a test counts them. Pass 1's questions
+  ruled out one at least, so they are level 0 with the measure named; pass 2 is
+  level 1. Never a code value the docs don't hold, and no harder SQL. Its
+  strength was chosen with pass 1's results seen.
 - **A blind check before the pass:** an Opus 5.5 subagent, not a candidate, writes
   each question's SQL from the question, the marts and the full-docs text alone.
   Each mismatch with the accepted results is a question defect, fixed, or an
@@ -77,8 +80,8 @@ Pass 2's outcomes, fixed before it runs:
 | Pass 2 | Then |
 | --- | --- |
 | A model is eligible | The protocol's rule picks it, Haiku 4.5 or Sonnet 5.5; no pass 3 |
-| The larger-gap model above 90% with full docs | Pass 3 at level 2: two docs-settled choices per question |
-| The larger-gap model below 50% with full docs | Pass 3 at level 0: the measure named, nothing more |
+| The larger-gap model above 90% with full docs | Pass 3 at level 2: all three families per question |
+| The larger-gap model below 50% with full docs | Pass 3 at level 0: one family per question, the measure named |
 | Its full docs in the band, gap under 15 points | Pass 3 at level 2 |
 | A question defect found after the pass | Pass 3 with the defect fixed, same level |
 
