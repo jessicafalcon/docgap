@@ -17,9 +17,9 @@ pilot pass and counts toward none.
    for Phase 5's evidence packet: the column's name and type, its model's
    description, the compiled SQL of its model and every model upstream (from
    `warehouse/dbt/target/manifest.json`), and a profile on the offline sample
-   (null rate, distinct count, values carried by at least *k* = 11 rows, minimum
-   and maximum clipped to the 11th). A `restricted` column's profile holds no
-   value. `packets.json`.
+   (null rate, distinct count, the 10 most frequent values carried by at least
+   *k* = 11 rows and, for a numeric column, the minimum and maximum clipped to the
+   11th). A `restricted` column's profile holds no value. `packets.json`.
 2. **Drafts.** Opus 5.5, at default sampling, wrote one description per packet in
    French, at most 200 characters, under a stand-in prompt that forbids claims the
    packet doesn't support. No gate: every draft went in, so the result is an upper

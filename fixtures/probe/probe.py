@@ -17,10 +17,10 @@ the response cache and the event log go to the gitignored `data/probe/` (ADR 003
 
 from __future__ import annotations
 
+import argparse
 import dataclasses
 import json
 import re
-import sys
 from pathlib import Path
 
 import yaml
@@ -74,9 +74,8 @@ def columns() -> list[tuple[str, str, str, str]]:
     return out
 
 
-def lineage(model: str) -> list[dict[str, str]]:
-    """The compiled SQL of the model and every model upstream of it."""
-    nodes = json.loads(DBT_MANIFEST.read_text())["nodes"]
+def lineage(nodes: dict, model: str) -> list[dict[str, str]]:
+    """The compiled SQL of the model and every model upstream of it, from the manifest's nodes."""
     out, todo, seen = [], [f"model.docgap.{model}"], set()
     while todo:
         uid = todo.pop()
@@ -101,7 +100,8 @@ def profile(con, model: str, column: str, data_type: str, sensitivity: str) -> d
     if sensitivity == "restricted":
         out["values"] = "withheld: restricted column"
         return out
-    # A dimension's values are counted by the fact rows that carry them.
+    # A dimension's values are counted by the fact rows that carry them. Only these two
+    # dimensions get here: the age and region ones are restricted, returned above.
     if model.startswith("dim_"):
         keys = {
             "dim_benefit_type": "PRS_NAT",
@@ -150,7 +150,7 @@ def draft() -> None:
                 "column": fqn,
                 "data_type": data_type,
                 "model_description": nodes[f"model.docgap.{model}"]["description"],
-                "lineage": lineage(model),
+                "lineage": lineage(nodes, model),
                 "profile": profile(con, model, column, data_type, sensitivity),
             }
             packets[fqn] = packet
@@ -248,7 +248,13 @@ def run(limit: int | None) -> None:
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "draft":
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    stages = parser.add_subparsers(dest="stage", required=True)
+    stages.add_parser("draft", help="build the packets and draft every column")
+    run_parser = stages.add_parser("run", help="run Haiku 4.5 on the pilot with the drafts")
+    run_parser.add_argument("--limit", type=int, help="make the first N runs only")
+    args = parser.parse_args()
+    if args.stage == "draft":
         draft()
     else:
-        run(int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[2] == "--limit" else None)
+        run(args.limit)
