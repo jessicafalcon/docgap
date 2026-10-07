@@ -169,3 +169,13 @@ def test_grade_records_a_pass_or_the_failed_check() -> None:
     assert grade("q01", 3, GradeReason.TIMEOUT, GOLD, ordered=True) == Grade(
         qid="q01", repetition=3, passed=False, reason=GradeReason.TIMEOUT
     )
+
+
+def test_a_run_matching_an_accepted_result_passes_and_one_matching_none_keeps_the_golds_reason() -> (
+    None
+):
+    gold, other = Result(1, ((1,), (2,))), Result(1, ((3,),))
+    assert grade("Q1", 1, other, gold, ordered=False, accepted=[other]).passed
+    # Against the accepted result alone it would be a value mismatch.
+    missed = grade("Q1", 1, Result(1, ((4,),)), gold, ordered=False, accepted=[other])
+    assert missed.reason is GradeReason.ROW_COUNT_MISMATCH

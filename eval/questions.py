@@ -234,8 +234,9 @@ def read_as(sql: str, swap: Swap) -> str | None:
     replaced: list[exp.Column] = []
     filtered: dict[int, tuple[exp.Select, str]] = {}
     for scope in traverse_scope(tree):
+        # Unquoted identifiers are case-insensitive in Snowflake: `f` and `F` are one alias.
         facts = {
-            alias
+            alias.upper()
             for alias, source in scope.sources.items()
             if isinstance(source, exp.Table) and source.name.upper() == FACT
         }
@@ -243,7 +244,7 @@ def read_as(sql: str, swap: Swap) -> str | None:
             if column.name.upper() not in swap.replace:
                 continue
             if column.table:
-                if column.table not in facts:
+                if column.table.upper() not in facts:
                     continue
             elif not facts:
                 continue

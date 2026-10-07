@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from importlib import metadata
 from pathlib import Path
-from typing import Self
+from typing import NamedTuple, Self
 
 import anthropic
 import pyarrow as pa
@@ -66,6 +66,7 @@ __all__ = [
     "PilotInputs",
     "PilotManifest",
     "PlannedRun",
+    "Regraded",
     "RunGrade",
     "configurations",
     "grade_run",
@@ -94,6 +95,9 @@ CODE = (
     *sorted((ROOT / "src" / "docgap" / "llm").glob("*.py")),
     ROOT / "src" / "docgap" / "grade.py",
     ROOT / "src" / "docgap" / "manifest.py",
+    # Which accepted results reach the grader, and how stored results are read back.
+    ROOT / "eval" / "questions.py",
+    ROOT / "eval" / "pilot.py",
 )
 # The installed packages a run goes through, by version: not all of `uv.lock`, so a
 # dependency no run uses, added mid-pass, can't strand a pass that counts (ADR 0031).
@@ -497,46 +501,61 @@ def run_pass(
     return manifest
 
 
+class Regraded(NamedTuple):
+    """A configuration's runs graded again: passed, graded, and those asked another text."""
+
+    passed: int
+    graded: int
+    other_text: int
+
+
 def regrade(
     pass_dir: Path,
     questions: Sequence[GoldQuestion],
     gold: Mapping[str, Result],
     accepted: Mapping[str, Sequence[Result]],
-) -> dict[str, tuple[int, int]]:
+) -> dict[str, Regraded]:
     """Grade a written pass again from its stored rows, against the current gold and
-    accepted results: passed and graded runs per configuration.
+    accepted results, per configuration.
 
-    A run with no result keeps its recorded grade. A run with a harness error, or one
-    asked a question whose text has changed since, isn't graded: a changed text asks
-    another question, which the runs never saw.
+    A run with no result keeps its recorded grade, and one with a harness error counts
+    as failed (ADR 0034). A run asked a question whose text has changed since isn't
+    graded, since the runs never saw that question, and is counted apart.
+
+    Raises:
+        FileNotFoundError: no pass was written at `pass_dir`.
     """
+    if not pass_dir.is_dir():
+        raise FileNotFoundError(f"{pass_dir}: no such pass")
     by_id = {question.id: question for question in questions}
-    counts: dict[str, tuple[int, int]] = {}
+    counts: dict[str, Regraded] = {}
     for configuration in sorted(path for path in pass_dir.iterdir() if path.is_dir()):
-        passed = graded = 0
+        passed = graded = other_text = 0
         for run in sorted(configuration.glob(f"*/{TRANSCRIPT}")):
             transcript, recorded = _read(run.parent)
             question = by_id.get(transcript.qid)
             first = transcript.messages[0] if transcript.messages else None
             asked = first.get("content") if isinstance(first, dict) else None
-            if recorded.grade is None or question is None or asked != question.text:
+            if question is None or asked != question.text:
+                other_text += 1
                 continue
             graded += 1
+            if recorded.grade is None:
+                continue
             if not (run.parent / ROWS).exists():
                 passed += recorded.grade.passed
                 continue
-            outcome = read_gold(run.parent / ROWS)
             regraded = grade(
                 transcript.qid,
                 transcript.repetition,
-                outcome,
+                read_gold(run.parent / ROWS),
                 gold[question.id],
                 ordered=question.ordered,
                 accepted=accepted[question.id],
             )
             passed += regraded.passed
-        if graded:
-            counts[configuration.name] = (passed, graded)
+        if graded or other_text:
+            counts[configuration.name] = Regraded(passed, graded, other_text)
     return counts
 
 
@@ -586,8 +605,13 @@ def main(argv: list[str] | None = None) -> None:
     gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
     accepted = {q.id: read_accepted(q, PILOT_GOLD) for q in questions}
     if args.regrade:
-        for name, (passed, graded) in regrade(out_dir, questions, gold, accepted).items():
-            print(f"{name}: {passed}/{graded} passed, {100 * passed / graded:.1f}%")
+        try:
+            regraded = regrade(out_dir, questions, gold, accepted)
+        except FileNotFoundError as error:
+            sys.exit(str(error))
+        for name, (passed, graded, other_text) in regraded.items():
+            share = f", {100 * passed / graded:.1f}%" if graded else ""
+            print(f"{name}: {passed}/{graded} passed{share}, {other_text} asked another text")
         return
     try:
         lock = lock_pilot(WORK_DIR)

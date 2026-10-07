@@ -388,6 +388,11 @@ def test_a_swap_reads_the_facts_columns_under_their_qualifier() -> None:
     )
 
 
+def test_a_qualifier_matches_its_alias_in_any_case() -> None:
+    upper = _JOINED.replace("f.FLT_REM_MNT", "F.FLT_REM_MNT")
+    assert read_as(upper, SWAPS["rem_total"]) == upper.replace("F.FLT_REM_MNT", "F.PRS_REM_MNT")
+
+
 def test_an_unqualified_column_beside_two_tables_fails() -> None:
     with pytest.raises(ValueError, match="qualify FLT_REM_MNT"):
         read_as(_JOINED.replace("f.FLT_REM_MNT", "FLT_REM_MNT"), SWAPS["rem_total"])

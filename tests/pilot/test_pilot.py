@@ -40,7 +40,16 @@ from eval.pilot import (
     regrade,
     run_pass,
 )
-from eval.questions import PILOT_QUESTIONS, Category, GoldQuestion, load_questions, read_gold
+from eval.questions import (
+    PILOT_GOLD,
+    PILOT_QUESTIONS,
+    Category,
+    GoldQuestion,
+    gold_files,
+    load_questions,
+    read_accepted,
+    read_gold,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = ["model-a", "model-b"]
@@ -228,10 +237,36 @@ def test_a_regrade_grades_the_stored_rows_against_the_current_results(pilot: Pil
     # The runs never saw the reworded question, so they aren't graded on it.
     on_reworded = regrade(pilot.out, [reworded, REGIONS], GOLD, one_region)
 
-    assert set(as_run.values()) == {(3, 6)}
-    assert set(accepted.values()) == {(6, 6)}
-    assert set(on_reworded.values()) == {(3, 3)}
+    assert set(as_run.values()) == {(3, 6, 0)}
+    assert set(accepted.values()) == {(6, 6, 0)}
+    assert set(on_reworded.values()) == {(3, 3, 3)}
     assert len(as_run) == 4
+
+
+def test_a_regrade_of_no_pass_fails(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="no such pass"):
+        regrade(tmp_path / "pass-9", [COUNT], GOLD, ACCEPTED)
+
+
+def test_pass_2_regrades_to_its_recorded_accuracies_and_to_the_gold_alone() -> None:
+    # Pins ADR 0034's numbers from the committed runs: as graded, with the accepted
+    # readings, and on the gold alone.
+    questions = load_questions(PILOT_QUESTIONS)
+    gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
+    accepted = {q.id: read_accepted(q, PILOT_GOLD) for q in questions}
+    pass_2 = ROOT / "fixtures" / "pilot" / "pass-2"
+    manifest = PilotManifest.model_validate_json((pass_2 / "manifest.json").read_bytes())
+
+    regraded = regrade(pass_2, questions, gold, accepted)
+    on_gold = regrade(pass_2, questions, gold, {q.id: [] for q in questions})
+
+    assert {name: (c.passed, c.runs, 0) for name, c in manifest.configurations.items()} == regraded
+    assert {name: counts.passed for name, counts in on_gold.items()} == {
+        "claude-haiku-4-5-20251001.full_docs": 26,
+        "claude-haiku-4-5-20251001.no_docs": 0,
+        "claude-sonnet-5-5.full_docs": 35,
+        "claude-sonnet-5-5.no_docs": 2,
+    }
 
 
 def test_a_smoke_run_makes_the_first_runs_in_every_configuration(pilot: Pilot) -> None:
@@ -486,10 +521,14 @@ def test_the_input_hashes_ignore_the_budget_but_not_the_timeout(
         "code.src/docgap/grade.py",
         "code.src/docgap/manifest.py",
         "code.eval/agent/loop.py",
+        "code.eval/questions.py",
+        "code.eval/pilot.py",
     } <= set(base)
     assert base == hashes(config.llm.model_copy(update={"max_calls": 1, "max_spend_usd": 1.0}))
     assert base != hashes(config.llm.model_copy(update={"timeout_seconds": 1.0}))
-    assert {f"gold.{q.id}" for q in questions} <= set(base)
+    # Every stored result a grade reads: each gold and each accepted reading's.
+    assert {f"gold.{stem}" for q in questions for stem in gold_files(q, PILOT_GOLD)} <= set(base)
+    assert any(q.accept for q in questions)
     assert base["manifest.no_docs"] != base["manifest.full_docs"]
 
 
