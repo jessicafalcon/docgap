@@ -42,6 +42,11 @@ The result is reported whatever it turns out to be.
    result stored beside the gold, or ruled out by a phrase in the question's text.
    An undeclared swap that changes the result fails the gold check. The columns
    a question needs come from its gold SQL alone (ADR 0033).
+6. **Half the 40 have no measure trap.** 20 questions name a measure whose
+   unfiltered sum the docs support (the statutory and supplementary shares
+   together, or the reimbursement base with every share), and 20 a `FLT_`
+   measure, at most 6 on any one. Drafts don't carry the `FLT_` filter, so a
+   measure trap the baseline leaves closed stays closed in every arm (ADR 0036).
 
 ## The split
 
@@ -267,6 +272,8 @@ promise a detectable headline.
   random-N matches or beats top-N.
 - Delivered drafts per band and per arm.
 - Accuracy per arm on both splits, the ceiling included when it ran.
+- Accuracy per arm, and the mean of `d` over holdout questions, for each half
+  of Questions item 6: descriptive only; the verdict rests on the headline.
 - A per-question flips table (fail → pass, pass → fail) per arm against the
   session's baseline.
 - The needed columns shared by discovery and holdout, and the overlap of top-N

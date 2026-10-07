@@ -215,7 +215,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** none.
+- **Open PRs:** #27, `docs/question-design-probe` (Phase 3 PR 4a), in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -261,11 +261,13 @@ Update after every PR and merge, in the same change. A new session resumes from 
     - **3c:** `feat/offline-pilot`, merged (#26). Both passes, the readings
       check and accepted results (ADR 0033), the model (Haiku 4.5, ADR 0034) and
       `SELECT *` (counted, ADR 0035) records.
-- **Next step:** `devils-advocate` on the 40 questions' design
-  (the open risk below), then the 40 with their gold SQL. The pilot
-  is done: pass 2 chose Haiku 4.5, 0.0% → 83.3% (Sonnet 5.5 5.6% → 100%), $6.95;
-  no pass 3 (ADR 0033's first outcome). Open risk for the 40 questions, weighed
-  with `devils-advocate` before they are written: with no docs, nearly every run
-  failed on the unfiltered `PRS_` measure, so the baseline's seeded half may set
-  the baseline by whether it documents the measure columns (ADR 0034).
-  `feat/loader-snowflake` still lands before the go/no-go.
+  - **PR 4**, after `devils-advocate` on the 40's design and a drafter probe:
+    - **4a:** `docs/question-design-probe`, in review (#27). The 40's design (half
+      with no measure trap, since drafts don't carry the `FLT_` filter; ADR 0036)
+      and the probe's packets, drafts and runs under `fixtures/probe/`.
+    - **4b:** `feat/eval-questions`. The 40 with gold SQL, as ADR 0036 sets them.
+- **Next step:** after #27 merges, PR 4b: the 40 questions with gold SQL, as
+  ADR 0036 and the brief's "Write 40 questions" step set them, then the blind
+  check; nobody computes the split or the baseline docs draw before they merge.
+  Then the baseline docs lock in its own PR (ADR 0021). `feat/loader-snowflake`
+  still lands before the go/no-go.

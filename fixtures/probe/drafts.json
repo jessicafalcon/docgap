@@ -1,0 +1,547 @@
+{
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLX_ANN_MOI": {
+  "description": "Année-mois du flux mensuel Open DAMIR, entier AAAAMM. Jamais nul ; 3 valeurs (202501 à 202503), environ 0,7 M lignes chacune. Ne pas confondre avec SOI_ANN/SOI_MOI.",
+  "unknowns": [
+   "sens exact de « flux » (mois de traitement, de remboursement ou de publication du fichier)",
+   "décalage habituel entre ce mois et le mois de soins (SOI_ANN/SOI_MOI)"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ORG_CLE_REG": {
+  "description": "Code région (type INSEE, régions 2016) de l'organisme d'Assurance maladie qui gère la ligne. 14 valeurs, jamais nul ; 11 (Île-de-France) domine. Sens de 99 et 5 inconnu.",
+  "unknowns": [
+   "Le rôle exact de l'organisme (liquidation ou rattachement) n'est pas documenté dans les modèles.",
+   "Sens de la valeur 99 (non renseigné, hors région ou régime spécial ?).",
+   "Sens de la valeur minimale 5, qui n'est pas un code région INSEE habituel.",
+   "Référentiel de régions (avant ou après 2016) non confirmé par un dictionnaire."
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.AGE_BEN_SNDS": {
+  "description": "Code entier, a priori la tranche d'âge du bénéficiaire (codage SNDS, d'après le nom). 9 valeurs distinctes, jamais NULL. Repris tel quel de la source DAMIR, casté en entier.",
+  "unknowns": [
+   "libellés et bornes de chaque code de tranche d'âge (valeurs masquées, colonne restreinte)",
+   "date de référence de l'âge (date des soins ou date de remboursement)",
+   "présence d'un code « inconnu » ou « non renseigné » parmi les 9 valeurs"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.BEN_RES_REG": {
+  "description": "Code entier, probablement la région de résidence du bénéficiaire (d'après le nom). Aucun NULL, 14 valeurs distinctes. Fait partie de la clé de grain des lignes DAMIR.",
+  "unknowns": [
+   "signification confirmée du code (aucune entrée de dictionnaire fournie)",
+   "correspondance code → libellé de région",
+   "valeurs effectives (masquées : colonne restreinte)",
+   "présence éventuelle de codes « inconnu » ou « hors France »"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.BEN_CMU_TOP": {
+  "description": "Code entier, sans nul, sur le bénéficiaire, lié à la CMU d'après le nom (BEN_CMU_TOP). Quatre valeurs : 0 (49 %), 9 (40 %), 1 (11 %), 2 (rare).",
+  "unknowns": [
+   "Signification de chaque code (0, 1, 2, 9) : aucun dictionnaire fourni",
+   "Si 9 désigne une valeur inconnue ou non renseignée",
+   "Lien exact avec la CMU (CMU de base ou CMU-C), déduit du seul nom de colonne"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.BEN_QLT_COD": {
+  "description": "Code entier de la qualité du bénéficiaire (lecture du nom de colonne), non nul, 4 valeurs : 1 (~90 % des lignes), 3 (~8 %), 2 (~1,4 %), 4 (<0,1 %). Fait partie de la clé de grain.",
+  "unknowns": [
+   "Libellé de chaque code (1 à 4) : le dictionnaire DAMIR n'est pas fourni",
+   "Sens exact de « qualité » (lien du bénéficiaire avec l'assuré ?), déduit du seul nom de colonne"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.BEN_SEX_COD": {
+  "description": "Code du sexe du bénéficiaire, d'après le nom de la colonne DAMIR. Entier, jamais nul, 3 valeurs distinctes. Fait partie de la clé de grain des lignes de prestations.",
+  "unknowns": [
+   "Valeurs et libellés des 3 codes (profil masqué, colonne restreinte)",
+   "Signification de chaque code, dont un éventuel code « inconnu »",
+   "Le sens « sexe du bénéficiaire » repose sur le nom seul, sans dictionnaire fourni"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.DDP_SPE_COD": {
+  "description": "Code entier DAMIR DDP_SPE_COD (nom évoquant une discipline/spécialité), 29 valeurs, jamais nul. 121 (~51 %) et 0 (~48 %) dominent, puis 16, 60, 11, 21… Champ du grain.",
+  "unknowns": [
+   "libellé officiel et nomenclature des codes",
+   "signification de la valeur 0 (non renseigné ou sans objet ?)",
+   "signification de la valeur 121"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ETE_CAT_SNDS": {
+  "description": "Code entier de catégorie (nomenclature SNDS) de l'établissement exécutant, d'après le nom. 30 valeurs, jamais nul ; 9999 couvre ~83 % des lignes.",
+  "unknowns": [
+   "libellé de chaque code",
+   "sens de 9999 (non renseigné ou sans objet ?)",
+   "définition officielle de la colonne dans le dictionnaire DAMIR"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ETE_REG_COD": {
+  "description": "Code région de l'établissement exécutant, d'après le nom (valeurs au format des codes région INSEE : 11, 76, 93…). 99 sur ~83 % des lignes ; 14 valeurs distinctes, jamais nul.",
+  "unknowns": [
+   "Signification du code 99 (inconnu, sans objet ou hors établissement ?)",
+   "Sens de la valeur minimale 5, qui ne correspond à aucun code région INSEE courant",
+   "Référentiel exact des régions utilisé (découpage 2016 ou antérieur)"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ETE_TYP_SNDS": {
+  "description": "Code entier de type d'établissement (exécutant, d'après le nom), nomenclature SNDS. 5 valeurs : 99 (~83 % des lignes), 1, 4, 6, 2. Jamais nul. Une ligne par ligne source DAMIR.",
+  "unknowns": [
+   "libellés des codes 1, 2, 4, 6 et 99",
+   "si 99 signifie non renseigné ou sans objet",
+   "confirmation que ETE désigne l'établissement exécutant",
+   "dictionnaire de référence des codes"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ETP_REG_COD": {
+  "description": "Code région de l'établissement prescripteur (ETP, probablement), aux valeurs de type codes région INSEE (11, 84, 44…). 99 couvre 57 % des lignes. 14 valeurs, aucune nulle.",
+  "unknowns": [
+   "Le sens exact du code 99 (inconnu, sans objet ou hors établissement) n'est pas documenté.",
+   "Le sens du code minimal 5 n'est pas connu.",
+   "La lecture d'ETP comme « établissement prescripteur » vient du nommage DAMIR, pas du SQL.",
+   "Le référentiel des régions (découpage 2016 ou antérieur) n'est pas confirmé."
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ETP_CAT_SNDS": {
+  "description": "Code catégorie d'établissement (ETP, sans doute le prescripteur) de la ligne DAMIR. 44 codes à 4 chiffres, jamais nul. 9999 couvre ~59 % des lignes, puis 1102, 1101, 2206.",
+  "unknowns": [
+   "Signification de ETP (établissement prescripteur ?), non confirmée par les preuves",
+   "Libellés des codes de catégorie (nomenclature non fournie)",
+   "Sens de 9999 : non renseigné, sans objet ou autre"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.MDT_TYP_COD": {
+  "description": "Code entier issu des fichiers DAMIR (typ. type de mode de traitement, d'après le nom). 4 valeurs : 9 (~97 % des lignes), 2, 1, 3. Jamais nul. Fait une ligne par ligne source.",
+  "unknowns": [
+   "Signification exacte de la colonne : le dictionnaire DAMIR n'est pas fourni",
+   "Libellé de chaque code (1, 2, 3, 9)",
+   "Si 9 désigne une valeur « sans objet » ou « inconnue »"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.MFT_COD": {
+  "description": "Code DAMIR MFT_COD, entier catégoriel, jamais nul, 18 valeurs distinctes. La valeur 99 couvre environ 83 % des lignes, puis viennent 3, 7 et 36. Libellés non fournis.",
+  "unknowns": [
+   "Signification métier de MFT_COD (aucune entrée de dictionnaire fournie)",
+   "Libellés des codes, notamment le sens de 99 (sans objet ou inconnu ?)",
+   "Liste complète des 18 valeurs possibles"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_FJH_TYP": {
+  "description": "Code entier, probablement le type de prise en charge du forfait journalier hospitalier (FJH). Valeurs 0, 8, 2, 3, 1 ; 0 sur ~89 % des lignes ; jamais nul. Fait partie de la clé de grain.",
+  "unknowns": [
+   "Le libellé de chaque code (0, 1, 2, 3, 8) n'est pas fourni.",
+   "La lecture « forfait journalier hospitalier » ne vient que du nom de la colonne, sans dictionnaire.",
+   "Rien n'indique si 0 veut dire « sans objet » ou « non renseigné »."
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_ACT_COG": {
+  "description": "Mesure DAMIR, sans doute le coefficient global des actes de la ligne. Valeurs surtout entières faibles (1 à 8, 1,50, 0), aussi négatives (min -2515) et très élevées (936710).",
+  "unknowns": [
+   "Signification exacte non définie dans les modèles (dictionnaire DAMIR absent)",
+   "Sens des valeurs négatives (régularisations ?) non documenté",
+   "Lien avec FLT_ACT_COG non précisé"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_ACT_NBR": {
+  "description": "Mesure entière DAMIR, vraisemblablement le nombre d'actes de la ligne. Surtout 1 à 10 ; valeurs négatives possibles (min ≈ -922, max ≈ 190970 hors extrêmes) ; 10,8 % de NULL.",
+  "unknowns": [
+   "Définition exacte de PRS_ACT_NBR, en particulier sa différence avec PRS_ACT_QTE et FLT_ACT_NBR",
+   "Signification des valeurs négatives (régularisations ?)",
+   "Raison des NULL"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_ACT_QTE": {
+  "description": "Mesure DAMIR, probablement la quantité d'actes de la prestation sur la ligne source. Entier jamais nul, souvent 1 à 10, avec des valeurs négatives (min. -1229) et de très grandes (256480).",
+  "unknowns": [
+   "Définition officielle du dictionnaire DAMIR, non fournie : sens déduit du nom",
+   "Signification des valeurs négatives (annulations, régularisations ?)",
+   "Différence avec PRS_ACT_NBR et FLT_ACT_QTE",
+   "Unité de comptage selon la nature de prestation"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_DEP_MNT": {
+  "description": "Montant décimal par ligne source DAMIR, probablement le dépassement (d'honoraires ?) d'après le nom. Nul dans ~95 % des lignes. Quelques valeurs négatives. Jamais NULL.",
+  "unknowns": [
+   "Signification exacte de PRS_DEP_MNT (aucune entrée du dictionnaire fournie)",
+   "Unité monétaire (euros supposés)",
+   "Raison des valeurs négatives (régularisations ?)",
+   "Lien avec FLT_DEP_MNT"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PAI_MNT": {
+  "description": "Montant numérique par ligne source DAMIR, sans valeur nulle. Le nom suggère un montant payé de la prestation. Valeurs de -17653,12 à 1906961,39 ; 0,00 est la valeur la plus fréquente.",
+  "unknowns": [
+   "sens exact du montant (payé, dépense totale ?) : aucun dictionnaire dans les éléments fournis",
+   "unité monétaire, probablement l'euro mais non confirmée",
+   "signification des valeurs négatives (régularisations ?)",
+   "lien avec PRS_DEP_MNT, PRS_REM_MNT et FLT_PAI_MNT"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_REM_BSE": {
+  "description": "Base de remboursement de la ligne DAMIR (PRS_REM_BSE), montant décimal. Jamais nulle ; environ 25 % des lignes à 0 ; des valeurs négatives existent (min clippé -20784,00).",
+  "unknowns": [
+   "Unité monétaire (euros supposés, non confirmée)",
+   "Signification des valeurs négatives (régularisations ?)",
+   "Relation exacte avec PRS_REM_MNT, PRS_PAI_MNT et PRS_REM_TAU"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_REM_MNT": {
+  "description": "Montant remboursé (d'après le nom) sur une ligne source DAMIR. Jamais nul. Valeurs négatives fréquentes (-2.00 la plus courante). Bornes écrêtées : -151552.80 à 2153688.68.",
+  "unknowns": [
+   "Unité monétaire (euros supposés, non confirmés)",
+   "Signification des montants négatifs (régularisations ?)",
+   "Lien exact avec PRS_REM_BSE, PRS_REM_TAU et FLT_REM_MNT",
+   "Définition officielle du dictionnaire DAMIR"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLT_ACT_COG": {
+  "description": "Mesure DAMIR décimale, pendant FLT_ du coefficient d'acte PRS_ACT_COG. Valeurs surtout entières (1, 2, 0, 3…), parfois négatives (min -2500), max 936710. Jamais nulle.",
+  "unknowns": [
+   "Signification exacte du préfixe FLT_ par rapport à PRS_",
+   "Sens des valeurs négatives (régularisations ?)",
+   "Unité et définition officielle du coefficient selon le dictionnaire DAMIR"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLT_ACT_NBR": {
+  "description": "Mesure DAMIR entière de nombre d'actes, variante FLT de PRS_ACT_NBR. Hors clé de grain, valeurs négatives possibles (min -922). Environ 10 % de NULL, valeurs les plus fréquentes 0 à 9.",
+  "unknowns": [
+   "Signification exacte du préfixe FLT par rapport à PRS (filtre ou flux)",
+   "Raison des valeurs négatives (régularisations ?)",
+   "Sens des NULL"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLT_ACT_QTE": {
+  "description": "Mesure entière de quantité d'actes, variante « FLT » de PRS_ACT_QTE. Jamais nulle, surtout 0 à 9, des valeurs négatives (jusqu'à -1229) et une valeur haute de 256480. Hors clé de grain.",
+  "unknowns": [
+   "Signification exacte du préfixe FLT par rapport à PRS : aucune définition du dictionnaire DAMIR n'est fournie",
+   "Unité de la quantité (actes, jours, unités…)",
+   "Signification des valeurs négatives (régularisations ou annulations ?)",
+   "Les extrêmes du profil sont écrêtés à la 11e valeur, donc le vrai minimum et le vrai maximum restent inconnus"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLT_PAI_MNT": {
+  "description": "Montant décimal (2 déc.) DAMIR par ligne source. Sans NULL, 27 % de lignes à 0,00, valeurs négatives possibles (min −15 906,53, max 1 906 961,39).",
+  "unknowns": [
+   "sens exact de FLT_PAI_MNT (dépense payée ?) et différence avec PRS_PAI_MNT",
+   "signification du préfixe FLT",
+   "devise (euros présumés)",
+   "raison des montants négatifs (régularisations ?)"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLT_DEP_MNT": {
+  "description": "Montant (2 décimales) d'un dépassement probablement, variante « FLT » de PRS_DEP_MNT, par ligne source Open DAMIR. Nul dans ~96 % des lignes. Valeurs négatives présentes, jamais NULL.",
+  "unknowns": [
+   "sens exact du préfixe FLT_ par rapport à PRS_ (filtré ?)",
+   "unité monétaire (euros supposés)",
+   "signification des montants négatifs (régularisations ?)",
+   "règle de calcul du dépassement"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.FLT_REM_MNT": {
+  "description": "Montant de remboursement (variante FLT de PRS_REM_MNT) par ligne source Open DAMIR. Jamais nul. 0,00 fréquent ; valeurs négatives courantes (min -151552,80, max 2153688,68).",
+  "unknowns": [
+   "Sens exact du préfixe FLT par rapport à PRS_REM_MNT",
+   "Unité monétaire (euros probables, non confirmés)",
+   "Signification des montants négatifs (régularisations ?)",
+   "Additivité de la mesure entre les lignes"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.SOI_ANN": {
+  "description": "Année des soins, texte de 4 caractères sans espaces (AAAA), surtout 2025 et 2024, dès 2017 dans le top. '0000' sur 949 lignes, sens inconnu. Jamais nul. Mois dans SOI_MOI.",
+  "unknowns": [
+   "sens de la valeur '0000' (année inconnue ou manquante ?)",
+   "les 7 valeurs distinctes hors du top 10 (moins de 11 lignes chacune) ne sont pas listées",
+   "lien précis avec FLX_ANN_MOI (période du flux) non documenté"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.SOI_MOI": {
+  "description": "Mois des soins, vraisemblablement, en texte sur deux chiffres (« 01 » à « 12 »), jamais nul. 13 valeurs distinctes : une 13e reste non identifiée. Les plus fréquentes sont 01, 02 et 03.",
+  "unknowns": [
+   "Valeur de la 13e modalité distincte, absente du top 10 du profil",
+   "Confirmation par le dictionnaire DAMIR qu'il s'agit du mois de réalisation des soins",
+   "Codes spéciaux éventuels pour un mois inconnu"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ASU_NAT": {
+  "description": "Code entier, probablement la nature d'assurance du dictionnaire DAMIR. 10 distincts, aucun NULL ; 10 couvre ~97 % des lignes, puis 40, 30, 90, 70, 22, 80, 50.",
+  "unknowns": [
+   "Libellés des codes (10, 22, 30, 40, 50, 70, 80, 90) : non fournis",
+   "Sens exact de la colonne : déduit du nom seul, absent de l'évidence",
+   "Deux codes rares (moins de 11 lignes) non affichés dans le profil"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ATT_NAT": {
+  "description": "Code entier de la ligne DAMIR, probablement la nature d'accident du travail. Valeurs 0 à 3 ; 0 sur ~99,97 % des lignes, sans NULL. Fait partie de la clé de grain.",
+  "unknowns": [
+   "Signification exacte du code ATT_NAT (non fournie, déduite du nom DAMIR)",
+   "Libellés des valeurs 0, 1, 2 et 3",
+   "Si 0 signifie « sans objet » ou « non concerné »"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.CPL_COD": {
+  "description": "Code entier issu des fichiers Open DAMIR, probablement « code complément » d'après son nom. Valeurs 0 à 3, sans NULL. 0 couvre ~98 % des lignes. Fait partie de la clé de grain.",
+  "unknowns": [
+   "Signification exacte de CPL_COD et libellé de chaque valeur (0, 1, 2, 3), absents des éléments fournis",
+   "Si 0 signifie « sans objet » ou « non renseigné »"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.CPT_ENV_TYP": {
+  "description": "Code entier de la colonne DAMIR CPT_ENV_TYP (« type d'enveloppe » d'après le nom, non confirmé). Jamais nul, 9 valeurs de 0 à 9 sans 6 ; 1 (~50 %) et 9 (~40 %) dominent.",
+  "unknowns": [
+   "libellé officiel de CPT_ENV_TYP dans le dictionnaire DAMIR",
+   "signification de chaque code (0 à 9)",
+   "absence du code 6 : propre aux trois mois chargés ou permanente"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.DRG_AFF_NAT": {
+  "description": "Code entier issu des fichiers mensuels Open DAMIR, partie de la clé de grain. 18 valeurs, sans NULL. Dominantes : 99 (~40 %), 35 (~37 %), 11 (~12 %), 36 (~10 %).",
+  "unknowns": [
+   "Signification du code (nom suggérant une nature de droit/affection, non confirmée)",
+   "Libellés des valeurs, dont 99 (non renseigné ?)",
+   "Liste complète des 18 valeurs"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.ETE_IND_TAA": {
+  "description": "Code entier (0, 1, 2, 9), sans NULL, probablement indicateur de tarification à l'activité (T2A) de l'établissement exécutant. 9 couvre ~83 % des lignes. Fait partie de la clé de grain.",
+  "unknowns": [
+   "Signification exacte du sigle ETE_IND_TAA (lecture T2A non confirmée par les modèles fournis)",
+   "Libellé de chaque code 0, 1, 2 et 9",
+   "Si 9 signifie « sans objet » ou « inconnu »"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.EXO_MTF": {
+  "description": "Code DAMIR, vraisemblablement le motif d'exonération du ticket modérateur, d'après le nom. Jamais nul, 23 valeurs de 0 à 99. Les plus fréquentes sont 99 (≈40 %), 0 (≈20 %), 42 et 41.",
+  "unknowns": [
+   "Signification confirmée du champ (aucune entrée de dictionnaire fournie)",
+   "Libellé de chaque code, en particulier 99 et 0",
+   "Liste complète des 23 valeurs"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.MTM_NAT": {
+  "description": "Code DAMIR MTM_NAT (entier, jamais nul), 6 valeurs : 0 (56 %), 9 (40 %), puis 2, 1, 3, 4. Fait partie de la clé de grain de la ligne de prestation.",
+  "unknowns": [
+   "Signification métier de MTM_NAT : aucun dictionnaire n'est fourni dans les éléments.",
+   "Libellé de chaque code (0, 1, 2, 3, 4, 9), notamment si 9 signifie « sans objet » ou « inconnu »."
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_NAT": {
+  "description": "Code de nature de la prestation remboursée (Open DAMIR), entier jamais nul, 783 valeurs distinctes (ex. 1952, 3111, 3364). Fait partie de la clé de grain.",
+  "unknowns": [
+   "libellés associés à chaque code (nomenclature non fournie)",
+   "sens exact du code au-delà de son nom"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PPU_SEC": {
+  "description": "Code entier à deux valeurs (2 : ~91 % des lignes, 1 : ~9 %), jamais nul, issu de la colonne DAMIR PRS_PPU_SEC. Fait partie de la clé de grain des prestations.",
+  "unknowns": [
+   "Signification du code et libellés des valeurs 1 et 2 (absents des preuves fournies)",
+   "Le nom évoque un secteur public/privé, sans confirmation par un dictionnaire"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_REM_TAU": {
+  "description": "Taux de remboursement probable en % (nom ; valeurs 100, 60, 65, 70…). Champ du grain, pas une mesure. Jamais nul ; 1193 valeurs, 0 à 113 hors extrêmes ; 100 sur ~50 % des lignes.",
+  "unknowns": [
+   "Définition officielle du dictionnaire DAMIR non fournie",
+   "Sens des valeurs au-delà de 100 et des valeurs non entières",
+   "Base à laquelle le taux s'applique (PRS_REM_BSE ?) non confirmée"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_REM_TYP": {
+  "description": "Code entier du type de remboursement de la prestation (DAMIR, d'après le nom). 10 valeurs, jamais nul ; 0 (~53 %) et 99 (~40 %) dominent, puis 5, 1, 4. Champ de la clé de grain.",
+  "unknowns": [
+   "Libellé de chaque code : le dictionnaire DAMIR n'est pas fourni.",
+   "Si 0 et 99 signifient « sans objet » ou « inconnu ».",
+   "La 10e valeur distincte, portée par au plus 10 lignes."
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRS_PDS_QCP": {
+  "description": "Code entier de la prestation DAMIR, probablement le qualificatif du parcours de soins (d'après le nom). 24 valeurs de 0 à 34, jamais nul, 31 sur ~74 % des lignes. Fait partie du grain.",
+  "unknowns": [
+   "signification confirmée du champ, que le nom seul suggère",
+   "libellé de chaque code, dont 31, la valeur dominante",
+   "ce que représente le code 0 (absence d'information ou modalité réelle)"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.EXE_INS_REG": {
+  "description": "Code région (codes INSEE : 11, 84, 76, 93…) d'installation du professionnel exécutant, selon le nom DAMIR. 14 valeurs, jamais nul. 99, la plus fréquente (16 %), sens non documenté.",
+  "unknowns": [
+   "Sens exact de la valeur 99 (inconnu, étranger, non renseigné ?)",
+   "Sens de la valeur 5, hors liste des codes région actuels",
+   "Référentiel des régions utilisé (avant ou après la réforme de 2016)",
+   "Confirmation par le dictionnaire DAMIR qu'il s'agit bien de l'exécutant"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PSE_ACT_SNDS": {
+  "description": "Code entier de l'activité du professionnel de santé exécutant (regroupement SNDS, d'après le nom). 13 valeurs, jamais nul ; 50 et 0 dominent. Partie de la clé de grain.",
+  "unknowns": [
+   "libellés des codes, absents du modèle",
+   "sens de la valeur 0 (non renseigné ?)",
+   "lien avec PSE_ACT_CAT",
+   "signification de 99"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PSE_ACT_CAT": {
+  "description": "Code entier de catégorie, probablement d'activité du professionnel de santé exécutant (nom PSE_ACT_CAT). 11 valeurs (0–9, 99), 2 la plus fréquente. Jamais nul. Partie de la clé de grain.",
+  "unknowns": [
+   "libellé de chaque code (dictionnaire DAMIR non fourni)",
+   "sens exact de PSE et ACT_CAT, déduit du seul nom",
+   "sens du code 99 (inconnu ou non renseigné ?)",
+   "distinction avec PSP_ACT_CAT"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PSE_SPE_SNDS": {
+  "description": "Code entier, probablement la spécialité du professionnel de santé exécutant (regroupement SNDS). 27 valeurs de 0 à 80, aucun NULL ; 0 sur environ 76 % des lignes.",
+  "unknowns": [
+   "Signification confirmée de la colonne : seul le nom et la convention DAMIR la suggèrent",
+   "Libellés des codes, nomenclature absente des preuves",
+   "Sens du code 0 (sans objet, non renseigné ou spécialité réelle ?)"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PSE_STJ_SNDS": {
+  "description": "Code entier du professionnel de santé exécutant (PSE), probablement son statut juridique (STJ). 4 valeurs : 1 (~74 %), 2, 9, 8 ; jamais nul. Fait partie de la clé de grain.",
+  "unknowns": [
+   "Libellés des codes 1, 2, 8 et 9 (dictionnaire DAMIR non fourni)",
+   "Signification exacte de STJ, déduite du seul nom de colonne",
+   "Si 8 ou 9 désignent « sans objet » ou « non renseigné »"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PRE_INS_REG": {
+  "description": "Code région (codes INSEE des régions 2016 : 11, 93, 76, 84…), probablement celle d'installation du prescripteur. 99, sur ~49 % des lignes, semble non renseigné. 14 valeurs, aucun NULL.",
+  "unknowns": [
+   "Le sens exact de PRE_INS_REG (région d'installation du prescripteur) est déduit du nom et des valeurs, non documenté ici.",
+   "La signification du code 99 (sans prescripteur, inconnu ou étranger) n'est pas confirmée.",
+   "La signification de la valeur minimale 5 n'est pas connue."
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PSP_ACT_SNDS": {
+  "description": "Code entier de l'activité d'un professionnel de santé, probablement le prescripteur (préfixe PSP). 13 valeurs de 0 à 99, jamais nul ; 0 sur ~94 % des lignes.",
+  "unknowns": [
+   "Le sens exact du préfixe PSP (prescripteur ?) n'est pas documenté dans les éléments fournis",
+   "Libellés des codes (19, 21, 24, 50, 99…) inconnus faute de nomenclature",
+   "Signification de la valeur 0 (non renseigné ? sans objet ?) non établie"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PSP_ACT_CAT": {
+  "description": "Code de catégorie d'activité, probablement du professionnel de santé prescripteur (PSP), selon le nom DAMIR. 11 codes de 0 à 99, jamais nul. 1 et 0 dominent, 99 sur ~4 % des lignes.",
+  "unknowns": [
+   "libellés des codes, notamment 0 et 99 (inconnu, non renseigné ?)",
+   "lecture exacte de PSP et ACT_CAT, déduite du nom seul, non confirmée par la nomenclature DAMIR"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PSP_SPE_SNDS": {
+  "description": "Code entier de spécialité du professionnel de santé prescripteur (PSP_SPE_SNDS, Open DAMIR). Jamais nul, 27 valeurs de 0 à 99 ; « 1 » couvre près de la moitié des lignes.",
+  "unknowns": [
+   "Libellés des codes : la nomenclature SNDS n'est pas jointe",
+   "Sens du code 0 (non renseigné ou sans prescripteur ?)",
+   "Interprétation « spécialité du prescripteur » déduite du nom de colonne seul"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.PSP_STJ_SNDS": {
+  "description": "Code entier, probablement le statut juridique du professionnel de santé prescripteur (PSP_STJ_SNDS, Open DAMIR). Jamais nul. 4 valeurs : 1, 2, 9, 8 (par fréquence décroissante).",
+  "unknowns": [
+   "Libellés des codes 1, 2, 8 et 9 : le dictionnaire DAMIR n'est pas fourni",
+   "Le sens « statut juridique du prescripteur » est déduit du seul nom de la colonne",
+   "Si 8 ou 9 désignent « sans objet » ou « inconnu »"
+  ]
+ },
+ "ANALYTICS.MARTS.FCT_REIMBURSEMENTS.TOP_PS5_TRG": {
+  "description": "Indicateur DAMIR codé (« TOP »), entier jamais nul à 3 valeurs : 1 (~56 % des lignes), 9 (~40 %), 0 (~4 %). Fait partie de la clé de grain de la ligne de prestation.",
+  "unknowns": [
+   "Signification métier de TOP_PS5_TRG et de « PS5 »",
+   "Libellé des codes 0, 1 et 9 (9 = non renseigné ?)",
+   "Dictionnaire DAMIR de référence non fourni"
+  ]
+ },
+ "ANALYTICS.MARTS.DIM_AGE_BRACKET.AGE_BEN_SNDS": {
+  "description": "Code entier de la tranche d'âge du bénéficiaire (AGE_BEN_SNDS), une ligne par code : 9 valeurs distinctes, aucun null. Le libellé est dans AGE_BEN_SNDS_LIB. Issu d'une seed.",
+  "unknowns": [
+   "Bornes d'âge couvertes par chaque code",
+   "Correspondance exacte entre codes et libellés (valeurs masquées)",
+   "Date de référence utilisée pour calculer l'âge",
+   "Présence éventuelle d'un code « inconnu » ou « non renseigné »"
+  ]
+ },
+ "ANALYTICS.MARTS.DIM_AGE_BRACKET.AGE_BEN_SNDS_LIB": {
+  "description": "Libellé de la tranche d'âge associée au code AGE_BEN_SNDS (âge du bénéficiaire, nomenclature SNDS présumée). 9 libellés distincts, un par code, sans nulls. Issu du seed age_ben_snds.",
+  "unknowns": [
+   "bornes exactes des tranches d'âge (valeurs masquées)",
+   "âge calculé à quelle date de référence",
+   "confirmation que BEN désigne le bénéficiaire du SNDS"
+  ]
+ },
+ "ANALYTICS.MARTS.DIM_BENEFIT_TYPE.PRS_NAT": {
+  "description": "Code de nature de prestation (PRS_NAT), clé de la dimension. Il couvre les codes du dictionnaire 2024 et ceux du fait absents de ce dictionnaire, qui ont alors un libellé NULL.",
+  "unknowns": [
+   "Nombre de codes sans libellé (absents du dictionnaire 2024)",
+   "Signification métier de chaque code et éventuelle structure hiérarchique des valeurs",
+   "Unicité garantie par un test ou seulement constatée dans le profil"
+  ]
+ },
+ "ANALYTICS.MARTS.DIM_BENEFIT_TYPE.PRS_NAT_LIB": {
+  "description": "Libellé de la nature de prestation (PRS_NAT), tiré du dictionnaire 2024 (seed prs_nat). NULL pour les codes présents dans fct_reimbursements mais absents du dictionnaire.",
+  "unknowns": [
+   "Les effectifs des valeurs fréquentes (jusqu'à 105 858) dépassent les 1 573 lignes de la table : leur base de comptage est inconnue.",
+   "Avec 1 460 libellés distincts pour 1 573 lignes, certains libellés semblent partagés par plusieurs codes, sans que la raison soit connue.",
+   "Le sens des abréviations des libellés (ex. « HONO DISP 7 ») est inconnu.",
+   "L'origine et la version exactes du dictionnaire source ne sont pas documentées au-delà de « 2024 »."
+  ]
+ },
+ "ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY.PSE_ACT_SNDS": {
+  "description": "Code d'activité du professionnel de santé exécutant (nomenclature SNDS), clé de la dimension avec son libellé. 50 = pharmacies, 19 = chirurgiens-dentistes. Catégorie de agg_monthly_spend_by_category.",
+  "unknowns": [
+   "signification du code 0 (non renseigné ou inconnu ?)",
+   "libellés des autres codes (24, 26, 30, 60, 55, etc.), à lire dans PSE_ACT_SNDS_LIB",
+   "les effectifs du profil (ex. 691027 pour 50) ne concordent pas avec les 15 lignes de la table, leur origine est inconnue"
+  ]
+ },
+ "ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY.PSE_ACT_SNDS_LIB": {
+  "description": "Libellé de l'activité du professionnel exécutant, associé au code PSE_ACT_SNDS (ex. PHARMACIE, INFIRMIER, CHIRURGIE DENTAIRE, NON RENSEIGNE). 15 valeurs distinctes, aucun null.",
+  "unknowns": [
+   "Les effectifs des valeurs les plus fréquentes (ex. 691027 pour PHARMACIE) dépassent les 15 lignes de la table : leur source et leur signification sont inconnues.",
+   "La correspondance code→libellé n'est confirmée que pour 50 (pharmacies) et 19 (chirurgiens-dentistes).",
+   "Le code associé à NON RENSEIGNE n'est pas connu."
+  ]
+ },
+ "ANALYTICS.MARTS.DIM_REGION.BEN_RES_REG": {
+  "description": "Code entier, clé de la dimension (une ligne par code, 14 valeurs distinctes, aucun nul), libellé dans BEN_RES_REG_LIB. Le nom évoque la région de résidence du bénéficiaire.",
+  "unknowns": [
+   "Signification exacte du code (région de résidence du bénéficiaire supposée d'après le nom)",
+   "Nomenclature source des codes (régions administratives, codes spéciaux inconnus, etc.)",
+   "Valeurs réelles non visibles (colonne restreinte)"
+  ]
+ },
+ "ANALYTICS.MARTS.DIM_REGION.BEN_RES_REG_LIB": {
+  "description": "Libellé du code BEN_RES_REG (vraisemblablement la région de résidence du bénéficiaire), issu d'une seed. 14 valeurs distinctes, une par code, sans aucune valeur nulle.",
+  "unknowns": [
+   "la signification exacte de BEN_RES_REG (région de résidence du bénéficiaire est une interprétation du nom)",
+   "les valeurs des libellés, masquées car la colonne est restreinte",
+   "le référentiel régional utilisé (anciennes ou nouvelles régions, codes INSEE ou autres)"
+  ]
+ },
+ "ANALYTICS.MARTS.AGG_MONTHLY_SPEND_BY_CATEGORY.FLX_ANN_MOI": {
+  "description": "Mois de traitement au format AAAAMM (entier), clé du grain avec PSE_ACT_SNDS. Trois valeurs observées : 202501, 202502, 202503 (13 lignes chacune). Jamais nul.",
+  "unknowns": [
+   "Définition exacte du mois de traitement (flux) par rapport au mois de soins SOI_ANN/SOI_MOI.",
+   "Si d'autres mois s'ajouteront au-delà des trois mois figés de l'échantillon."
+  ]
+ },
+ "ANALYTICS.MARTS.AGG_MONTHLY_SPEND_BY_CATEGORY.PSE_ACT_SNDS": {
+  "description": "Code entier de l'activité du professionnel de santé exécutant. Catégorie de l'agrégat, clé avec FLX_ANN_MOI. 13 valeurs distinctes, aucun NULL, plage tronquée 24–50.",
+  "unknowns": [
+   "libellés des codes d'activité",
+   "extrêmes réels (min/max tronqués au 11e)",
+   "liste complète des codes possibles"
+  ]
+ },
+ "ANALYTICS.MARTS.AGG_MONTHLY_SPEND_BY_CATEGORY.FLT_PAI_MNT": {
+  "description": "Somme de FLT_PAI_MNT (montant DAMIR déjà filtré sur le type de remboursement) par mois de traitement et activité du PS exécutant. Évite le double compte de PRS_PAI_MNT.",
+  "unknowns": [
+   "signification métier exacte de FLT_PAI_MNT (dépense, paiement…) selon le dictionnaire DAMIR",
+   "unité monétaire (euros supposés, non confirmés)",
+   "règle précise du filtre sur le type de remboursement"
+  ]
+ },
+ "ANALYTICS.MARTS.AGG_MONTHLY_SPEND_BY_CATEGORY.FLT_REM_MNT": {
+  "description": "Somme de FLT_REM_MNT (montant remboursé, déjà filtré sur le type de remboursement) par mois de traitement et activité du PS exécutant. Aucun NULL ; ~1,1 M à 11,3 M.",
+  "unknowns": [
+   "unité monétaire (euros supposés, non confirmés)",
+   "définition exacte du filtre sur le type de remboursement",
+   "sens précis de « REM » (remboursé) non documenté dans le modèle"
+  ]
+ }
+}
