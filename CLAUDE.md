@@ -256,17 +256,13 @@ Update after every PR and merge, in the same change. A new session resumes from 
       the comment) and the full-docs manifest built by `dbt parse`.
     - **3b:** `feat/pilot-runner`, merged (#25). The runner, offline with a fake
       transport, and the decision record on which pilot passes count (ADR 0031).
-    - **3c:** `feat/offline-pilot`, in progress. The live pass, after my go-ahead,
-      smoke run first; the fixtures, and the decision records on the model and on
-      `SELECT *`.
-- **Next step:** pass 2's smoke run, `--pass 2 --limit 8`, after my go-ahead.
-  Pass 1 (Haiku 4.5 13.9% → 58.3%, Sonnet 5.5 8.3% → 41.7%, $5.76) counts, but its
-  gold rejected a reading the full docs support; regraded with `--pass 1 --regrade`
-  it gives 25.0% → 88.9% and 75.0% → 100%. Pass 2 runs as a disclosed deviation
-  (ADR 0033): each question names its measure, accepts the `PRS_` reading the docs
-  give (the `FLT_` measures are also filled on reimbursement type 99), and settles
-  at least two of the month, the region and the provider; `gold --check` fails on
-  an undeclared reading. ADR 0033 fixes what each pass 2 outcome leads to, pass 3
-  included. The blind check passed 12 of 12 (`eval/blind_check/`). Still owed in
-  this PR: the model decision record and the `SELECT *` record, which reads pass
-  1's traffic. `feat/loader-snowflake` still lands before the go/no-go.
+    - **3c:** `feat/offline-pilot`, in progress. Both passes, the readings
+      check and accepted results (ADR 0033), the model (Haiku 4.5, ADR 0034) and
+      `SELECT *` (counted, ADR 0035) records.
+- **Next step:** the pre-PR gate on `feat/offline-pilot`, then its PR. The pilot
+  is done: pass 2 chose Haiku 4.5, 0.0% → 83.3% (Sonnet 5.5 5.6% → 100%), $6.95;
+  no pass 3 (ADR 0033's first outcome). Open risk for the 40 questions, weighed
+  with `devils-advocate` before they are written: with no docs, nearly every run
+  failed on the unfiltered `PRS_` measure, so the baseline's seeded half may set
+  the baseline by whether it documents the measure columns (ADR 0034).
+  `feat/loader-snowflake` still lands before the go/no-go.
