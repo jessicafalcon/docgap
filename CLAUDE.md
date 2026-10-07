@@ -215,7 +215,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** #26, `feat/offline-pilot` (Phase 3 PR 3c), in review.
+- **Open PRs:** none.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -258,10 +258,10 @@ Update after every PR and merge, in the same change. A new session resumes from 
       the comment) and the full-docs manifest built by `dbt parse`.
     - **3b:** `feat/pilot-runner`, merged (#25). The runner, offline with a fake
       transport, and the decision record on which pilot passes count (ADR 0031).
-    - **3c:** `feat/offline-pilot`, in review (#26). Both passes, the readings
+    - **3c:** `feat/offline-pilot`, merged (#26). Both passes, the readings
       check and accepted results (ADR 0033), the model (Haiku 4.5, ADR 0034) and
       `SELECT *` (counted, ADR 0035) records.
-- **Next step:** after #26 merges, `devils-advocate` on the 40 questions' design
+- **Next step:** `devils-advocate` on the 40 questions' design
   (the open risk below), then the 40 with their gold SQL. The pilot
   is done: pass 2 chose Haiku 4.5, 0.0% → 83.3% (Sonnet 5.5 5.6% → 100%), $6.95;
   no pass 3 (ADR 0033's first outcome). Open risk for the 40 questions, weighed
