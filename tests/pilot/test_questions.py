@@ -35,7 +35,7 @@ from eval.questions import (
     query_problems,
     read_as,
     read_gold,
-    reading_problems,
+    readings,
     sha256,
     to_result,
     write_gold,
@@ -97,10 +97,9 @@ def test_stored_gold_is_gradable(question: GoldQuestion) -> None:
 def test_stored_gold_records_its_sql_and_the_sample_it_ran_on(question: GoldQuestion) -> None:
     # Editing the gold SQL or a swap, or locking another sample, without running `gold`
     # again fails here.
-    sqls = {question.id: question.gold_sql}
-    sqls |= {f"{question.id}.{n}": read_as(question.gold_sql, SWAPS[n]) for n in question.accept}
     for stem, path in gold_files(question, PILOT_GOLD).items():
-        sql = sqls[stem]
+        swap = stem.partition(".")[2]
+        sql = read_as(question.gold_sql, SWAPS[swap]) if swap else question.gold_sql
         assert sql is not None
         assert gold_provenance(path) == {
             GOLD_SQL_KEY: sha256(sql).encode(),
@@ -280,7 +279,7 @@ _CHARGED = "SELECT SUM(FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS"
 def _readings(db: Path, question: GoldQuestion, *, stale_accepts: bool = True) -> list[str]:
     with _connect(db) as con:
         gold = to_result(gold_result(con, question, max_rows=200))
-        return reading_problems(con, question, gold, stale_accepts=stale_accepts)
+        return readings(con, question, gold, row_cap=200, stale_accepts=stale_accepts)[1]
 
 
 def test_a_reading_that_changes_the_result_must_be_declared(readings_db: Path) -> None:

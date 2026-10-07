@@ -53,8 +53,8 @@ from eval.questions import (
     GoldQuestion,
     gold_files,
     load_questions,
+    read_accepted,
     read_gold,
-    to_result,
 )
 
 __all__ = [
@@ -525,8 +525,7 @@ def regrade(
             if not (run.parent / ROWS).exists():
                 passed += recorded.grade.passed
                 continue
-            with pq.ParquetFile(run.parent / ROWS) as file:
-                outcome = to_result(file.read())  # pyright: ignore[reportUnknownMemberType]
+            outcome = read_gold(run.parent / ROWS)
             regraded = grade(
                 transcript.qid,
                 transcript.repetition,
@@ -585,10 +584,7 @@ def main(argv: list[str] | None = None) -> None:
     run_id = f"pilot-{args.pass_number}"
     questions = load_questions(PILOT_QUESTIONS)
     gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
-    accepted = {
-        q.id: [read_gold(path) for stem, path in gold_files(q, PILOT_GOLD).items() if stem != q.id]
-        for q in questions
-    }
+    accepted = {q.id: read_accepted(q, PILOT_GOLD) for q in questions}
     if args.regrade:
         for name, (passed, graded) in regrade(out_dir, questions, gold, accepted).items():
             print(f"{name}: {passed}/{graded} passed, {100 * passed / graded:.1f}%")
