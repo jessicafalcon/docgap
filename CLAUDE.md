@@ -45,13 +45,14 @@ the file is the current standard, and memory of it may be stale.
 | Moment | Invoke | Then |
 |---|---|---|
 | **Fresh clone** | `uv sync`, `uv run pre-commit install` (the pre-commit and commit-msg hooks); gitleaks 8.30.1 (the version CI pins) on `PATH` | The `gitleaks-system` hook needs it, or every commit fails |
+| **A live call** needs a secret (the Anthropic API key; later the Snowflake keys) | `cp .env.example .env`; you fill it in, never me. A new variable goes into `.env.example` too, empty, in the same change | Load it with `uv run --env-file .env …`. I never read `.env`: `.claude/settings.json` denies it; secrets rules in `docgap-correctness` |
 | **Offline data** needed (DuckDB work) and `data/sample/` is missing | `uv run python loader/offline_sample.py`, with the sources in `data/open_damir/` | It checks sources and outputs against the locks; `--update-lock` only under an ADR that supersedes 0013 |
 | **Offline warehouse** needed and `data/warehouse/<source>/RAW.duckdb` is missing | `uv run python loader/load_duckdb.py sample` (or `fixture`, the CI fixture) | It checks each file against `loader/sample.lock` and its header against `loader/raw_prestations.sql`; a re-run loads nothing twice |
 | **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` and `uv run python -m eval.column_docs` | They rewrite the code-list seeds in `warehouse/dbt/seeds/` and the every-column docs in `eval/column_docs.json`; until they run, the byte-identity tests fail |
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`) | It copies the build's marts alone into the agent's database (ADR 0026) |
-| **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. CI runs every gold query on the fixture |
-| **A pilot pass** runs live (after my go-ahead) | `uv run python -m eval.pilot --pass N --limit 8` first, the smoke run; then the same command without `--limit` | Commit and push `fixtures/pilot/pass-N/` after every process, the smoke run's included. It resumes a pass in place, skipping written runs and starting the budget from its manifest; a changed input makes it refuse. A pass counts once it has made a run, and no new `N` starts while one that counts is unfinished, or once three count (ADR 0031) |
+| **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. Both fail on a reading of a gold query a question doesn't declare (ADR 0033). CI runs every gold query on the fixture |
+| **A pilot pass** runs live (after my go-ahead) | `uv run --env-file .env python -m eval.pilot --pass N --limit 8` first, the smoke run; then the same command without `--limit` | Commit and push `fixtures/pilot/pass-N/` after every process, the smoke run's included. It resumes a pass in place, skipping written runs and starting the budget from its manifest; a changed input makes it refuse. A pass counts once it has made a run, and no new `N` starts while one that counts is unfinished, or once three count (ADR 0031). After the gold or the accepted results change, `--pass N --regrade` grades a written pass again, with no model call |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -168,7 +169,9 @@ code is lost to the next session, and the review agents treat it as a finding.
 - **A threshold, key or command changes:** update every record that states it.
 - **A new skill, agent, hook or slash command:** add it here, with when to invoke
   it. A `docgap` command is product behaviour, and the README documents it.
-- **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
+- **After `preregistered`:** questions, gold SQL, grading rules (with the readings
+  catalog `SWAPS` in `eval/questions.py`, each question's `accept` and `rule_out`,
+  and the stored accepted results), split, N, arms,
   the agent (model, prompt version, 8 tool calls, `[agent]` limits, the model
   calls' `[llm] timeout_seconds` and `max_retries`, and `eval/agent/` itself, with
   every text the model reads), and the
@@ -212,7 +215,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/pilot-runner` (Phase 3 PR 3b), in review.
+- **Open PRs:** #26, `feat/offline-pilot` (Phase 3 PR 3c), in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -253,11 +256,16 @@ Update after every PR and merge, in the same change. A new session resumes from 
     - **3a:** `feat/pilot-questions`, merged (#24). The 12 pilot questions with gold
       SQL and typed gold results, the every-column docs (label, a newline, then
       the comment) and the full-docs manifest built by `dbt parse`.
-    - **3b:** `feat/pilot-runner`, in review. The runner, offline with a fake transport, and
-      the decision record on which pilot passes count (ADR 0031), as the brief's
-      pilot step owes them.
-    - **3c:** `feat/offline-pilot`. The live pass, after my go-ahead, smoke run
-      first; the fixtures, and the decision records on the model and on `SELECT *`.
-- **Next step:** after `feat/pilot-runner` merges, `feat/offline-pilot`. Before
-  3c, the account's rate limits for Opus 5.5 are checked. `feat/loader-snowflake`
-  still lands before the go/no-go.
+    - **3b:** `feat/pilot-runner`, merged (#25). The runner, offline with a fake
+      transport, and the decision record on which pilot passes count (ADR 0031).
+    - **3c:** `feat/offline-pilot`, in review (#26). Both passes, the readings
+      check and accepted results (ADR 0033), the model (Haiku 4.5, ADR 0034) and
+      `SELECT *` (counted, ADR 0035) records.
+- **Next step:** after #26 merges, `devils-advocate` on the 40 questions' design
+  (the open risk below), then the 40 with their gold SQL. The pilot
+  is done: pass 2 chose Haiku 4.5, 0.0% → 83.3% (Sonnet 5.5 5.6% → 100%), $6.95;
+  no pass 3 (ADR 0033's first outcome). Open risk for the 40 questions, weighed
+  with `devils-advocate` before they are written: with no docs, nearly every run
+  failed on the unfiltered `PRS_` measure, so the baseline's seeded half may set
+  the baseline by whether it documents the measure columns (ADR 0034).
+  `feat/loader-snowflake` still lands before the go/no-go.

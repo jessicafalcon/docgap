@@ -22,8 +22,12 @@ repos:
         types: [text]
         files: (\.toml|^loader/(sources|sample)\.lock)$
       - id: check-yaml
+      # The pilot's output stays byte for byte as the runner wrote it: a pass hashes
+      # its dbt manifests, and a rewritten copy makes the runner refuse to resume.
       - id: end-of-file-fixer
+        exclude: ^fixtures/pilot/
       - id: trailing-whitespace
+        exclude: ^fixtures/pilot/
 
   # Keep in sync with `required-version` in pyproject.toml.
   - repo: https://github.com/astral-sh/uv-pre-commit

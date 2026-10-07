@@ -48,6 +48,21 @@ outputs and run manifest. In `src/docgap/` outside `llm/` and `cli.py`:
 - `eval/reference/` (the dictionary) is ground truth for grading and is never
   imported or read by `src/`.
 
+#### Secrets
+
+- Secrets live in `.env` locally (gitignored, from the committed `.env.example`)
+  and in GitHub Actions secrets in CI; never in the repo, Terraform state or a
+  config file. A command that needs one loads it with `uv run --env-file .env`.
+- `.env.example` lists every variable `.env` holds, with an empty value and a
+  comment on what needs it. A variable added to `.env` is added to it in the same change.
+- Code reads a secret from the environment through the SDK or driver that uses it,
+  never from a CLI argument, which shell history and `ps` keep.
+- A secret never reaches disk or output: not in logs, the event log, transcripts,
+  the model cache, its keys, manifests or exception text.
+- Claude never reads `.env`; `.claude/settings.json` denies it. The user edits it.
+- A gitleaks hit on a pushed commit means the secret is public: rotate it first,
+  then clean the history.
+
 ### 4. Evaluation integrity
 
 - What is frozen at the `preregistered` tag, and how anything else in the

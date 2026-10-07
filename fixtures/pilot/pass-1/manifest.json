@@ -1,0 +1,77 @@
+{
+  "inputs": {
+    "agent_db": "64bc3ba45558dc3e599fed696f8bff6bf73e258d8ae8cd75f3579b3401e94ad8",
+    "call_site.claude-haiku-4-5-20251001": "416f801c4f91a53f66bb6ad89e8c41380e423855bc344daba5e4df80123b4b85",
+    "call_site.claude-sonnet-5-5": "1f2e6068d7a14827571869ab2f4a5cf5de303fc7b544bdf11e6cd2d3cd5dd8fb",
+    "code.eval/agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "code.eval/agent/loop.py": "a1cce2303f036e91a5a7d2d0f5c44532456d3ca741e2f4890f33829e20e9a9ee",
+    "code.eval/agent/tools.py": "d0d3850ce2190e05416ba714a159690d8345e29a3d96e50d088decac5c0537b1",
+    "code.eval/agent/warehouse.py": "8511c89585f1819881ea4786d9e5ce5492de66dd3e1f8daabba8cbdc989d19a4",
+    "code.src/docgap/grade.py": "925376f85aa9ccd01c312936b6155203f92a9b8d6fbfb58db4c8041a7b52c67e",
+    "code.src/docgap/llm/__init__.py": "b33252512b9faf424aeabccf1bbc99c280252a3db1ccc01611a8d35228afeb6a",
+    "code.src/docgap/llm/budget.py": "12d1e6eb0044f41755b09fd0454926d11b0fc659b1918cbc1a0ece6391445fa6",
+    "code.src/docgap/llm/cache.py": "28c75f207ddf6aec967426df90d0498b1c5c118a20a44aa31395e1fab81e840e",
+    "code.src/docgap/llm/client.py": "c0292cb332cb86c1c6a5e2a536a7e286d12cb2011f51b2e1a28eb9fdf9c2b62d",
+    "code.src/docgap/manifest.py": "ca7332f6557537a765c3130e8cdbb4a6366a3062fdc51cfe81fa44fcf2cad03b",
+    "column_docs": "00d61042cebca816bf4fe6a45e4467d82995257f6c53c8e94e4288894474d89b",
+    "config.agent": "96936eeb2e1ad2ed0e548e22006c7b8b8cc2751b4bd500dd141453568f4c7a02",
+    "config.llm": "1237837156348967605749c9f714a413a2ef7d832ce74c5728888977d347d45e",
+    "config.pilot": "c30d3aa8588490add3b053cebaa21a65716a40915d95aa0248300c76906a2946",
+    "gold.P01": "048b21092364bd1a8cc803b3f51dfd27508e7c3eae181f38aaaff77861c7b698",
+    "gold.P02": "d60750a1f478f77c99c309e11334e94513b2d13b441832cb25215ff00579e370",
+    "gold.P03": "ded2c1366dd6e11522da6aee8b7e5ffd091143b191eae289115ec1f39c635288",
+    "gold.P04": "ef11adf46a555c406d1e0c9a966caf4b45de0fa0ba791f6b277e066268206424",
+    "gold.P05": "36b326f62f261db628d1fe8ef1f9b2fd0286019a95930215c71f039019b5fe35",
+    "gold.P06": "3d1a4d0d0f532dfbafe937d9b3f00cf20de1350ec4ae58bd44fcccdd8d0c43a5",
+    "gold.P07": "9caca1a4435e1989e3cefd1d096b10bc2547ab0b8ee5c09a619ff0a946aa1be4",
+    "gold.P08": "4a1cd6e7c5abc317d4b9ba6bd8eb73fbbfe7cbb6b208c144dd2f2c732e794253",
+    "gold.P09": "b8a3ebe4c2152e7e3cd6410444b363251af2f7e3d95fa1d55ba2b1de3afdaf58",
+    "gold.P10": "688cad0081ddb1a33414602d61f020e2b3289dc5306b4b47b6038b86c9fd8d4a",
+    "gold.P11": "fd2da1a2151b9422ed57271099f7895ca94a07bd06f1366b8696ead1ae9520fb",
+    "gold.P12": "0ba0cd3b45f21864b92ac1a522af90ff7d45a29ad0149f1f0f833ef1d1868eab",
+    "manifest.full_docs": "0b96ab3a17fa10f13444562c79a5795e8a866b3b589952ea54f6a3b458eea2d5",
+    "manifest.no_docs": "c56094a692c9efe2315ad496ed8231d33110ce18a3cfd1327a75742d21562763",
+    "packages": "78e81e82a19622ad5dc3b87f98223be92a810fcc39f7faa71ae64a294c8488d1",
+    "questions": "fd9daff57bcfc3b23d297e3526b9eee6295bdcc533c22f90e2c941b4251f26a1",
+    "sample_lock": "11fcd8b099b34c26ea7401e0fd6a838a68eb9fe2c2e149f68705577f7923b0c9"
+  },
+  "status": "completed",
+  "stops": [],
+  "model_calls": 546,
+  "spend_usd": 5.760238000000005,
+  "configurations": {
+    "claude-haiku-4-5-20251001.no_docs": {
+      "runs": 36,
+      "passed": 5,
+      "failed_model_calls": 0,
+      "error_causes": {},
+      "harness_errors": 0,
+      "not_made": 0
+    },
+    "claude-haiku-4-5-20251001.full_docs": {
+      "runs": 36,
+      "passed": 21,
+      "failed_model_calls": 0,
+      "error_causes": {},
+      "harness_errors": 0,
+      "not_made": 0
+    },
+    "claude-sonnet-5-5.no_docs": {
+      "runs": 36,
+      "passed": 3,
+      "failed_model_calls": 0,
+      "error_causes": {},
+      "harness_errors": 0,
+      "not_made": 0
+    },
+    "claude-sonnet-5-5.full_docs": {
+      "runs": 36,
+      "passed": 15,
+      "failed_model_calls": 0,
+      "error_causes": {},
+      "harness_errors": 0,
+      "not_made": 0
+    }
+  },
+  "not_made": []
+}

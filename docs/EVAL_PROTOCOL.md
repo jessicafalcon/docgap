@@ -33,6 +33,15 @@ The result is reported whatever it turns out to be.
    the setup, and the 40 questions with their gold SQL, come first. The lock lands in
    its own pull request, merged after the questions' pull request, and GitHub's
    merge times witness the order, since commit dates prove nothing (ADR 0021).
+5. **Every reading the docs support is accepted.** A question names its measure
+   in business words ("Health Insurance's statutory share", "amount charged",
+   "quantity of acts"), never a column. Each swap in the catalog of
+   `eval/questions.py` that changes a gold result (a `FLT_` measure for the `PRS_`
+   one filtered as the docs say, a sibling region or provider column, the
+   processing for the care month) is declared by the question: accepted, its
+   result stored beside the gold, or ruled out by a phrase in the question's text.
+   An undeclared swap that changes the result fails the gold check. The columns
+   a question needs come from its gold SQL alone (ADR 0033).
 
 ## The split
 
@@ -71,8 +80,10 @@ columns the two sets share.
 ## What "correct" means
 
 The grader executes nothing. It compares the agent's result with the stored
-gold result, and a run passes only if every check holds. Checks run in this
-order, and the first that fails gives the reason code:
+gold result, and a run passes only if every check holds. A run that fails
+against the gold passes if every check holds against one of the question's
+accepted results (Questions item 5); its reason code otherwise is the gold's.
+Checks run in this order, and the first that fails gives the reason code:
 
 | Check | Rule | Reason code |
 | --- | --- | --- |
@@ -218,7 +229,7 @@ the tag (`CLAUDE.md` → "After `preregistered`"):
 
 The pilot runs the 12 pilot questions, 3 repetitions each, on DuckDB over the
 offline sample pinned by `loader/sample.lock` (ADR 0013), in four configurations:
-{Haiku 4.5, Opus 5.5} × {no column docs, every column documented from the
+{Haiku 4.5, Sonnet 5.5} × {no column docs, every column documented from the
 dictionary}. The every-column text is the dictionary's, verbatim and in French: it
 is the ceiling arm's text, and its locked half is the baseline's (ADR 0025). The
 agent writes Snowflake SQL, as in the trial, and the harness transpiles it to
@@ -239,6 +250,11 @@ accuracy minus no-docs accuracy.
    `[llm]` budget, a permanent API error) stops, or one left unfinished, is
    resumed in place, and no new pass starts while one that counts is unfinished. The pilot's decision
    record reports every pass (ADR 0031).
+4. **Pass 2 is a deviation.** Pass 1 had an eligible model, but its gold rejected
+   a reading the full docs support, so its grades don't apply the rule. Pass 2
+   runs on questions that name their measure, graded on every supported reading,
+   one level harder, and what each of its outcomes leads to, pass 3's setup
+   included, was fixed before it ran (ADR 0033).
 
 The four accuracies and the choice go in their own decision record. The model
 not chosen is reported under limits and doesn't run as an arm. The 15-point

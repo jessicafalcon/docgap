@@ -2,6 +2,7 @@
 
 uv run python -m eval.pilot --pass 1 --limit 8   # a smoke run: the first 8 runs of pass 1
 uv run python -m eval.pilot --pass 1             # the rest of the pass
+uv run python -m eval.pilot --pass 1 --regrade   # grade a written pass again, no model call
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from importlib import metadata
 from pathlib import Path
-from typing import Self
+from typing import NamedTuple, Self
 
 import anthropic
 import pyarrow as pa
@@ -50,7 +51,9 @@ from eval.questions import (
     PILOT_QUESTIONS,
     SAMPLE_LOCK,
     GoldQuestion,
+    gold_files,
     load_questions,
+    read_accepted,
     read_gold,
 )
 
@@ -63,6 +66,7 @@ __all__ = [
     "PilotInputs",
     "PilotManifest",
     "PlannedRun",
+    "Regraded",
     "RunGrade",
     "configurations",
     "grade_run",
@@ -70,6 +74,7 @@ __all__ = [
     "lock_pilot",
     "plan",
     "refuse_pass",
+    "regrade",
     "run_pass",
 ]
 
@@ -90,6 +95,9 @@ CODE = (
     *sorted((ROOT / "src" / "docgap" / "llm").glob("*.py")),
     ROOT / "src" / "docgap" / "grade.py",
     ROOT / "src" / "docgap" / "manifest.py",
+    # Which accepted results reach the grader, and how stored results are read back.
+    ROOT / "eval" / "questions.py",
+    ROOT / "eval" / "pilot.py",
 )
 # The installed packages a run goes through, by version: not all of `uv.lock`, so a
 # dependency no run uses, added mid-pass, can't strand a pass that counts (ADR 0031).
@@ -117,7 +125,7 @@ class Configuration:
 
     @property
     def name(self) -> str:
-        """The configuration's directory name, such as `claude-opus-5-5.full_docs`."""
+        """The configuration's directory name, such as `claude-sonnet-5-5.full_docs`."""
         return f"{self.model}.{self.docs}"
 
 
@@ -140,7 +148,7 @@ class PlannedRun:
 
     @property
     def key(self) -> str:
-        """The run's directory under the pass, such as `claude-opus-5-5.no_docs/P01.r1`."""
+        """The run's directory under the pass, such as `claude-sonnet-5-5.no_docs/P01.r1`."""
         return f"{self.configuration.name}/{self.question.id}.r{self.repetition}"
 
 
@@ -260,6 +268,8 @@ class PilotInputs:
 
     questions: Sequence[GoldQuestion]
     gold: Mapping[str, Result]
+    # Each question's accepted results, the other readings the docs support (ADR 0033).
+    accepted: Mapping[str, Sequence[Result]]
     models: Sequence[str]
     tools: Mapping[Docs, AgentTools]
     hashes: Mapping[str, str]
@@ -284,7 +294,11 @@ def input_hashes(
         "questions": PILOT_QUESTIONS,
         "sample_lock": SAMPLE_LOCK,
         **{f"manifest.{docs}": path for docs, path in manifests.items()},
-        **{f"gold.{question.id}": PILOT_GOLD / f"{question.id}.parquet" for question in questions},
+        **{
+            f"gold.{stem}": path
+            for question in questions
+            for stem, path in gold_files(question, PILOT_GOLD).items()
+        },
         **{f"code.{path.relative_to(ROOT).as_posix()}": path for path in CODE},
     }
     hashes = {name: _file_sha256(path) for name, path in files.items()}
@@ -311,7 +325,13 @@ def _write_result(result: Result, path: Path) -> None:
 
 
 def grade_run(
-    transcript: Transcript, outcome: Outcome, gold: Result, *, ordered: bool, rows: Path
+    transcript: Transcript,
+    outcome: Outcome,
+    gold: Result,
+    *,
+    ordered: bool,
+    rows: Path,
+    accepted: Sequence[Result] = (),
 ) -> RunGrade:
     """Grade a run, and store a final result's rows typed as Parquet at `rows`.
 
@@ -320,7 +340,14 @@ def grade_run(
     and the pass goes on.
     """
     try:
-        graded = grade(transcript.qid, transcript.repetition, outcome, gold, ordered=ordered)
+        graded = grade(
+            transcript.qid,
+            transcript.repetition,
+            outcome,
+            gold,
+            ordered=ordered,
+            accepted=accepted,
+        )
         if isinstance(outcome, Result):
             _write_result(outcome, rows)
     except (TypeError, OverflowError, pa.ArrowException) as error:
@@ -418,6 +445,7 @@ def run_pass(
             inputs.gold[question.id],
             ordered=question.ordered,
             rows=directory / ROWS,
+            accepted=inputs.accepted[question.id],
         )
         _write_json(graded, directory / GRADE)
         _write_json(agent.transcript, directory / TRANSCRIPT)
@@ -473,6 +501,64 @@ def run_pass(
     return manifest
 
 
+class Regraded(NamedTuple):
+    """A configuration's runs graded again: passed, graded, and those asked another text."""
+
+    passed: int
+    graded: int
+    other_text: int
+
+
+def regrade(
+    pass_dir: Path,
+    questions: Sequence[GoldQuestion],
+    gold: Mapping[str, Result],
+    accepted: Mapping[str, Sequence[Result]],
+) -> dict[str, Regraded]:
+    """Grade a written pass again from its stored rows, against the current gold and
+    accepted results, per configuration.
+
+    A run with no result keeps its recorded grade, and one with a harness error counts
+    as failed (ADR 0034). A run asked a question whose text has changed since isn't
+    graded, since the runs never saw that question, and is counted apart.
+
+    Raises:
+        FileNotFoundError: no pass was written at `pass_dir`.
+    """
+    if not pass_dir.is_dir():
+        raise FileNotFoundError(f"{pass_dir}: no such pass")
+    by_id = {question.id: question for question in questions}
+    counts: dict[str, Regraded] = {}
+    for configuration in sorted(path for path in pass_dir.iterdir() if path.is_dir()):
+        passed = graded = other_text = 0
+        for run in sorted(configuration.glob(f"*/{TRANSCRIPT}")):
+            transcript, recorded = _read(run.parent)
+            question = by_id.get(transcript.qid)
+            first = transcript.messages[0] if transcript.messages else None
+            asked = first.get("content") if isinstance(first, dict) else None
+            if question is None or asked != question.text:
+                other_text += 1
+                continue
+            graded += 1
+            if recorded.grade is None:
+                continue
+            if not (run.parent / ROWS).exists():
+                passed += recorded.grade.passed
+                continue
+            regraded = grade(
+                transcript.qid,
+                transcript.repetition,
+                read_gold(run.parent / ROWS),
+                gold[question.id],
+                ordered=question.ordered,
+                accepted=accepted[question.id],
+            )
+            passed += regraded.passed
+        if graded or other_text:
+            counts[configuration.name] = Regraded(passed, graded, other_text)
+    return counts
+
+
 def lock_pilot(work_dir: Path) -> Path:
     """Claim the pilot for this process: one pass at a time, so two processes never write
     the same runs, and two new passes never both get past `refuse_pass`.
@@ -503,6 +589,11 @@ def main(argv: list[str] | None = None) -> None:
     # fourth pass directory may exist.
     parser.add_argument("--pass", dest="pass_number", type=int, required=True)
     parser.add_argument("--limit", type=int, help="make the pass's first N runs only: a smoke run")
+    parser.add_argument(
+        "--regrade",
+        action="store_true",
+        help="grade a written pass again against the current gold; no model call, nothing written",
+    )
     args = parser.parse_args(argv)
     if args.pass_number < 1 or (args.limit is not None and args.limit < 1):
         parser.error("--pass and --limit must be at least 1")
@@ -510,6 +601,18 @@ def main(argv: list[str] | None = None) -> None:
     out_dir = PILOT_DIR / f"pass-{args.pass_number}"
     work = WORK_DIR / f"pass-{args.pass_number}"
     run_id = f"pilot-{args.pass_number}"
+    questions = load_questions(PILOT_QUESTIONS)
+    gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
+    accepted = {q.id: read_accepted(q, PILOT_GOLD) for q in questions}
+    if args.regrade:
+        try:
+            regraded = regrade(out_dir, questions, gold, accepted)
+        except FileNotFoundError as error:
+            sys.exit(str(error))
+        for name, (passed, graded, other_text) in regraded.items():
+            share = f", {100 * passed / graded:.1f}%" if graded else ""
+            print(f"{name}: {passed}/{graded} passed{share}, {other_text} asked another text")
+        return
     try:
         lock = lock_pilot(WORK_DIR)
     except FileExistsError as error:
@@ -517,7 +620,6 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if refusal := refuse_pass(PILOT_DIR, out_dir):
             sys.exit(refusal)
-        questions = load_questions(PILOT_QUESTIONS)
         docs_text: dict[str, str] = json.loads(DOCS.read_text(encoding="utf-8"))
         manifests: dict[Docs, Path] = {}
         for docs in Docs:
@@ -528,7 +630,6 @@ def main(argv: list[str] | None = None) -> None:
         database, schema = config.manifest.mart_database, config.manifest.mart_schema
         agent_db = ROOT / "data" / "agent" / "sample" / f"{database}.duckdb"
         hashes = input_hashes(config, manifests=manifests, agent_db=agent_db, questions=questions)
-        gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
         warehouse = Warehouse(
             agent_db,
             database=database,
@@ -542,7 +643,7 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 for docs, path in manifests.items()
             }
-            inputs = PilotInputs(questions, gold, config.pilot.models, tools, hashes)
+            inputs = PilotInputs(questions, gold, accepted, config.pilot.models, tools, hashes)
             work.mkdir(parents=True, exist_ok=True)
             with (work / "events.jsonl").open("a") as sink:
                 log = EventLog(sink, run_id)

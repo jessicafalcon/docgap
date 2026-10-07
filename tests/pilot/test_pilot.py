@@ -37,9 +37,19 @@ from eval.pilot import (
     lock_pilot,
     plan,
     refuse_pass,
+    regrade,
     run_pass,
 )
-from eval.questions import PILOT_QUESTIONS, Category, GoldQuestion, load_questions, read_gold
+from eval.questions import (
+    PILOT_GOLD,
+    PILOT_QUESTIONS,
+    Category,
+    GoldQuestion,
+    gold_files,
+    load_questions,
+    read_accepted,
+    read_gold,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = ["model-a", "model-b"]
@@ -64,6 +74,8 @@ GOLD = {
     "P01": Result(1, ((300,),)),
     "P02": Result(2, ((11, "Ile-de-France"), (24, "Centre-Val de Loire"))),
 }
+# Half the lines: another reading P01 accepts.
+ACCEPTED = {"P01": [Result(1, ((150,),))], "P02": []}
 RIGHT = {COUNT.text: COUNT.gold_sql, REGIONS.text: REGIONS.gold_sql}
 HASHES = {"agent_db": "0" * 64}
 _ids = itertools.count(1)
@@ -140,7 +152,7 @@ class Pilot:
         )
         log = EventLog(self.log, "pilot-1")
         llm = LlmClient(model, ResponseCache(self.cache), Budget(config), log)
-        inputs = PilotInputs([COUNT, REGIONS], GOLD, MODELS, self.tools, hashes)
+        inputs = PilotInputs([COUNT, REGIONS], GOLD, ACCEPTED, MODELS, self.tools, hashes)
         return run_pass(
             inputs,
             llm=llm,
@@ -204,6 +216,57 @@ def test_a_pass_writes_and_grades_every_run(pilot: Pilot) -> None:
     assert read_gold(run / "rows.parquet") == Result(2, ((11, "Ile-de-France"),))
     # The full-docs run replays its no-docs twin's reply: the same first request.
     assert manifest.model_calls == 12
+
+
+def test_a_run_matching_an_accepted_result_passes(pilot: Pilot) -> None:
+    half = {**RIGHT, COUNT.text: "SELECT COUNT(*) / 2 FROM FCT_REIMBURSEMENTS"}
+    manifest = pilot.run(FakeModel(half))
+
+    assert [counts.passed for counts in manifest.configurations.values()] == [6, 6, 6, 6]
+
+
+def test_a_regrade_grades_the_stored_rows_against_the_current_results(pilot: Pilot) -> None:
+    # P02 answered with one region of the two: failed as run, passed once accepted.
+    wrong = {**RIGHT, REGIONS.text: "SELECT 11, 'Ile-de-France'"}
+    pilot.run(FakeModel(wrong))
+    one_region = {**ACCEPTED, "P02": [Result(2, ((11, "Ile-de-France"),))]}
+    reworded = COUNT.model_copy(update={"text": "How many lines are there?"})
+
+    as_run = regrade(pilot.out, [COUNT, REGIONS], GOLD, ACCEPTED)
+    accepted = regrade(pilot.out, [COUNT, REGIONS], GOLD, one_region)
+    # The runs never saw the reworded question, so they aren't graded on it.
+    on_reworded = regrade(pilot.out, [reworded, REGIONS], GOLD, one_region)
+
+    assert set(as_run.values()) == {(3, 6, 0)}
+    assert set(accepted.values()) == {(6, 6, 0)}
+    assert set(on_reworded.values()) == {(3, 3, 3)}
+    assert len(as_run) == 4
+
+
+def test_a_regrade_of_no_pass_fails(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="no such pass"):
+        regrade(tmp_path / "pass-9", [COUNT], GOLD, ACCEPTED)
+
+
+def test_pass_2_regrades_to_its_recorded_accuracies_and_to_the_gold_alone() -> None:
+    # Pins ADR 0034's numbers from the committed runs: as graded, with the accepted
+    # readings, and on the gold alone.
+    questions = load_questions(PILOT_QUESTIONS)
+    gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
+    accepted = {q.id: read_accepted(q, PILOT_GOLD) for q in questions}
+    pass_2 = ROOT / "fixtures" / "pilot" / "pass-2"
+    manifest = PilotManifest.model_validate_json((pass_2 / "manifest.json").read_bytes())
+
+    regraded = regrade(pass_2, questions, gold, accepted)
+    on_gold = regrade(pass_2, questions, gold, {q.id: [] for q in questions})
+
+    assert {name: (c.passed, c.runs, 0) for name, c in manifest.configurations.items()} == regraded
+    assert {name: counts.passed for name, counts in on_gold.items()} == {
+        "claude-haiku-4-5-20251001.full_docs": 26,
+        "claude-haiku-4-5-20251001.no_docs": 0,
+        "claude-sonnet-5-5.full_docs": 35,
+        "claude-sonnet-5-5.no_docs": 2,
+    }
 
 
 def test_a_smoke_run_makes_the_first_runs_in_every_configuration(pilot: Pilot) -> None:
@@ -458,10 +521,14 @@ def test_the_input_hashes_ignore_the_budget_but_not_the_timeout(
         "code.src/docgap/grade.py",
         "code.src/docgap/manifest.py",
         "code.eval/agent/loop.py",
+        "code.eval/questions.py",
+        "code.eval/pilot.py",
     } <= set(base)
     assert base == hashes(config.llm.model_copy(update={"max_calls": 1, "max_spend_usd": 1.0}))
     assert base != hashes(config.llm.model_copy(update={"timeout_seconds": 1.0}))
-    assert {f"gold.{q.id}" for q in questions} <= set(base)
+    # Every stored result a grade reads: each gold and each accepted reading's.
+    assert {f"gold.{stem}" for q in questions for stem in gold_files(q, PILOT_GOLD)} <= set(base)
+    assert any(q.accept for q in questions)
     assert base["manifest.no_docs"] != base["manifest.full_docs"]
 
 
