@@ -24,8 +24,17 @@ disclosed deviation, with its outcomes fixed before it ran (ADR 0033). Pass 2
 had no error, no harness error and no reply cut at `max_tokens`. Before it, a
 blind check by an Opus 5.5 subagent, not a candidate, answered all 12 questions
 with the gold or an accepted result; its one ambiguity, whether P02 counts the
-unknown region, was fixed in the text and P02 passed again alone
-(`eval/blind_check/pass-2.json`). Which model is the agent?
+unknown region, was fixed in the text and P02 passed again alone. The subagent
+read only the agent's system prompt, the marts' columns with the full-docs text,
+and the questions, and queried the agent's database through the agent's own
+`run_sql`; it was kept from the gold SQL and results by instruction, not by a
+sandbox (`eval/blind_check/`). Which model is the agent?
+
+Pass 2's rows are pinned by a test that regrades the committed runs
+(`tests/pilot/test_pilot.py`). Pass 1's regrade ran on pass 1's questions, at
+commit 42df153: `uv run python -m eval.pilot --pass 1 --regrade` there. Later,
+the questions' texts changed, and the regrade counts pass 1's runs as asked
+another text.
 
 ## Considered Options
 
@@ -35,7 +44,15 @@ unknown region, was fixed in the text and P02 passed again alone
 ## Decision Outcome
 
 Chosen option: **Haiku 4.5**, by the protocol's rule on pass 2, the first
-outcome in ADR 0033's table: no pass 3 runs. It stays eligible graded on the
+outcome in ADR 0033's table: no pass 3 runs. Its next three rows name pass 3's
+setup when no model is eligible, the only case the kill criterion reruns; that
+Sonnet 5.5 has the larger gap and is above 90% changes nothing once Haiku 4.5 is
+eligible. Its last row, a question defect, doesn't apply: Haiku 4.5's 6
+full-docs failures are agent errors on questions the text settles. Two took the
+beneficiary's region where P02 and P04 name another, one the executing provider
+where P07 names the prescribing one, one returned an extra column (P10), and in
+P06 one summed `PRS_DEP_MNT` unfiltered and one computed fees as amount paid
+minus base, the docs' recipe for products, not doctors' fees. It stays eligible graded on the
 gold alone (72.2%, gap 72.2), so the choice doesn't rest on the accepted
 readings. `[call_sites.agent]` records it at the tag. Sonnet 5.5 is reported
 under limits and runs as no arm.
@@ -43,8 +60,9 @@ under limits and runs as no arm.
 How the accuracies are counted:
 
 - **A run with a harness error** (a value the grader refuses, such as an
-  interval) counts as failed in its configuration's accuracy and is reported
-  apart. None occurred in either pass.
+  interval) counts as failed in its configuration's accuracy, in the runner's
+  manifest and in `--regrade` alike, and is reported apart. None occurred in
+  either pass.
 - **A model's two docs settings are paired.** The cache key holds the
   repetition and not the docs setting, so a question's no-docs and full-docs
   runs share replies until the first tool result that differs, usually the

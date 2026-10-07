@@ -20,6 +20,16 @@ would, on 2026-10-07:
 | Pass 2, both models | 560 | 153 (27.3%) | 0 | 15.1% | 18 of 20 shared |
 | Pass 2, Haiku 4.5 | 291 | 56 (19.2%) | 0 | 10.2% | the same 20 |
 
+Each query went through the snapshot's `normalize`, then `resolve_query` with
+database `ANALYTICS` and schema `MARTS` against the marts read from pass 2's
+full-docs manifest; a query counts as a top-level `*` when `resolve_query` says
+so, and *u* counts each query once per column it resolves to:
+
+```python
+refs, star = resolve_query(normalize(sql), database="ANALYTICS", schema="MARTS", marts=marts)
+columns = {name for kind, name, _ in refs if kind is Reference.RESOLVED}
+```
+
 Every other `*` reads a dimension's 2 columns, a code and its label, where
 reading every column is the query's purpose. The two fact previews, both in
 pass 1, gave 36 columns no other pass 1 query touched one or two executions. Do a

@@ -52,7 +52,7 @@ the file is the current standard, and memory of it may be stale.
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` for the sample) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`) | It copies the build's marts alone into the agent's database (ADR 0026) |
 | **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. Both fail on a reading of a gold query a question doesn't declare (ADR 0033). CI runs every gold query on the fixture |
-| **A pilot pass** runs live (after my go-ahead) | `uv run --env-file .env python -m eval.pilot --pass N --limit 8` first, the smoke run; then the same command without `--limit` | Commit and push `fixtures/pilot/pass-N/` after every process, the smoke run's included. It resumes a pass in place, skipping written runs and starting the budget from its manifest; a changed input makes it refuse. A pass counts once it has made a run, and no new `N` starts while one that counts is unfinished, or once three count (ADR 0031) |
+| **A pilot pass** runs live (after my go-ahead) | `uv run --env-file .env python -m eval.pilot --pass N --limit 8` first, the smoke run; then the same command without `--limit` | Commit and push `fixtures/pilot/pass-N/` after every process, the smoke run's included. It resumes a pass in place, skipping written runs and starting the budget from its manifest; a changed input makes it refuse. A pass counts once it has made a run, and no new `N` starts while one that counts is unfinished, or once three count (ADR 0031). After the gold or the accepted results change, `--pass N --regrade` grades a written pass again, with no model call |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
 | **Writing** Python, SQL, dbt, Terraform or the DAG; choosing a dependency | Skill `docgap-craft` | |
@@ -169,7 +169,9 @@ code is lost to the next session, and the review agents treat it as a finding.
 - **A threshold, key or command changes:** update every record that states it.
 - **A new skill, agent, hook or slash command:** add it here, with when to invoke
   it. A `docgap` command is product behaviour, and the README documents it.
-- **After `preregistered`:** questions, gold SQL, grading rules, split, N, arms,
+- **After `preregistered`:** questions, gold SQL, grading rules (with the readings
+  catalog `SWAPS` in `eval/questions.py`, each question's `accept` and `rule_out`,
+  and the stored accepted results), split, N, arms,
   the agent (model, prompt version, 8 tool calls, `[agent]` limits, the model
   calls' `[llm] timeout_seconds` and `max_retries`, and `eval/agent/` itself, with
   every text the model reads), and the
