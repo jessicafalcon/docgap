@@ -5,7 +5,7 @@ the agent model on the pilot questions? Run once on 2026-10-07, before the 40
 questions were written; its result set their measure mix (ADR 0036). It is not a
 pilot pass and counts toward none.
 
-| Column docs, Haiku 4.5 | Passed | Passed with the gold's measure |
+| Column docs, Haiku 4.5 | Passed | Passed, `PRS_` measure renamed |
 | --- | --- | --- |
 | None (pilot pass 2) | 0/36 | 10/36 |
 | Every column drafted from its packet (here) | 6/36 | 23/36 |
@@ -29,14 +29,18 @@ pilot pass and counts toward none.
    repetitions on the gold and accepted results, as the pilot does. 36 runs,
    $1.69. `claude-haiku-4-5-20251001.drafts/<qid>.r<n>/`.
 
-The second column of the table comes from `measure_regrade.py`, which runs no
-model:
+The last column comes from `measure_regrade.py`, which runs no model. It renames
+each final query's `PRS_` measure to its `FLT_` twin, and `PRS_ACT_COG` to
+`FLT_PAI_MNT`, then grades it again. It leaves `PRS_REM_BSE` as written, which 8 of
+the probe's failures summed for the amount charged, so its counts are lower
+bounds. Sonnet 5.5's no-docs runs give 34 of 36.
 
 ```sh
 PYTHONPATH=. uv run python fixtures/probe/measure_regrade.py \
   fixtures/pilot/pass-2/claude-haiku-4-5-20251001.no_docs \
   fixtures/probe/claude-haiku-4-5-20251001.drafts \
-  fixtures/pilot/pass-2/claude-haiku-4-5-20251001.full_docs
+  fixtures/pilot/pass-2/claude-haiku-4-5-20251001.full_docs \
+  fixtures/pilot/pass-2/claude-sonnet-5-5.no_docs
 ```
 
 Both scripts ran from a scratch directory. `probe.py` was moved here with its
@@ -45,3 +49,15 @@ replayed from the response cache in the gitignored `data/probe/`, it rewrites
 `packets.json` and `drafts.json` byte for byte and makes no model call.
 `measure_regrade.py` renames columns with sqlglot where the scratch version used
 regular expressions, and gives the scratch version's counts: 10, 23 and 31 of 36.
+
+## Limits
+
+- **Unpinned.** No test runs either script: `measure_regrade.py` needs the
+  offline sample's agent database, which CI doesn't build. The figures are
+  evidence for ADR 0036's design, not a protocol result.
+- **Spend** comes from the event log in the gitignored `data/probe/`.
+- **No offline mode.** With the cache missing, `probe.py draft` calls the model
+  again, within a $4 budget.
+- **A clipping defect.** On a relation with fewer than 22 rows, the 11th smallest
+  value lies above the 11th largest, so `DIM_PROVIDER_ACTIVITY.PSE_ACT_SNDS`, 15
+  rows, got the inverted range 50 to 24.

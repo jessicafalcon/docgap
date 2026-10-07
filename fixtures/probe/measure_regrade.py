@@ -71,7 +71,7 @@ def main(directories: list[str]) -> None:
             try:
                 sql = to_duckdb(with_gold_measure(transcript["final_sql"]))
                 result = to_result(con.execute(sql).to_arrow_table())
-            except (sqlglot.errors.ParseError, TranspileError, duckdb.Error):
+            except (sqlglot.errors.SqlglotError, TranspileError, duckdb.Error):
                 # A query that fails once renamed fails the run, as it would have run.
                 continue
             golds = [

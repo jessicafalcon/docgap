@@ -15,7 +15,7 @@ warehouse/dbt/     dbt project over Open DAMIR (Snowflake and DuckDB profiles)
 infra/             bootstrap.sql (ACCOUNTADMIN, once) + terraform/
 loader/            download, checksum, stage, COPY; offline sample and its DuckDB load; code-list seeds
 orchestration/     one Airflow DAG calling the CLI
-fixtures/          DAMIR fixture, query history, manifest, ranking scope, profiles, model cache (offline mode)
+fixtures/          DAMIR fixture, query history, manifest, ranking scope, profiles, model cache (offline mode); pilot passes and the drafter probe
 runs/              one folder per `docgap analyze` run (gitignored, regenerated)
 tests/             unit, golden, determinism, integrity, fault injection
 docs/              EVAL_PROTOCOL.md, adr/, RESULTS.md (generated)

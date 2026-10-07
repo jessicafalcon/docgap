@@ -45,8 +45,9 @@ The result is reported whatever it turns out to be.
 6. **Half the 40 have no measure trap.** 20 questions name a measure whose
    unfiltered sum the docs support (the statutory and supplementary shares
    together, or the reimbursement base with every share), and 20 a `FLT_`
-   measure, at most 6 on any one. Drafts don't carry the `FLT_` filter, so a
-   measure trap the baseline leaves closed stays closed in every arm (ADR 0036).
+   measure, at most 6 on any one. In the drafter probe, a fact `FLT_` column's
+   draft didn't carry its filter, so a question whose measure twins are both
+   undocumented in the baseline fails in every arm (ADR 0036).
 
 ## The split
 
