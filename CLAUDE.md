@@ -215,7 +215,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** #27, `docs/question-design-probe` (Phase 3 PR 4a), in review.
+- **Open PRs:** none.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -262,12 +262,11 @@ Update after every PR and merge, in the same change. A new session resumes from 
       check and accepted results (ADR 0033), the model (Haiku 4.5, ADR 0034) and
       `SELECT *` (counted, ADR 0035) records.
   - **PR 4**, after `devils-advocate` on the 40's design and a drafter probe:
-    - **4a:** `docs/question-design-probe`, in review (#27). The 40's design (half
+    - **4a:** `docs/question-design-probe`, merged (#27). The 40's design (half
       with no measure trap, since drafts don't carry the `FLT_` filter; ADR 0036)
       and the probe's packets, drafts and runs under `fixtures/probe/`.
     - **4b:** `feat/eval-questions`. The 40 with gold SQL, as ADR 0036 sets them.
-- **Next step:** after #27 merges, PR 4b: the 40 questions with gold SQL, as
-  ADR 0036 and the brief's "Write 40 questions" step set them, then the blind
-  check; nobody computes the split or the baseline docs draw before they merge.
+- **Next step:** PR 4b: the 40 questions with gold SQL, as ADR 0036 and the
+  brief's "Write 40 questions" step set them, then the blind check; nobody computes the split or the baseline docs draw before they merge.
   Then the baseline docs lock in its own PR (ADR 0021). `feat/loader-snowflake`
   still lands before the go/no-go.
