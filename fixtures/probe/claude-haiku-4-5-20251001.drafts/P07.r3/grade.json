@@ -1,0 +1,9 @@
+{
+ "grade": {
+  "qid": "P07",
+  "repetition": 3,
+  "passed": false,
+  "reason": "shape_mismatch"
+ },
+ "harness_error": null
+}
