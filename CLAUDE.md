@@ -267,8 +267,9 @@ Update after every PR and merge, in the same change. A new session resumes from 
       and the probe's packets, drafts and runs under `fixtures/probe/`.
     - **4b:** `feat/full-month-duckdb`, in review. The three full months on
       DuckDB (`full`: load, dbt target, agent database, gold check), each file's
-      rows pinned in `sources.lock`, and the decision record that the 40 pass the
-      full-month check before they merge (ADR 0037).
+      rows pinned in `sources.lock`, and the decision records that the 40 pass the
+      full-month check before they merge (ADR 0037) and that keep the aggregate
+      out of the gold and count only traps that change the result (ADR 0038).
     - **4c:** `feat/eval-questions`, the second of the two PRs `devils-advocate`
       set before the baseline docs lock. The checks the 40 add to `eval/questions.py` (the no-trap
       readings in `SWAPS`, a required `trap` whose swap changes the result, the

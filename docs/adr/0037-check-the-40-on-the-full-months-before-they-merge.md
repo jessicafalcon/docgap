@@ -44,6 +44,11 @@ size and SHA-256, so the load checks its row count as the sample's does. dbt's
   the baseline is graded on, while no question's split is known.
 - Good, because the Snowflake `COPY` can check its loaded rows against the same
   lock.
+- Bad, because a gold query can still break on Snowflake, at the gold results'
+  materialization after the merge: a transpile or type difference, or a run
+  past 20 s. The protocol has it fixed before the tag, with the split
+  computable, so the results list each question fixed then and whether it is
+  holdout.
 - Bad, because the check runs on a laptop, not in CI: the gate runs it, and a
   later change to the questions is checked only if the gate runs it again.
 - Bad, because the full months take 20 GB on disk: 6.9 GB in `RAW.duckdb` and
