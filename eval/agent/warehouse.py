@@ -14,9 +14,13 @@ from docgap.config import load_config
 from docgap.grade import Result
 from docgap.manifest import Marts, read_marts
 
-__all__ = ["SqlError", "SqlTimeout", "Warehouse", "connect_marts", "copy_marts"]
+__all__ = ["SOURCES", "SqlError", "SqlTimeout", "Warehouse", "connect_marts", "copy_marts"]
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+# The sources a warehouse is built from: keep in sync with `SOURCES` in loader/load_duckdb.py.
+SOURCES = ("sample", "fixture", "full")
 
 
 class SqlError(Exception):
@@ -174,7 +178,7 @@ class Warehouse:
 def main(argv: list[str] | None = None) -> None:
     """Build the agent's marts-only database from a dbt build and its manifest."""
     parser = argparse.ArgumentParser(description=main.__doc__)
-    parser.add_argument("source", choices=["sample", "fixture", "full"])
+    parser.add_argument("source", choices=SOURCES)
     args = parser.parse_args(argv)
     config = load_config(ROOT / "docgap.toml").manifest
     marts, _ = read_marts(ROOT / "warehouse" / "dbt" / "target" / "manifest.json", config)

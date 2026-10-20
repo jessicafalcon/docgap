@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import gzip
 import hashlib
-import tomllib
 from pathlib import Path
 
 import offline_sample
@@ -167,8 +166,7 @@ def test_an_output_matching_the_lock_is_not_cut_again(tmp_path: Path) -> None:
 
 
 def test_lock_pins_a_sample_and_a_fixture_file_per_source() -> None:
-    sources = tomllib.loads(SOURCES_LOCK.read_text(encoding="utf-8"))["files"]
-    months = [s["name"].removesuffix(".gz") for s in sources]
+    months = [name.removesuffix(".gz") for name in read_lock(SOURCES_LOCK)]
     expected = [f"{d}/{m}" for m in months for d in ("data/sample", "fixtures/damir")]
     assert list(read_lock(SAMPLE_LOCK)) == expected
 
@@ -192,7 +190,9 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     source = _gz(tmp_path / "A202501.csv.gz", [_line(i) for i in range(200)])
     size, sha = digest_file(source)
     lock = tmp_path / "sources.lock"
-    lock.write_text(f'[[files]]\nname = "A202501.csv.gz"\nbytes = {size}\nsha256 = "{sha}"\n')
+    lock.write_text(
+        f'[[files]]\nname = "A202501.csv.gz"\nrows = 200\nbytes = {size}\nsha256 = "{sha}"\n'
+    )
     for name, value in {
         "ROOT": tmp_path,
         "SOURCES_LOCK": lock,

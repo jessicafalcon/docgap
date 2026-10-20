@@ -166,7 +166,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Cut every file again and write its facts to loader/sample.lock instead of checking them.",
     )
     args = parser.parse_args(argv)
-    sources = tomllib.loads(SOURCES_LOCK.read_text(encoding="utf-8"))["files"]
+    sources = read_lock(SOURCES_LOCK)
     locked = {} if args.update_lock else read_lock(SAMPLE_LOCK)
     SAMPLE_DIR.mkdir(parents=True, exist_ok=True)
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
@@ -179,10 +179,9 @@ def main(argv: list[str] | None = None) -> None:
         facts[name] = refresh(source, source_pin, out, one_in, locked.get(name))
         return facts[name]
 
-    for source in sources:
-        month = source["name"].removesuffix(".gz")
-        pin = (source["bytes"], source["sha256"])
-        sample = step(SOURCE_DIR / source["name"], pin, SAMPLE_DIR / month, SAMPLE_ONE_IN)
+    for source, pin in sources.items():
+        month = source.removesuffix(".gz")
+        sample = step(SOURCE_DIR / source, pin[1:], SAMPLE_DIR / month, SAMPLE_ONE_IN)
         step(SAMPLE_DIR / month, sample[1:], FIXTURE_DIR / month, FIXTURE_ONE_IN)
     for name, f in facts.items():
         print(f"{name}: {f.rows} rows, {f.bytes} bytes, sha256 {f.sha256}")
