@@ -7,8 +7,11 @@ from pathlib import Path
 
 import duckdb
 import pytest
-from load_duckdb import DDL, check_header, load, locked_files, raw_columns
-from offline_sample import FIELDS, FIXTURE_DIR, SOURCE_DIR, Facts, digest_file
+import yaml
+from load_duckdb import DDL, SOURCES, check_header, load, locked_files, raw_columns
+from offline_sample import FIELDS, FIXTURE_DIR, ROOT, SOURCE_DIR, Facts, digest_file
+
+from eval.agent import warehouse
 
 FIXTURE = locked_files(FIXTURE_DIR)
 COLUMNS = raw_columns(DDL.read_text())
@@ -83,8 +86,14 @@ def test_the_full_months_are_the_source_files_sources_lock_pins() -> None:
         "A202502.csv.gz",
         "A202503.csv.gz",
     ]
-    # The brief's count for the three months, measured by `loader/profile_sources.py`.
+    # The three months' data lines, counted with `awk` apart from DuckDB (ADR 0012).
     assert sum(pin.rows for pin in full.values()) == 107_232_480
+
+
+def test_every_source_has_a_dbt_target_and_an_agent_database() -> None:
+    profiles = yaml.safe_load((ROOT / "warehouse" / "dbt" / "profiles.yml").read_text())
+
+    assert set(SOURCES) == set(warehouse.SOURCES) == set(profiles["docgap"]["outputs"])
 
 
 def test_a_rerun_loads_nothing(tmp_path: Path) -> None:

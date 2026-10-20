@@ -269,8 +269,8 @@ Update after every PR and merge, in the same change. A new session resumes from 
       DuckDB (`full`: load, dbt target, agent database, gold check), each file's
       rows pinned in `sources.lock`, and the decision record that the 40 pass the
       full-month check before they merge (ADR 0037).
-    - **4c:** `feat/eval-questions`, after `devils-advocate` on the split (two PRs
-      before the lock). The checks the 40 add to `eval/questions.py` (the no-trap
+    - **4c:** `feat/eval-questions`, the second of the two PRs `devils-advocate`
+      set before the baseline docs lock. The checks the 40 add to `eval/questions.py` (the no-trap
       readings in `SWAPS`, a required `trap` whose swap changes the result, the
       aggregate rule, the question set in the CLI), the 40 with gold SQL and their
       tests, `resolve` checked by hand on 10 gold queries over a dbt-parsed

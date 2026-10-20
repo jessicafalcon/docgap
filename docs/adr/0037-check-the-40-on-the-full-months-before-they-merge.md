@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-10-20
 - **Superseded by:** none
+- **Amends:** [0013](0013-offline-sample-by-hashed-grain-key.md), whose full-month check ran
+  "before the trial"
 
 ## Context and Problem Statement
 
@@ -19,7 +21,7 @@ CI. When does the check run?
 
 ## Considered Options
 
-1. **Before the trial**, after the questions merge, as the brief first set it.
+1. **Before the trial**, after the questions merge, as ADR 0013 and the brief set it.
 2. **Before the baseline docs lock**, after the questions merge.
 3. **Before the questions merge:** the full months load offline in their own pull
    request first, and the questions' pull request runs the check in its gate.
