@@ -47,7 +47,13 @@ The result is reported whatever it turns out to be.
    together, or the reimbursement base with every share), and 20 a `FLT_`
    measure, at most 6 on any one. In the drafter probe, a fact `FLT_` column's
    draft didn't carry its filter, so a question whose measure twins are both
-   undocumented in the baseline fails in every arm (ADR 0036).
+   undocumented in the baseline fails in every arm (ADR 0036). No gold query
+   reads the aggregate, and a no-trap question summing `PRS_REM_MNT` needs a fact
+   column the aggregate lacks. Each question's main trap is ruled out by its
+   text and changes its gold result on the sample (ADR 0038).
+7. **Checked on the full months before they merge.** Every gold query and every
+   reading of it runs on the three full months before the questions merge,
+   since the split can be computed after (ADR 0037).
 
 ## The split
 
@@ -283,6 +289,8 @@ promise a detectable headline.
   whose order the FQN decides.
 - Grade reason codes per arm, and infrastructure failures per arm.
 - The Phase 3 baseline next to the session's baseline.
+- Each gold query fixed after the questions merged, and whether its question is
+  holdout (ADR 0037).
 - Every deviation from this protocol, with its decision record.
 
 ## Witnessing the tag
@@ -290,7 +298,9 @@ promise a detectable headline.
 Git sets tag and commit dates from the committer's clock, so they prove nothing
 on their own (ADRs 0004 and 0017). The repo is public before the tag (ADR 0017), and the
 tag comes after the gold results are materialized, so a gold query that breaks
-the rules above is fixed before it. The order is:
+the rules above is fixed before it. Such a fix comes after the questions merge,
+when the split can be computed, so the results list each question fixed then and
+whether it is holdout (ADR 0037). The order is:
 
 1. Run gitleaks over the full history and the private-terms guard over every
    commit message.

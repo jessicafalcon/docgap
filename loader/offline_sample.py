@@ -20,7 +20,17 @@ import tomllib
 from pathlib import Path
 from typing import NamedTuple
 
-__all__ = ["Facts", "cut", "digest_file", "grain_key", "keeps", "main", "read_lock", "refresh"]
+__all__ = [
+    "Facts",
+    "cut",
+    "digest_file",
+    "grain_key",
+    "keeps",
+    "main",
+    "open_source",
+    "read_lock",
+    "refresh",
+]
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES_LOCK = ROOT / "loader" / "sources.lock"
@@ -70,7 +80,8 @@ def digest_file(path: Path) -> tuple[int, str]:
         return path.stat().st_size, hashlib.file_digest(f, "sha256").hexdigest()
 
 
-def _open(path: Path) -> io.BufferedIOBase:
+def open_source(path: Path) -> io.BufferedIOBase:
+    """Open a source file's bytes, decompressed when it is gzipped."""
     return gzip.open(path, "rb") if path.suffix == ".gz" else path.open("rb")
 
 
@@ -87,7 +98,7 @@ def cut(source: Path, out: Path, one_in: int, pinned: Facts | None) -> Facts:
     tmp = out.with_name(f"{out.name}.tmp-{os.getpid()}")
     rows = 0
     try:
-        with _open(source) as lines, tmp.open("wb") as sink:
+        with open_source(source) as lines, tmp.open("wb") as sink:
             sink.write(next(lines))
             for line in lines:
                 if keeps(line, one_in):
@@ -120,7 +131,7 @@ def refresh(
 
 
 def read_lock(path: Path) -> dict[str, Facts]:
-    """Return the facts `sample.lock` pins, by the output's repo-relative path."""
+    """Return the facts a lock pins, by file name: repo-relative in `sample.lock`, bare in `sources.lock`."""
     files = tomllib.loads(path.read_text(encoding="utf-8"))["files"]
     return {f["name"]: Facts(f["rows"], f["bytes"], f["sha256"]) for f in files}
 
@@ -155,7 +166,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Cut every file again and write its facts to loader/sample.lock instead of checking them.",
     )
     args = parser.parse_args(argv)
-    sources = tomllib.loads(SOURCES_LOCK.read_text(encoding="utf-8"))["files"]
+    sources = read_lock(SOURCES_LOCK)
     locked = {} if args.update_lock else read_lock(SAMPLE_LOCK)
     SAMPLE_DIR.mkdir(parents=True, exist_ok=True)
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
@@ -168,10 +179,9 @@ def main(argv: list[str] | None = None) -> None:
         facts[name] = refresh(source, source_pin, out, one_in, locked.get(name))
         return facts[name]
 
-    for source in sources:
-        month = source["name"].removesuffix(".gz")
-        pin = (source["bytes"], source["sha256"])
-        sample = step(SOURCE_DIR / source["name"], pin, SAMPLE_DIR / month, SAMPLE_ONE_IN)
+    for source, pin in sources.items():
+        month = source.removesuffix(".gz")
+        sample = step(SOURCE_DIR / source, pin[1:], SAMPLE_DIR / month, SAMPLE_ONE_IN)
         step(SAMPLE_DIR / month, sample[1:], FIXTURE_DIR / month, FIXTURE_ONE_IN)
     for name, f in facts.items():
         print(f"{name}: {f.rows} rows, {f.bytes} bytes, sha256 {f.sha256}")
