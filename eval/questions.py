@@ -502,7 +502,7 @@ def main(argv: list[str] | None = None) -> None:
     gold = commands.add_parser("gold", help="run the gold SQL on the sample and store its results")
     gold.add_argument("--check", action="store_true", help="compare with the stored results")
     run = commands.add_parser("check", help="run every gold query on a source's agent database")
-    run.add_argument("source", choices=["sample", "fixture"])
+    run.add_argument("source", choices=["sample", "fixture", "full"])
     args = parser.parse_args(argv)
     config = load_config(ROOT / "docgap.toml")
     database, schema = config.manifest.mart_database, config.manifest.mart_schema

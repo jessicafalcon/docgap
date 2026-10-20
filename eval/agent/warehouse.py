@@ -174,7 +174,7 @@ class Warehouse:
 def main(argv: list[str] | None = None) -> None:
     """Build the agent's marts-only database from a dbt build and its manifest."""
     parser = argparse.ArgumentParser(description=main.__doc__)
-    parser.add_argument("source", choices=["sample", "fixture"])
+    parser.add_argument("source", choices=["sample", "fixture", "full"])
     args = parser.parse_args(argv)
     config = load_config(ROOT / "docgap.toml").manifest
     marts, _ = read_marts(ROOT / "warehouse" / "dbt" / "target" / "manifest.json", config)

@@ -1,11 +1,12 @@
-"""Load the offline sample or the CI fixture into DuckDB's `RAW.DAMIR.PRESTATIONS`.
+"""Load the offline sample, the CI fixture or the full months into DuckDB's `RAW.DAMIR.PRESTATIONS`.
 
 The offline stand-in for the Snowflake PUT and `COPY`: the same table, from the same
-DDL, over files pinned by `loader/sample.lock` (ADR 0013). Each file is checked
-against the lock and its header against the DDL, then loaded in one transaction with
-its row in `RAW.DAMIR.LOADED_FILES`, so a re-run loads nothing twice.
+DDL, over files pinned by `loader/sample.lock` (ADR 0013), or, for the three full
+months the gold queries are checked on, by `loader/sources.lock` (ADR 0037). Each
+file is checked against its lock and its header against the DDL, then loaded in one
+transaction with its row in `RAW.DAMIR.LOADED_FILES`, so a re-run loads nothing twice.
 
-    uv run python loader/load_duckdb.py {sample,fixture}
+    uv run python loader/load_duckdb.py {sample,fixture,full}
 """
 
 from __future__ import annotations
@@ -18,14 +19,25 @@ from pathlib import Path
 
 import duckdb
 import sqlglot
-from offline_sample import FIXTURE_DIR, ROOT, SAMPLE_DIR, SAMPLE_LOCK, Facts, digest_file, read_lock
+from offline_sample import (
+    FIXTURE_DIR,
+    ROOT,
+    SAMPLE_DIR,
+    SAMPLE_LOCK,
+    SOURCE_DIR,
+    SOURCES_LOCK,
+    Facts,
+    digest_file,
+    open_source,
+    read_lock,
+)
 from sqlglot import exp
 
 __all__ = ["DDL", "check_header", "load", "locked_files", "main", "raw_columns"]
 
 DDL = ROOT / "loader" / "raw_prestations.sql"
 WAREHOUSE_DIR = ROOT / "data" / "warehouse"
-SOURCES = {"sample": SAMPLE_DIR, "fixture": FIXTURE_DIR}
+SOURCES = {"sample": SAMPLE_DIR, "fixture": FIXTURE_DIR, "full": SOURCE_DIR}
 
 
 def raw_columns(ddl: str) -> list[str]:
@@ -40,7 +52,13 @@ def raw_columns(ddl: str) -> list[str]:
 
 
 def locked_files(directory: Path) -> dict[Path, Facts]:
-    """Return the files `sample.lock` pins in `directory`, with their pins."""
+    """Return the files a lock pins in `directory`, with their pins.
+
+    The source files are `sources.lock`'s, named bare; the cuts are `sample.lock`'s,
+    named from the repo root.
+    """
+    if directory == SOURCE_DIR:
+        return {SOURCE_DIR / name: pin for name, pin in read_lock(SOURCES_LOCK).items()}
     return {
         ROOT / name: pin
         for name, pin in read_lock(SAMPLE_LOCK).items()
@@ -57,7 +75,7 @@ def check_header(path: Path, columns: list[str]) -> None:
     Raises:
         ValueError: the header differs, naming the first field that does.
     """
-    with path.open("rb") as f:
+    with open_source(path) as f:
         found = f.readline().removesuffix(b"\n").decode("ascii").split(";")
     expected = [*columns[:-1], ""]
     for i, (a, b) in enumerate(zip_longest(found, expected)):
@@ -116,7 +134,8 @@ def load(files: Mapping[Path, Facts], db: Path, ddl: str) -> dict[str, int]:
             con.begin()
             # Types come from the table, as in Snowflake's `COPY`: a value that doesn't
             # parse aborts the statement, like `ON_ERROR = ABORT_STATEMENT`. An empty
-            # field is NULL. `COPY` takes no bound path, so a quote in it is doubled.
+            # field is NULL. A `.gz` file is read decompressed. `COPY` takes no bound
+            # path, so a quote in it is doubled.
             source = path.as_posix().replace("'", "''")
             copied = con.execute(
                 f"COPY RAW.DAMIR.PRESTATIONS FROM '{source}' (DELIMITER ';', HEADER true)"
@@ -135,11 +154,13 @@ def load(files: Mapping[Path, Facts], db: Path, ddl: str) -> dict[str, int]:
 
 def main(argv: list[str] | None = None) -> None:
     """Load one source's locked files into `data/warehouse/<source>/RAW.duckdb`."""
-    parser = argparse.ArgumentParser(description="Load the offline sample or the CI fixture.")
+    parser = argparse.ArgumentParser(
+        description="Load the offline sample, the CI fixture or the full months."
+    )
     parser.add_argument("source", choices=sorted(SOURCES))
     args = parser.parse_args(argv)
     directory = SOURCES[args.source]
-    # The database is named after its file, so both sources are `RAW`, in their own directory.
+    # The database is named after its file, so every source is `RAW`, in its own directory.
     db = WAREHOUSE_DIR / args.source / "RAW.duckdb"
     for name, rows in load(locked_files(directory), db, DDL.read_text()).items():
         where = (directory / name).relative_to(ROOT)

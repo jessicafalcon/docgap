@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import shutil
 from decimal import Decimal
 from pathlib import Path
@@ -7,7 +8,7 @@ from pathlib import Path
 import duckdb
 import pytest
 from load_duckdb import DDL, check_header, load, locked_files, raw_columns
-from offline_sample import FIELDS, FIXTURE_DIR, Facts, digest_file
+from offline_sample import FIELDS, FIXTURE_DIR, SOURCE_DIR, Facts, digest_file
 
 FIXTURE = locked_files(FIXTURE_DIR)
 COLUMNS = raw_columns(DDL.read_text())
@@ -24,8 +25,9 @@ def _rows(db: Path) -> tuple[int, int]:
 
 
 def _write(path: Path, lines: list[bytes]) -> dict[Path, Facts]:
-    """Write `lines` to `path` and pin the file as it is."""
-    path.write_bytes(b"".join(lines))
+    """Write `lines` to `path`, gzipped when it ends in `.gz`, and pin the file as it is."""
+    data = b"".join(lines)
+    path.write_bytes(gzip.compress(data, mtime=0) if path.suffix == ".gz" else data)
     return {path: Facts(len(lines) - 1, *digest_file(path))}
 
 
@@ -56,6 +58,33 @@ def test_fixture_loads_the_rows_its_lock_pins(tmp_path: Path) -> None:
     assert len(FIXTURE) == 3
     assert loaded == {path.name: pin.rows for path, pin in FIXTURE.items()}
     assert _rows(db) == (sum(pin.rows for pin in FIXTURE.values()), len(FIXTURE))
+
+
+def test_a_gzipped_file_loads_its_data_lines(tmp_path: Path) -> None:
+    files = _write(tmp_path / "A202501.csv.gz", _lines(3))
+
+    assert load(files, tmp_path / "RAW.duckdb", DDL.read_text()) == {"A202501.csv.gz": 3}
+
+
+def test_a_gzipped_header_is_checked_decompressed(tmp_path: Path) -> None:
+    header, *rows = _lines(1)
+    path = tmp_path / "A202501.csv.gz"
+    _write(path, [header.replace(b"AGE_BEN_SNDS", b"AGE_BEN"), *rows])
+
+    with pytest.raises(ValueError, match="at field 3"):
+        check_header(path, COLUMNS)
+
+
+def test_the_full_months_are_the_source_files_sources_lock_pins() -> None:
+    full = locked_files(SOURCE_DIR)
+
+    assert sorted(path.relative_to(SOURCE_DIR).as_posix() for path in full) == [
+        "A202501.csv.gz",
+        "A202502.csv.gz",
+        "A202503.csv.gz",
+    ]
+    # The brief's count for the three months, measured by `loader/profile_sources.py`.
+    assert sum(pin.rows for pin in full.values()) == 107_232_480
 
 
 def test_a_rerun_loads_nothing(tmp_path: Path) -> None:
