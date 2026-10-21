@@ -1,0 +1,164 @@
+{
+  "first": {
+    "Q01": {
+      "notes": "Pharmacies = PSE_ACT_SNDS 50 (executing activity). Age 80 = AGE_BEN_SNDS 80. Processing month = FLX_ANN_MOI. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT SUM(PRS_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 50 AND AGE_BEN_SNDS = 80 AND FLX_ANN_MOI = 202501"
+    },
+    "Q02": {
+      "notes": "Pharmacies = PSE_ACT_SNDS 50 (executing activity). Executing professional's region = EXE_INS_REG 28 (not BEN_RES_REG). Processing month = FLX_ANN_MOI. Measure: quantity of acts = FLT_ACT_QTE (doc: prefer quantité over dénombrement). Alternative PRS_ACT_QTE WHERE PRS_REM_TYP=0 differs slightly (type-99 rows).",
+      "sql": "SELECT SUM(FLT_ACT_QTE) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 50 AND EXE_INS_REG = 28 AND FLX_ANN_MOI = 202503"
+    },
+    "Q03": {
+      "notes": "Dental surgery = PSE_ACT_SNDS 19; the doc warns dentists also appear as activity 53/54 and medical specialty 36 (2974 rows with PSE_SPE_SNDS=36 and PSE_ACT_SNDS=0), but the question says 'activity recorded as', so 19 only. Residing = BEN_RES_REG 32 (dim label 'Hauts-de-France - Nord-Pas-de-Calais-Picardie'). Processing month = FLX_ANN_MOI. Measure: SUM(PRS_REM_BSE) unfiltered ('every share included' matches the doc's no-filter reading).",
+      "sql": "SELECT SUM(PRS_REM_BSE) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 19 AND BEN_RES_REG = 32 AND FLX_ANN_MOI = 202502"
+    },
+    "Q04": {
+      "notes": "Dental surgery = PSE_ACT_SNDS 19; the doc warns dentists also appear as activity 53/54 and medical specialty 36 (2974 rows with PSE_SPE_SNDS=36 and PSE_ACT_SNDS=0), but the question says 'activity recorded as', so 19 only. Age 0-19 = AGE_BEN_SNDS 0. Care month = SOI_ANN='2025' AND SOI_MOI='01' (strings), no FLX filter. Measure: amount charged = FLT_PAI_MNT (dépense, pre-filtered). Alternative PRS_PAI_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows).",
+      "sql": "SELECT SUM(FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 19 AND AGE_BEN_SNDS = 0 AND SOI_ANN = '2025' AND SOI_MOI = '01'"
+    },
+    "Q05": {
+      "notes": "Pharmacies = PSE_ACT_SNDS 50 (executing activity). Prescriber's region = PRE_INS_REG 53 (professional, not ETP_REG_COD establishment). Processing month = FLX_ANN_MOI. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT SUM(PRS_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 50 AND PRE_INS_REG = 53 AND FLX_ANN_MOI = 202502"
+    },
+    "Q06": {
+      "notes": "Dental surgery = PSE_ACT_SNDS 19; the doc warns dentists also appear as activity 53/54 and medical specialty 36 (2974 rows with PSE_SPE_SNDS=36 and PSE_ACT_SNDS=0), but the question says 'activity recorded as', so 19 only. BEN_RES_REG 11; grouped by FLX_ANN_MOI, ordered. Measure: fees above agreed rate = FLT_DEP_MNT. Alternative PRS_DEP_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows). Doc also says dépassement is not fed for LPP and should be recomputed as paid - base; I used the stored column.",
+      "sql": "SELECT FLX_ANN_MOI, SUM(FLT_DEP_MNT) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 19 AND BEN_RES_REG = 11 GROUP BY FLX_ANN_MOI ORDER BY FLX_ANN_MOI"
+    },
+    "Q07": {
+      "notes": "Pharmacies = PSE_ACT_SNDS 50 (executing activity). BEN_RES_REG 44. Care month = SOI_ANN='2025' AND SOI_MOI='01' (strings), no FLX filter. Measure: SUM(PRS_REM_BSE) unfiltered ('every share included' matches the doc's no-filter reading).",
+      "sql": "SELECT SUM(PRS_REM_BSE) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 50 AND BEN_RES_REG = 44 AND SOI_ANN = '2025' AND SOI_MOI = '01'"
+    },
+    "Q08": {
+      "notes": "Excluded PSE_ACT_SNDS 0 (NON RENSEIGNE) only; 99 (VALEUR INCONNUE) kept since the question says 'not recorded' only (it does not reach the top 3 anyway). BEN_RES_REG 76, FLX 202501, top 3 by amount, labels from DIM_PROVIDER_ACTIVITY. Measure: statutory share = FLT_REM_MNT (doc: pre-filtered on PRS_REM_TYP 0 or 1). Alternative: SUM(PRS_REM_MNT) WHERE PRS_REM_TYP IN (0,1), as the PRS_REM_TYP doc says; differs because of PRS_REM_TYP=99 rows (FLT_ includes them). Top 3 (PHARMACIE, INFIRMIER, FOURNISSEUR) is the same under both readings; amounts differ.",
+      "sql": "SELECT d.PSE_ACT_SNDS_LIB, SUM(f.FLT_REM_MNT) AS amt FROM FCT_REIMBURSEMENTS f JOIN DIM_PROVIDER_ACTIVITY d ON d.PSE_ACT_SNDS = f.PSE_ACT_SNDS WHERE f.PSE_ACT_SNDS <> 0 AND f.BEN_RES_REG = 76 AND f.FLX_ANN_MOI = 202501 GROUP BY d.PSE_ACT_SNDS_LIB ORDER BY amt DESC LIMIT 3"
+    },
+    "Q09": {
+      "notes": "Prescribing activity = PSP_ACT_SNDS, excluded 0 and 99; labels taken from DIM_PROVIDER_ACTIVITY joined on PSP_ACT_SNDS (the dim is keyed on the executing code but shares the nomenclature). BEN_RES_REG 11, FLX 202503. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT d.PSE_ACT_SNDS_LIB, SUM(f.PRS_REM_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_PROVIDER_ACTIVITY d ON d.PSE_ACT_SNDS = f.PSP_ACT_SNDS WHERE f.PSP_ACT_SNDS NOT IN (0, 99) AND f.BEN_RES_REG = 11 AND f.FLX_ANN_MOI = 202503 GROUP BY d.PSE_ACT_SNDS_LIB"
+    },
+    "Q10": {
+      "notes": "Age 30-39 = AGE_BEN_SNDS 30; midwife prescriber = PSP_ACT_SNDS 21. Processing month = FLX_ANN_MOI. Measure: quantity of acts = FLT_ACT_QTE (doc: prefer quantité over dénombrement). Alternative PRS_ACT_QTE WHERE PRS_REM_TYP=0 differs slightly (type-99 rows).",
+      "sql": "SELECT SUM(FLT_ACT_QTE) FROM FCT_REIMBURSEMENTS WHERE AGE_BEN_SNDS = 30 AND PSP_ACT_SNDS = 21 AND FLX_ANN_MOI = 202502"
+    },
+    "Q11": {
+      "notes": "PSP_ACT_SNDS <> 0, PRE_INS_REG 52, care month Jan 2025, top 1 by PRS_REM_BSE. Whether 99 is kept doesn't change the answer (CHIRURGIE DENTAIRE leads by far). Measure: SUM(PRS_REM_BSE) unfiltered ('every share included' matches the doc's no-filter reading).",
+      "sql": "SELECT d.PSE_ACT_SNDS_LIB FROM FCT_REIMBURSEMENTS f JOIN DIM_PROVIDER_ACTIVITY d ON d.PSE_ACT_SNDS = f.PSP_ACT_SNDS WHERE f.PSP_ACT_SNDS <> 0 AND f.PRE_INS_REG = 52 AND f.SOI_ANN = '2025' AND f.SOI_MOI = '01' GROUP BY d.PSE_ACT_SNDS_LIB ORDER BY SUM(f.PRS_REM_BSE) DESC LIMIT 1"
+    },
+    "Q12": {
+      "notes": "Excluded PSE_ACT_SNDS 0 and 99; BEN_RES_REG 24; FLX 202502; one row per activity label. Measure: amount charged = FLT_PAI_MNT (dépense, pre-filtered). Alternative PRS_PAI_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows).",
+      "sql": "SELECT d.PSE_ACT_SNDS_LIB, SUM(f.FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_PROVIDER_ACTIVITY d ON d.PSE_ACT_SNDS = f.PSE_ACT_SNDS WHERE f.PSE_ACT_SNDS NOT IN (0, 99) AND f.BEN_RES_REG = 24 AND f.FLX_ANN_MOI = 202502 GROUP BY d.PSE_ACT_SNDS_LIB"
+    },
+    "Q13": {
+      "notes": "Excluded PSE_ACT_SNDS 0 only; EXE_INS_REG 44; FLX 202501; top 3. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative. Top 3 (PHARMACIE, INFIRMIER, TRANSPORTEUR) is stable with FLT_REM_MNT too.",
+      "sql": "SELECT d.PSE_ACT_SNDS_LIB, SUM(f.PRS_REM_MNT) AS amt FROM FCT_REIMBURSEMENTS f JOIN DIM_PROVIDER_ACTIVITY d ON d.PSE_ACT_SNDS = f.PSE_ACT_SNDS WHERE f.PSE_ACT_SNDS <> 0 AND f.EXE_INS_REG = 44 AND f.FLX_ANN_MOI = 202501 GROUP BY d.PSE_ACT_SNDS_LIB ORDER BY amt DESC LIMIT 3"
+    },
+    "Q14": {
+      "notes": "'Not recorded' = PSE_ACT_SNDS 0 (NON RENSEIGNE), not 99. EXE_INS_REG 93, FLX 202503. Measure: fees above agreed rate = FLT_DEP_MNT. Alternative PRS_DEP_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows). Doc also says dépassement is not fed for LPP and should be recomputed as paid - base; I used the stored column.",
+      "sql": "SELECT SUM(FLT_DEP_MNT) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 0 AND EXE_INS_REG = 93 AND FLX_ANN_MOI = 202503"
+    },
+    "Q15": {
+      "notes": "Excluded AGE_BEN_SNDS 99; BEN_RES_REG 27; FLX 202503; labels from DIM_AGE_BRACKET. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT a.AGE_BEN_SNDS_LIB, SUM(f.PRS_REM_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_AGE_BRACKET a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS WHERE f.AGE_BEN_SNDS <> 99 AND f.BEN_RES_REG = 27 AND f.FLX_ANN_MOI = 202503 GROUP BY a.AGE_BEN_SNDS_LIB"
+    },
+    "Q16": {
+      "notes": "Fund region = ORG_CLE_REG 28; age 70 bracket; FLX 202501. Measure: statutory share = FLT_REM_MNT (doc: pre-filtered on PRS_REM_TYP 0 or 1). Alternative: SUM(PRS_REM_MNT) WHERE PRS_REM_TYP IN (0,1), as the PRS_REM_TYP doc says; differs because of PRS_REM_TYP=99 rows (FLT_ includes them).",
+      "sql": "SELECT SUM(FLT_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE AGE_BEN_SNDS = 70 AND ORG_CLE_REG = 28 AND FLX_ANN_MOI = 202501"
+    },
+    "Q17": {
+      "notes": "Executing establishment region = ETE_REG_COD 53; age 80; care month Jan 2025. Measure: SUM(PRS_REM_BSE) unfiltered ('every share included' matches the doc's no-filter reading).",
+      "sql": "SELECT SUM(PRS_REM_BSE) FROM FCT_REIMBURSEMENTS WHERE AGE_BEN_SNDS = 80 AND ETE_REG_COD = 53 AND SOI_ANN = '2025' AND SOI_MOI = '01'"
+    },
+    "Q18": {
+      "notes": "Prescribing establishment region = ETP_REG_COD 11 (not PRE_INS_REG); exclude age 99; FLX 202502. Measure: amount charged = FLT_PAI_MNT (dépense, pre-filtered). Alternative PRS_PAI_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows).",
+      "sql": "SELECT a.AGE_BEN_SNDS_LIB, SUM(f.FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_AGE_BRACKET a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS WHERE f.AGE_BEN_SNDS <> 99 AND f.ETP_REG_COD = 11 AND f.FLX_ANN_MOI = 202502 GROUP BY a.AGE_BEN_SNDS_LIB"
+    },
+    "Q19": {
+      "notes": "EXE_INS_REG 52; exclude age 99; FLX 202502; top 1 with label and amount (70-79 leads clearly). Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT a.AGE_BEN_SNDS_LIB, SUM(f.PRS_REM_MNT) AS amt FROM FCT_REIMBURSEMENTS f JOIN DIM_AGE_BRACKET a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS WHERE f.AGE_BEN_SNDS <> 99 AND f.EXE_INS_REG = 52 AND f.FLX_ANN_MOI = 202502 GROUP BY a.AGE_BEN_SNDS_LIB ORDER BY amt DESC LIMIT 1"
+    },
+    "Q20": {
+      "notes": "Age 0-19 = 0; PRE_INS_REG 84; FLX 202501. Measure: quantity of acts = FLT_ACT_QTE (doc: prefer quantité over dénombrement). Alternative PRS_ACT_QTE WHERE PRS_REM_TYP=0 differs slightly (type-99 rows).",
+      "sql": "SELECT SUM(FLT_ACT_QTE) FROM FCT_REIMBURSEMENTS WHERE AGE_BEN_SNDS = 0 AND PRE_INS_REG = 84 AND FLX_ANN_MOI = 202501"
+    },
+    "Q21": {
+      "notes": "Prescribing activity dental = PSP_ACT_SNDS 19; exclude age 99; FLX 202503. Measure: SUM(PRS_REM_BSE) unfiltered ('every share included' matches the doc's no-filter reading).",
+      "sql": "SELECT a.AGE_BEN_SNDS_LIB, SUM(f.PRS_REM_BSE) FROM FCT_REIMBURSEMENTS f JOIN DIM_AGE_BRACKET a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS WHERE f.AGE_BEN_SNDS <> 99 AND f.PSP_ACT_SNDS = 19 AND f.FLX_ANN_MOI = 202503 GROUP BY a.AGE_BEN_SNDS_LIB"
+    },
+    "Q22": {
+      "notes": "Executing professional's region = EXE_INS_REG, exclude 99; nursing = PSE_ACT_SNDS 24; FLX 202501; top 3 region labels from DIM_REGION joined on EXE_INS_REG. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT g.BEN_RES_REG_LIB, SUM(f.PRS_REM_MNT) AS amt FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION g ON g.BEN_RES_REG = f.EXE_INS_REG WHERE f.EXE_INS_REG <> 99 AND f.PSE_ACT_SNDS = 24 AND f.FLX_ANN_MOI = 202501 GROUP BY g.BEN_RES_REG_LIB ORDER BY amt DESC LIMIT 3"
+    },
+    "Q23": {
+      "notes": "BEN_RES_REG all 14 codes incl. 99 'Inconnu'; physiotherapy = PSE_ACT_SNDS 26 (MASSEUR - KINESITHERAPEUTE); FLX 202502. Measure: statutory share = FLT_REM_MNT (doc: pre-filtered on PRS_REM_TYP 0 or 1). Alternative: SUM(PRS_REM_MNT) WHERE PRS_REM_TYP IN (0,1), as the PRS_REM_TYP doc says; differs because of PRS_REM_TYP=99 rows (FLT_ includes them).",
+      "sql": "SELECT g.BEN_RES_REG_LIB, SUM(f.FLT_REM_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION g ON g.BEN_RES_REG = f.BEN_RES_REG WHERE f.PSE_ACT_SNDS = 26 AND f.FLX_ANN_MOI = 202502 GROUP BY g.BEN_RES_REG_LIB"
+    },
+    "Q24": {
+      "notes": "Pharmacies = PSE_ACT_SNDS 50 (executing activity). Prescriber region = PRE_INS_REG, exclude 99; care month Jan 2025. Measure: SUM(PRS_REM_BSE) unfiltered ('every share included' matches the doc's no-filter reading).",
+      "sql": "SELECT g.BEN_RES_REG_LIB, SUM(f.PRS_REM_BSE) FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION g ON g.BEN_RES_REG = f.PRE_INS_REG WHERE f.PRE_INS_REG <> 99 AND f.PSE_ACT_SNDS = 50 AND f.SOI_ANN = '2025' AND f.SOI_MOI = '01' GROUP BY g.BEN_RES_REG_LIB"
+    },
+    "Q25": {
+      "notes": "Prescribing establishment region = ETP_REG_COD, exclude 99; laboratory = PSE_ACT_SNDS 30; FLX 202503; names only, top 3. Measure: amount charged = FLT_PAI_MNT (dépense, pre-filtered). Alternative PRS_PAI_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows). Top 3 identical under both readings, but 3rd place (Grand Est 251,609) is only ~500 EUR ahead of Languedoc-Roussillon-Midi-Pyrénées (251,112): fragile.",
+      "sql": "SELECT g.BEN_RES_REG_LIB FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION g ON g.BEN_RES_REG = f.ETP_REG_COD WHERE f.ETP_REG_COD <> 99 AND f.PSE_ACT_SNDS = 30 AND f.FLX_ANN_MOI = 202503 GROUP BY g.BEN_RES_REG_LIB ORDER BY SUM(f.FLT_PAI_MNT) DESC LIMIT 3"
+    },
+    "Q26": {
+      "notes": "EXE_INS_REG all incl. 99; age 60; FLX 202501. Measure: fees above agreed rate = FLT_DEP_MNT. Alternative PRS_DEP_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows). Doc also says dépassement is not fed for LPP and should be recomputed as paid - base; I used the stored column.",
+      "sql": "SELECT g.BEN_RES_REG_LIB, SUM(f.FLT_DEP_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION g ON g.BEN_RES_REG = f.EXE_INS_REG WHERE f.AGE_BEN_SNDS = 60 AND f.FLX_ANN_MOI = 202501 GROUP BY g.BEN_RES_REG_LIB"
+    },
+    "Q27": {
+      "notes": "PRE_INS_REG all incl. 99; nursing PSE_ACT_SNDS 24; care month Jan 2025. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT g.BEN_RES_REG_LIB, SUM(f.PRS_REM_MNT) FROM FCT_REIMBURSEMENTS f JOIN DIM_REGION g ON g.BEN_RES_REG = f.PRE_INS_REG WHERE f.PSE_ACT_SNDS = 24 AND f.SOI_ANN = '2025' AND f.SOI_MOI = '01' GROUP BY g.BEN_RES_REG_LIB"
+    },
+    "Q28": {
+      "notes": "BEN_RES_REG 53; March minus February by FLX_ANN_MOI. Measure: statutory share = FLT_REM_MNT (doc: pre-filtered on PRS_REM_TYP 0 or 1). Alternative: SUM(PRS_REM_MNT) WHERE PRS_REM_TYP IN (0,1), as the PRS_REM_TYP doc says; differs because of PRS_REM_TYP=99 rows (FLT_ includes them).",
+      "sql": "SELECT SUM(CASE WHEN FLX_ANN_MOI = 202503 THEN FLT_REM_MNT ELSE 0 END) - SUM(CASE WHEN FLX_ANN_MOI = 202502 THEN FLT_REM_MNT ELSE 0 END) FROM FCT_REIMBURSEMENTS WHERE BEN_RES_REG = 53"
+    },
+    "Q29": {
+      "notes": "Pharmacies = PSE_ACT_SNDS 50 (executing activity). Age 0; by FLX_ANN_MOI ordered. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT FLX_ANN_MOI, SUM(PRS_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 50 AND AGE_BEN_SNDS = 0 GROUP BY FLX_ANN_MOI ORDER BY FLX_ANN_MOI"
+    },
+    "Q30": {
+      "notes": "Nurses = executing PSE_ACT_SNDS 24; age 80; by FLX_ANN_MOI with LAG difference, NULL for first month. Measure: quantity of acts = FLT_ACT_QTE (doc: prefer quantité over dénombrement). Alternative PRS_ACT_QTE WHERE PRS_REM_TYP=0 differs slightly (type-99 rows).",
+      "sql": "SELECT FLX_ANN_MOI, qte, qte - LAG(qte) OVER (ORDER BY FLX_ANN_MOI) FROM (SELECT FLX_ANN_MOI, SUM(FLT_ACT_QTE) AS qte FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 24 AND AGE_BEN_SNDS = 80 GROUP BY FLX_ANN_MOI) t ORDER BY FLX_ANN_MOI"
+    },
+    "Q31": {
+      "notes": "Fund region = ORG_CLE_REG 11; March minus January. Measure: SUM(PRS_REM_BSE) unfiltered ('every share included' matches the doc's no-filter reading).",
+      "sql": "SELECT SUM(CASE WHEN FLX_ANN_MOI = 202503 THEN PRS_REM_BSE ELSE 0 END) - SUM(CASE WHEN FLX_ANN_MOI = 202501 THEN PRS_REM_BSE ELSE 0 END) FROM FCT_REIMBURSEMENTS WHERE ORG_CLE_REG = 11"
+    },
+    "Q32": {
+      "notes": "EXE_INS_REG 32; by FLX_ANN_MOI ordered. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT FLX_ANN_MOI, SUM(PRS_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE EXE_INS_REG = 32 GROUP BY FLX_ANN_MOI ORDER BY FLX_ANN_MOI"
+    },
+    "Q33": {
+      "notes": "PRE_INS_REG 44; February minus January. Measure: fees above agreed rate = FLT_DEP_MNT. Alternative PRS_DEP_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows). Doc also says dépassement is not fed for LPP and should be recomputed as paid - base; I used the stored column.",
+      "sql": "SELECT SUM(CASE WHEN FLX_ANN_MOI = 202502 THEN FLT_DEP_MNT ELSE 0 END) - SUM(CASE WHEN FLX_ANN_MOI = 202501 THEN FLT_DEP_MNT ELSE 0 END) FROM FCT_REIMBURSEMENTS WHERE PRE_INS_REG = 44"
+    },
+    "Q34": {
+      "notes": "Pharmacies = PSE_ACT_SNDS 50 (executing activity). BEN_RES_REG 28; care month Jan 2025. Measure: statutory share = FLT_REM_MNT (doc: pre-filtered on PRS_REM_TYP 0 or 1). Alternative: SUM(PRS_REM_MNT) WHERE PRS_REM_TYP IN (0,1), as the PRS_REM_TYP doc says; differs because of PRS_REM_TYP=99 rows (FLT_ includes them).",
+      "sql": "SELECT SUM(FLT_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 50 AND BEN_RES_REG = 28 AND SOI_ANN = '2025' AND SOI_MOI = '01'"
+    },
+    "Q35": {
+      "notes": "Care month Dec 2024 (SOI_ANN='2024', SOI_MOI='12'); BEN_RES_REG 44; by FLX_ANN_MOI. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT FLX_ANN_MOI, SUM(PRS_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE SOI_ANN = '2024' AND SOI_MOI = '12' AND BEN_RES_REG = 44 GROUP BY FLX_ANN_MOI ORDER BY FLX_ANN_MOI"
+    },
+    "Q36": {
+      "notes": "Care month Jan 2025 and FLX_ANN_MOI IN (202502, 202503), single total; PRE_INS_REG 11. Measure: SUM(PRS_REM_BSE) unfiltered ('every share included' matches the doc's no-filter reading).",
+      "sql": "SELECT SUM(PRS_REM_BSE) FROM FCT_REIMBURSEMENTS WHERE SOI_ANN = '2025' AND SOI_MOI = '01' AND FLX_ANN_MOI IN (202502, 202503) AND PRE_INS_REG = 11"
+    },
+    "Q37": {
+      "notes": "Executing establishment region = ETE_REG_COD 76; care month Jan 2025. Measure: amount charged = FLT_PAI_MNT (dépense, pre-filtered). Alternative PRS_PAI_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows).",
+      "sql": "SELECT SUM(FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS WHERE SOI_ANN = '2025' AND SOI_MOI = '01' AND ETE_REG_COD = 76"
+    },
+    "Q38": {
+      "notes": "Care month Jan 2025; fund region ORG_CLE_REG 52; by FLX_ANN_MOI. Measure: SUM(PRS_REM_MNT) unfiltered, which the docs define as statutory (0,1) + supplementary (>=2) shares; no real alternative.",
+      "sql": "SELECT FLX_ANN_MOI, SUM(PRS_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE SOI_ANN = '2025' AND SOI_MOI = '01' AND ORG_CLE_REG = 52 GROUP BY FLX_ANN_MOI ORDER BY FLX_ANN_MOI"
+    },
+    "Q39": {
+      "notes": "Nurses = PSE_ACT_SNDS 24; BEN_RES_REG 93; care month Jan 2025. Measure: quantity of acts = FLT_ACT_QTE (doc: prefer quantité over dénombrement). Alternative PRS_ACT_QTE WHERE PRS_REM_TYP=0 differs slightly (type-99 rows).",
+      "sql": "SELECT SUM(FLT_ACT_QTE) FROM FCT_REIMBURSEMENTS WHERE PSE_ACT_SNDS = 24 AND BEN_RES_REG = 93 AND SOI_ANN = '2025' AND SOI_MOI = '01'"
+    },
+    "Q40": {
+      "notes": "Care month Jan 2025; PRE_INS_REG 11. Measure: fees above agreed rate = FLT_DEP_MNT. Alternative PRS_DEP_MNT WHERE PRS_REM_TYP=0 differs (type-99 rows). Doc also says dépassement is not fed for LPP and should be recomputed as paid - base; I used the stored column.",
+      "sql": "SELECT SUM(FLT_DEP_MNT) FROM FCT_REIMBURSEMENTS WHERE SOI_ANN = '2025' AND SOI_MOI = '01' AND PRE_INS_REG = 11"
+    }
+  }
+}

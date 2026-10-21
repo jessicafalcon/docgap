@@ -51,7 +51,7 @@ the file is the current standard, and memory of it may be stale.
 | **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` and `uv run python -m eval.column_docs` | They rewrite the code-list seeds in `warehouse/dbt/seeds/` and the every-column docs in `eval/column_docs.json`; until they run, the byte-identity tests fail |
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` or `--target full` for the others) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`, `full`) | It copies the build's marts alone into the agent's database (ADR 0026) |
-| **The pilot's gold SQL** changes, or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/`; `gold` rewrites them. Both fail on a reading of a gold query a question doesn't declare (ADR 0033). CI runs every gold query on the fixture |
+| **The gold SQL** changes (`eval/pilot_questions.yml` or `eval/questions.yml`), or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected. Each runs both question sets, or the one `--questions pilot` or `--questions eval` names | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/` and `eval/gold/`; `gold` rewrites them. Both fail on a reading of a gold query a question doesn't declare (ADR 0033), and on a question of the 40 whose main trap gives its gold result (ADR 0038). CI runs every gold query of both sets on the fixture |
 | **A pilot pass** runs live (after my go-ahead) | `uv run --env-file .env python -m eval.pilot --pass N --limit 8` first, the smoke run; then the same command without `--limit` | Commit and push `fixtures/pilot/pass-N/` after every process, the smoke run's included. It resumes a pass in place, skipping written runs and starting the budget from its manifest; a changed input makes it refuse. A pass counts once it has made a run, and no new `N` starts while one that counts is unfinished, or once three count (ADR 0031). After the gold or the accepted results change, `--pass N --regrade` grades a written pass again, with no model call |
 | **Session start** | Read "Current status" below and the brief's current phase | Resume from the next step listed there |
 | **Planning** a phase's PR split, a design change, or anything touching the evaluation design | Skill `devils-advocate` on the plan | Bring me its verdict and "the one thing" before building |
@@ -77,10 +77,13 @@ after any fix, step 1 always runs again.
 
 1. `uv run pytest` and `uv run pre-commit run --all-files` are green. If `infra/`
    changed: `terraform fmt -check && terraform validate`. If `warehouse/`,
-   `loader/`, `fixtures/damir/` or `eval/pilot_questions.yml` changed: what CI
-   runs, `dbt build` over the fixture, `uv run docgap lint`, then
-   `uv run python -m eval.agent.warehouse fixture` and
-   `uv run python -m eval.questions check fixture`.
+   `loader/`, `fixtures/damir/`, `eval/pilot_questions.yml` or
+   `eval/questions.yml` changed: what CI runs, `dbt build` over the fixture,
+   `uv run docgap lint`, then `uv run python -m eval.agent.warehouse fixture` and
+   `uv run python -m eval.questions check fixture`. If `eval/questions.yml`
+   changed: also `uv run python -m eval.questions check full`, on the three full
+   months (ADR 0037), and the PR body quotes its output with the SHA-256 of
+   `loader/sources.lock` and of `eval/questions.yml`.
 2. Cleanup review with the four `/simplify` angles (reuse, simplification,
    efficiency, altitude), sized by what the PR changes; fix or answer the findings:
    - **Docs only** (every changed path is `*.md`): skip it; the auditor in step 3
@@ -215,7 +218,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** none. `feat/eval-questions` (Phase 3 PR 4c) is in progress.
+- **Open PRs:** `feat/eval-questions` (Phase 3 PR 4c), in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -270,12 +273,13 @@ Update after every PR and merge, in the same change. A new session resumes from 
       rows pinned in `sources.lock`, and the decision records that the 40 pass the
       full-month check before they merge (ADR 0037) and that keep the aggregate
       out of the gold and count only traps that change the result (ADR 0038).
-    - **4c:** `feat/eval-questions`, in progress, the second of the two PRs
+    - **4c:** `feat/eval-questions`, in review, the second of the two PRs
       `devils-advocate` set before the baseline docs lock. The checks the 40 add
-      to `eval/questions.py` (the no-trap readings in `SWAPS`, a required `trap` whose swap changes the result, the
-      aggregate rule, the question set in the CLI), the 40 with gold SQL and their
-      tests, `resolve` checked by hand on 10 gold queries over a dbt-parsed
-      manifest, the blind check, and `check full` in its gate.
-- **Next step:** PR 4c, as the brief's "Write 40 questions" step sets it;
-  nobody computes the split or the baseline docs draw before it merges. Then the baseline docs lock in its own PR (ADR 0021).
-  `feat/loader-snowflake` still lands before the go/no-go.
+      to `eval/questions.py` (the no-trap readings in `SWAPS`, a required `trap`
+      whose swap changes the result, the aggregate rule, the question set in the
+      CLI), the 40 with gold SQL and their tests, `resolve` checked by hand on 10
+      gold queries over a dbt-parsed manifest, the blind check, and `check full`
+      in its gate.
+- **Next step:** after 4c merges, the baseline docs lock in its own PR
+  (ADR 0021); nobody computes the split or the baseline docs draw before the
+  merge. `feat/loader-snowflake` still lands before the go/no-go.
