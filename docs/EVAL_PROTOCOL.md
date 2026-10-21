@@ -290,7 +290,7 @@ promise a detectable headline.
   whose order the FQN decides.
 - The undocumented columns whose name a baseline-documented column in another
   table shares, and which of them top-N and random-N picked: the baseline draw is
-  per FQN, so the agent can read their text in that table (ADR 0021).
+  per FQN, so the agent can read their text in that table (ADR 0039).
 - Grade reason codes per arm, and infrastructure failures per arm.
 - The Phase 3 baseline next to the session's baseline.
 - Each gold query fixed after the questions merged, and whether its question is
