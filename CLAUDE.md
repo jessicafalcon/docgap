@@ -212,13 +212,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
   when" holds and its phase-exit audit found no blockers. Phase 2's offline block
   (the brief's timeline row 3) is done except `feat/loader-snowflake`. Its "Done
   when" needs Snowflake, so the phase and its exit audit close in timeline row 7.
-  Phase 3's offline block (timeline row 4) is in progress. Phase 1 waits for the
+  Timeline row 4 is in progress: its Phase 3 steps are done (#19–#29), and
+  Phase 2's baseline docs lock and manifest freeze remain. Phase 1 waits for the
   offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/eval-questions` (Phase 3 PR 4c), in review.
+- **Open PRs:** none.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -273,13 +274,13 @@ Update after every PR and merge, in the same change. A new session resumes from 
       rows pinned in `sources.lock`, and the decision records that the 40 pass the
       full-month check before they merge (ADR 0037) and that keep the aggregate
       out of the gold and count only traps that change the result (ADR 0038).
-    - **4c:** `feat/eval-questions`, in review, the second of the two PRs
+    - **4c:** `feat/eval-questions`, merged (#29), the second of the two PRs
       `devils-advocate` set before the baseline docs lock. The checks the 40 add
       to `eval/questions.py` (the no-trap readings in `SWAPS`, a required `trap`
       whose swap changes the result, the aggregate rule, the question set in the
       CLI), the 40 with gold SQL and their tests, `resolve` checked by hand on 10
       gold queries over a dbt-parsed manifest, the blind check, and `check full`
       in its gate.
-- **Next step:** after 4c merges, the baseline docs lock in its own PR
-  (ADR 0021); nobody computes the split or the baseline docs draw before the
-  merge. `feat/loader-snowflake` still lands before the go/no-go.
+- **Next step:** the baseline docs lock in its own PR (ADR 0021), now that
+  the questions have merged, so the split and the draw may be computed; then
+  the manifest freeze. `feat/loader-snowflake` still lands before the go/no-go.
