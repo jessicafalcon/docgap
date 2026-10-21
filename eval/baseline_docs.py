@@ -29,7 +29,7 @@ from docgap.manifest import read_marts
 from eval.column_docs import DOCS, MARTS_YAML
 from eval.docs_manifest import build_manifest
 
-__all__ = ["LOCK", "document", "draw", "render_lock"]
+__all__ = ["LOCK", "document", "draw", "render_lock", "write_lock"]
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / "warehouse" / "baseline_docs.lock"
@@ -117,6 +117,18 @@ def document(marts_yaml: str, texts: Mapping[tuple[str, str], str]) -> str:
     return out.getvalue()
 
 
+def write_lock(path: Path, lock: bytes) -> None:
+    """Write the lock if it is missing; leave an equal one as it is.
+
+    Raises:
+        ValueError: the lock exists and differs, and it is frozen (ADR 0021).
+    """
+    if not path.exists():
+        write_atomic(path, lambda sink: sink.write(lock))
+    elif path.read_bytes() != lock:
+        raise ValueError(f"{path.name}: the draw changed, and the lock is frozen (ADR 0021)")
+
+
 def main() -> None:
     """Draw the lock from a parsed manifest, or check it, then write the text into the marts YAML."""
     config = load_config(ROOT / "docgap.toml")
@@ -127,10 +139,11 @@ def main() -> None:
     seed = config.seeds.baseline_docs
     locked = draw(fqns, seed)
     lock = render_lock(locked, seed=seed, total=len(fqns))
-    if not LOCK.exists():
-        write_atomic(LOCK, lambda sink: sink.write(lock))
-    elif LOCK.read_bytes() != lock:
-        sys.exit(f"{LOCK.relative_to(ROOT)}: the draw changed, and the lock is frozen (ADR 0021)")
+    # The lock first: a refused draw writes nothing to the YAML.
+    try:
+        write_lock(LOCK, lock)
+    except ValueError as error:
+        sys.exit(str(error))
     docs: dict[str, str] = json.loads(DOCS.read_text(encoding="utf-8"))
     texts = {(table, column): docs[column] for table, column in (f.split(".")[2:] for f in locked)}
     content = document(MARTS_YAML.read_text(encoding="utf-8"), texts).encode()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from random import Random
 
 import pytest
@@ -11,7 +12,7 @@ from hypothesis import strategies as st
 
 from docgap.config import load_config
 from docgap.manifest import Marts
-from eval.baseline_docs import LOCK, ROOT, document, draw, render_lock
+from eval.baseline_docs import LOCK, ROOT, document, draw, render_lock, write_lock
 from eval.column_docs import DOCS
 
 SEED = load_config(ROOT / "docgap.toml").seeds.baseline_docs
@@ -95,3 +96,14 @@ def test_document_refuses_a_description_outside_the_draw() -> None:
 def test_document_refuses_a_column_not_in_the_yaml() -> None:
     with pytest.raises(ValueError, match="not in the marts YAML"):
         document(YAML, {("T", "C"): "c"})
+
+
+def test_an_existing_lock_is_never_rewritten(tmp_path: Path) -> None:
+    # What freezes the lock: a re-run after a mart column changed fails instead of
+    # drawing again, so the regeneration test above can't follow a new draw.
+    lock = tmp_path / "baseline_docs.lock"
+    write_lock(lock, b"first\n")
+    write_lock(lock, b"first\n")
+    with pytest.raises(ValueError, match=r"frozen \(ADR 0021\)"):
+        write_lock(lock, b"second\n")
+    assert lock.read_bytes() == b"first\n"
