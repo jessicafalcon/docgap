@@ -215,7 +215,7 @@ Update after every PR and merge, in the same change. A new session resumes from 
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/full-month-duckdb` (Phase 3 PR 4b), in review.
+- **Open PRs:** none. `feat/eval-questions` (Phase 3 PR 4c) is in progress.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -265,18 +265,17 @@ Update after every PR and merge, in the same change. A new session resumes from 
     - **4a:** `docs/question-design-probe`, merged (#27). The 40's design (half
       with no measure trap, since drafts don't carry the `FLT_` filter; ADR 0036)
       and the probe's packets, drafts and runs under `fixtures/probe/`.
-    - **4b:** `feat/full-month-duckdb`, in review. The three full months on
+    - **4b:** `feat/full-month-duckdb`, merged (#28). The three full months on
       DuckDB (`full`: load, dbt target, agent database, gold check), each file's
       rows pinned in `sources.lock`, and the decision records that the 40 pass the
       full-month check before they merge (ADR 0037) and that keep the aggregate
       out of the gold and count only traps that change the result (ADR 0038).
-    - **4c:** `feat/eval-questions`, the second of the two PRs `devils-advocate`
-      set before the baseline docs lock. The checks the 40 add to `eval/questions.py` (the no-trap
-      readings in `SWAPS`, a required `trap` whose swap changes the result, the
+    - **4c:** `feat/eval-questions`, in progress, the second of the two PRs
+      `devils-advocate` set before the baseline docs lock. The checks the 40 add
+      to `eval/questions.py` (the no-trap readings in `SWAPS`, a required `trap` whose swap changes the result, the
       aggregate rule, the question set in the CLI), the 40 with gold SQL and their
       tests, `resolve` checked by hand on 10 gold queries over a dbt-parsed
       manifest, the blind check, and `check full` in its gate.
-- **Next step:** after 4b merges, PR 4c, as the brief's "Write 40 questions"
-  step sets it; nobody computes the split or the baseline docs draw before it
-  merges. Then the baseline docs lock in its own PR (ADR 0021).
+- **Next step:** PR 4c, as the brief's "Write 40 questions" step sets it;
+  nobody computes the split or the baseline docs draw before it merges. Then the baseline docs lock in its own PR (ADR 0021).
   `feat/loader-snowflake` still lands before the go/no-go.
