@@ -53,10 +53,10 @@ def build_manifest(out: Path, docs: Mapping[str, str] | None, project: Path = DB
 
     With no `docs`, the manifest has the committed baseline docs; an empty text
     leaves a column undocumented. One path builds every configuration's manifest,
-    the descriptions their only difference, so `describe()` reads each the same way (ADR 0025). `dbt parse`
-    opens no database. Each node's `root_path` is dropped, since it names the
-    temporary copy. The copy is built beside `out` and its manifest renamed over
-    it, so a crash never leaves half a file.
+    the descriptions their only difference, so `describe()` reads each the same
+    way (ADR 0025). `dbt parse` opens no database. Each node's `root_path` is
+    dropped, since it names the temporary copy. The copy is built beside `out` and
+    its manifest renamed over it, so a crash never leaves half a file.
 
     Raises:
         RuntimeError: `dbt parse` failed.

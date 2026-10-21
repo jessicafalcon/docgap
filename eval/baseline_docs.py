@@ -17,7 +17,7 @@ import io
 import json
 import sys
 import tempfile
-from collections.abc import Iterable, Mapping, MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -38,7 +38,7 @@ LOCK = ROOT / "warehouse" / "baseline_docs.lock"
 def draw(fqns: Iterable[str], seed: int) -> list[str]:
     """Return the first half of the FQNs sorted by `sha256(f"{seed}:{fqn}")`, sorted by FQN.
 
-    Half is `floor(M / 2)` of M. The FQN breaks a tie on the digest, so the order is total.
+    Half is `floor(M / 2)` of M.
 
     >>> draw(["A.S.T.X", "A.S.T.Y", "A.S.T.Z"], 3)
     ['A.S.T.X']
@@ -49,15 +49,12 @@ def draw(fqns: Iterable[str], seed: int) -> list[str]:
     listed = list(fqns)
     if len(set(listed)) != len(listed):
         raise ValueError("an FQN is listed twice")
-    ordered = sorted(
-        listed, key=lambda fqn: (hashlib.sha256(f"{seed}:{fqn}".encode()).digest(), fqn)
-    )
+    ordered = sorted(listed, key=lambda fqn: hashlib.sha256(f"{seed}:{fqn}".encode()).digest())
     return sorted(ordered[: len(ordered) // 2])
 
 
-def render_lock(locked: Iterable[str], *, seed: int, total: int) -> bytes:
-    """Return the lock file: a header naming the rule, then one FQN per line, sorted."""
-    fqns = sorted(locked)
+def render_lock(fqns: Sequence[str], *, seed: int, total: int) -> bytes:
+    """Return the lock file: a header naming the rule, then `draw`'s FQNs, one per line."""
     header = (
         "# The baseline's documented mart columns, drawn by eval/baseline_docs.py (ADR 0021):\n"
         f'# the {total} mart column FQNs sorted by sha256(f"{seed}:{{fqn}}"), the first {len(fqns)}.\n'
@@ -78,8 +75,23 @@ def _yaml() -> YAML:
 def document(marts_yaml: str, texts: Mapping[tuple[str, str], str]) -> str:
     """Return the marts YAML with each `(TABLE, COLUMN)` in `texts` described, comments kept.
 
-    A table is its model's name uppercased, as in the FQN. The description goes
-    after the column's `data_type`, replacing any earlier one, so a re-run rewrites it.
+    A table is its model's name uppercased, which is the FQN's while no mart sets an
+    alias. The description goes after the column's `data_type`, replacing any earlier
+    one, so a re-run rewrites it. `eval.docs_manifest.document_columns` sets every
+    column for a `dbt parse` copy and drops comments; this writes the committed file.
+
+    >>> print(document(
+    ...     "models:\\n  - name: t\\n    # kept\\n    columns:\\n"
+    ...     "      - name: A\\n        data_type: integer\\n",
+    ...     {("T", "A"): "Année de soins"},
+    ... ), end="")
+    models:
+      - name: t
+        # kept
+        columns:
+          - name: A
+            data_type: integer
+            description: Année de soins
 
     Raises:
         ValueError: a column in `texts` isn't in the YAML, or a column outside it
@@ -120,15 +132,10 @@ def main() -> None:
     elif LOCK.read_bytes() != lock:
         sys.exit(f"{LOCK.relative_to(ROOT)}: the draw changed, and the lock is frozen (ADR 0021)")
     docs: dict[str, str] = json.loads(DOCS.read_text(encoding="utf-8"))
-    texts = {(table, column): docs[column] for table, column in map(_table_column, locked)}
+    texts = {(table, column): docs[column] for table, column in (f.split(".")[2:] for f in locked)}
     content = document(MARTS_YAML.read_text(encoding="utf-8"), texts).encode()
     write_atomic(MARTS_YAML, lambda sink: sink.write(content))
     print(f"{LOCK.relative_to(ROOT)}: {len(locked)} of {len(fqns)} columns documented")
-
-
-def _table_column(fqn: str) -> tuple[str, str]:
-    _, _, table, column = fqn.split(".")
-    return table, column
 
 
 if __name__ == "__main__":
