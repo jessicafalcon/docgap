@@ -5,8 +5,9 @@ models:
     config:
       meta:
         owner: data-team
-    # Column descriptions are left blank until the baseline docs are drawn by the
-    # recorded rule (ADR 0021). `restricted` marks the beneficiary's demographics
+    # Only the columns in `warehouse/baseline_docs.lock` have a description, each the
+    # dictionary's text, written by `eval/baseline_docs.py` (ADR 0021): add or edit
+    # none by hand. `restricted` marks the beneficiary's demographics
     # (age bracket, sex, region of residence); every other column is published
     # open data, so `public`.
     columns:
@@ -42,26 +43,31 @@ models:
                 field: BEN_RES_REG
       - name: BEN_CMU_TOP
         data_type: integer
+        description: "Top Bénéficiaire CMU-C\nJusqu'àu mois de mars 2021,vaut ‘1’ (=‘OUI’) si la prestation qui a fait l’objet du remboursement est prise en charge au titre de la CMU-Complémentaire ET si cette prestation n’est pas exonérée du ticket modérateur pour un autre motif (exemple : ALD) car ce dernier prime sur le TOP CMU-C pour le remboursement de la prestation. A partir d'avril 2021,vaut ‘1’ (=‘OUI’) si la prestation qui a fait l’objet du remboursement est prise en charge au titre de la C2S ET si cette prestation n’est pas exonérée du ticket modérateur pour un autre motif (exemple : ALD) car ce dernier prime sur la C2S pour le remboursement de la prestation."
         config:
           meta:
             sensitivity: public
       - name: BEN_QLT_COD
         data_type: integer
+        description: Qualité du Bénéficiaire
         config:
           meta:
             sensitivity: public
       - name: BEN_SEX_COD
         data_type: integer
+        description: Sexe du Bénéficiaire
         config:
           meta:
             sensitivity: restricted
       - name: DDP_SPE_COD
         data_type: integer
+        description: Discipline de Prestation Etb Exécutant
         config:
           meta:
             sensitivity: public
       - name: ETE_CAT_SNDS
         data_type: integer
+        description: Catégorie Etb Exécutant
         config:
           meta:
             sensitivity: public
@@ -82,6 +88,7 @@ models:
             sensitivity: public
       - name: ETP_CAT_SNDS
         data_type: integer
+        description: Catégorie Etb Prescripteur
         config:
           meta:
             sensitivity: public
@@ -92,6 +99,7 @@ models:
             sensitivity: public
       - name: MFT_COD
         data_type: integer
+        description: Mode de Fixation des Tarifs Etb Exécutant
         config:
           meta:
             sensitivity: public
@@ -102,6 +110,7 @@ models:
             sensitivity: public
       - name: PRS_ACT_COG
         data_type: decimal(18, 2)
+        description: "Coefficient Global\nIndicateurs bruts destinés aux utilisateurs avertis des données, qui maitrisent les filtres sur les types de remboursement : \n- filtre impératif sur type de remboursement = 0 pour  comptabiliser les prestations sans doublon de type de remboursement puisque la totalité du coefficient global se trouve au sein de la modalité 0\n- filtre sur un type de remboursement <> 0 (choisir la valeur de la modalité en fonction du type de remboursement précis).\n\n\nIl représente un volume : quantité x coefficient tarifé de l'acte."
         config:
           meta:
             sensitivity: public
@@ -112,6 +121,7 @@ models:
             sensitivity: public
       - name: PRS_ACT_QTE
         data_type: integer
+        description: "Quantité\nIndicateurs bruts destinés aux utilisateurs avertis des données, qui maitrisent les filtres sur les types de remboursement : \n- filtre impératif sur type de remboursement = 0 pour  comptabiliser les prestations sans doublon de type de remboursement puisque la totalité de la quantité se trouve au sein de la modalité 0\n- filtre sur un type de remboursement <> 0 (choisir la valeur de la modalité en fonction du type de remboursement précis).\n\nPour compter des actes, il faut utiliser la variable « quantité d’actes ». Elle sert à tarifer et à calculer le remboursement selon la formule suivante : \nMontant remboursé = base de remboursement * quantité d’actes * taux de remboursement"
         config:
           meta:
             sensitivity: public
@@ -127,21 +137,25 @@ models:
             sensitivity: public
       - name: PRS_REM_BSE
         data_type: decimal(18, 2)
+        description: "Base de Remboursement\nCet indicateur peut s'utiliser sans filtres sur le type de remboursement. Dans ce cas, il s'agit de la base de remboursement des prestations légales d'Assurance Maladie (0,1) et des parts supplémentaires (>=2). Il peut également être filtré sur le type de remboursement (PRS_REM_TYP) selon la base de remboursement que vous souhaitez cibler.\n\nLa base de remboursement correspond au montant de la base remboursée par l'Assurance Maladie au bénéficiaire."
         config:
           meta:
             sensitivity: public
       - name: PRS_REM_MNT
         data_type: decimal(18, 2)
+        description: "Montant Versé/Remboursé\nCet indicateur peut s'utiliser sans filtres sur le type de remboursement. Dans ce cas, il s'agit du montant remboursé des prestations légales d'Assurance Maladie (0,1) et des parts supplémentaires (>=2). Il peut également être filtré sur le type de remboursement (PRS_REM_TYP) selon le montant remboursé que vous souhaitez cibler.\n\nLe montant remboursé correspond au montant payé par l'Assurance Maladie au bénéficiaire, en fonction de la base de remboursement et du taux de remboursement."
         config:
           meta:
             sensitivity: public
       - name: FLT_ACT_COG
         data_type: decimal(18, 2)
+        description: "Coefficient Global de la Prestation Préfiltré\nLe coefficient global est préfiltré sur le type de remboursement (PRS_REM_TYP) 0, il contient déjà le coefficient global de tous les types de remboursement.\n \nNB : Si ce filtre n'est pas fait, les coefficients seront doublés.\n\nIl représente un volume : quantité x coefficient tarifé de l'acte."
         config:
           meta:
             sensitivity: public
       - name: FLT_ACT_NBR
         data_type: integer
+        description: "Dénombrement de la Prestation Préfiltré\nLe dénombrement est préfiltré sur le type de remboursement (PRS_REM_TYP) 0, il contient déjà le dénombrement de tous les types de remboursement.\n \nNB : Si ce filtre n'est pas fait, les dénombrements seront doublés.\n\nAttention, il faut privilégier la quantité au dénombrement. En effet, les données du dénombrement ne sont pas remontées pour l’ensemble des régimes (elles sont remontées pour le régime général et les régimes infogérés)."
         config:
           meta:
             sensitivity: public
@@ -157,6 +171,7 @@ models:
             sensitivity: public
       - name: FLT_DEP_MNT
         data_type: decimal(18, 2)
+        description: "Montant du Dépassement de la Prestation Préfiltré\nLe montant du dépassement est préfiltré sur le type de remboursement (PRS_REM_TYP) 0, il contient déjà la dépassement de tous les types de remboursement.\n \nNB : Si ce filtre n'est pas fait, les montants seront doublés.\n\nLe montant de dépassement concerne uniquement du dépassement d’honoraires de médecins, il est non alimenté lorsqu’il s’agit de produits et prestations (LPP). Dans ce dernier cas, il faut recalculer l’indicateur de la manière suivante : Dépassement = Montant payé – base de remboursement."
         config:
           meta:
             sensitivity: public
@@ -187,6 +202,7 @@ models:
             sensitivity: public
       - name: CPL_COD
         data_type: integer
+        description: "Complément d'Acte\nUniquement des compléments d'actes Nuit, Férié, Urgences"
         config:
           meta:
             sensitivity: public
@@ -197,11 +213,13 @@ models:
             sensitivity: public
       - name: DRG_AFF_NAT
         data_type: integer
+        description: Nature du Destinataire de Règlement affiné
         config:
           meta:
             sensitivity: public
       - name: ETE_IND_TAA
         data_type: integer
+        description: "Indicateur TAA Privé/Public\nLa dimension « Indicateur TAA » permet de cibler les prestations en facturation directe à l’Assurance maladie : Actes et Consultations Externes. Pour les cibler, il faut prendre l'indicateur TAA public."
         config:
           meta:
             sensitivity: public
@@ -212,6 +230,7 @@ models:
             sensitivity: public
       - name: MTM_NAT
         data_type: integer
+        description: Modulation du Ticket Modérateur
         config:
           meta:
             sensitivity: public
@@ -237,6 +256,7 @@ models:
             sensitivity: public
       - name: PRS_REM_TYP
         data_type: integer
+        description: "Type de Remboursement\nPour prendre en compte les parts légales, il faut utiliser PRS_REM_TYP = 0 ou 1, les autres valeurs concernent les parts supplémentaires (voir modalités ci-contre)."
         config:
           meta:
             sensitivity: public
@@ -247,6 +267,7 @@ models:
             sensitivity: public
       - name: EXE_INS_REG
         data_type: integer
+        description: "Région du PS Exécutant à partir de 2015 (tables A)\nInforme de la région d’exécution de la prestation par un professionnel de santé dans un cabinet qu’il soit principal ou secondaire."
         config:
           meta:
             sensitivity: public
@@ -254,6 +275,7 @@ models:
       # the same set: one scan of the fact fewer.
       - name: PSE_ACT_SNDS
         data_type: integer
+        description: "Nature d'Activité PS Exécutant\nRenseignée pour les professions de santé non médicales (attention aux dentistes présents en nature d'activité 19, 53, 54 et spécialité médicale 36)"
         config:
           meta:
             sensitivity: public
@@ -274,6 +296,7 @@ models:
             sensitivity: public
       - name: PRE_INS_REG
         data_type: integer
+        description: "Région du PS Prescripteur à partir de 2015 (tables A)\nInforme de la région de prescription de la prestation par un professionnel de santé dans un cabinet qu’il soit principal ou secondaire."
         config:
           meta:
             sensitivity: public
@@ -284,16 +307,19 @@ models:
             sensitivity: public
       - name: PSP_ACT_CAT
         data_type: integer
+        description: Catégorie du Prescripteur
         config:
           meta:
             sensitivity: public
       - name: PSP_SPE_SNDS
         data_type: integer
+        description: "Spécialité Médicale PS Exécutant\nRenseigné pour les professions médicales (attention aux dentistes présents en nature d'activité 19, 53, 54 et spécialité médicale 36)"
         config:
           meta:
             sensitivity: public
       - name: PSP_STJ_SNDS
         data_type: integer
+        description: "Statut Juridique PS Prescripteur\nL’objet « Statut juridique du PS Perscripteur » est renseigné uniquement pour les données liquidées par les régimes RG et infogérées, il vaut ’90’ (= valeur inconnue) pour les autres."
         config:
           meta:
             sensitivity: public
@@ -305,8 +331,8 @@ models:
 
   # The dimensions hold the dictionary's code→label pairs, seeded by
   # `loader/code_list_seeds.py`. Their descriptions, like the aggregate's, state the
-  # grain in column codes only: a column's meaning waits for the baseline docs
-  # (ADR 0021). Region and age bracket are the beneficiary's
+  # grain in column codes only: a column's meaning is documented only by the baseline
+  # draw (ADR 0021). Region and age bracket are the beneficiary's
   # demographics, so `restricted` as in the fact (ADR 0022).
   - name: dim_age_bracket
     description: >-
@@ -325,6 +351,7 @@ models:
           - not_null
       - name: AGE_BEN_SNDS_LIB
         data_type: varchar
+        description: Libellé Tranche d'Age Bénéficiaire au moment des soins
         config:
           meta:
             sensitivity: restricted
@@ -340,6 +367,7 @@ models:
     columns:
       - name: PRS_NAT
         data_type: integer
+        description: "Nature de Prestation\nPermet de distinguer chaque acte principal de ses majorations."
         config:
           meta:
             sensitivity: public
@@ -349,6 +377,7 @@ models:
       # Empty for the codes the 2024 dictionary lacks.
       - name: PRS_NAT_LIB
         data_type: varchar
+        description: Libellé Nature de Prestation
         config:
           meta:
             sensitivity: public
@@ -385,6 +414,7 @@ models:
     columns:
       - name: BEN_RES_REG
         data_type: integer
+        description: Région de Résidence du Bénéficiaire à partir de 2015 (tables A)
         config:
           meta:
             sensitivity: restricted
@@ -393,6 +423,7 @@ models:
           - not_null
       - name: BEN_RES_REG_LIB
         data_type: varchar
+        description: Libellé Région de Résidence du Bénéficiaire
         config:
           meta:
             sensitivity: restricted
@@ -408,6 +439,7 @@ models:
     columns:
       - name: FLX_ANN_MOI
         data_type: integer
+        description: "Année et Mois de Traitement\nDate technique qui correspond à la date de chargement des flux arrivés dans l’entrepôt émanant de tous les organismes et régimes depuis le dernier chargement"
         config:
           meta:
             sensitivity: public
@@ -415,6 +447,7 @@ models:
           - not_null
       - name: PSE_ACT_SNDS
         data_type: integer
+        description: "Nature d'Activité PS Exécutant\nRenseignée pour les professions de santé non médicales (attention aux dentistes présents en nature d'activité 19, 53, 54 et spécialité médicale 36)"
         config:
           meta:
             sensitivity: public
@@ -426,6 +459,7 @@ models:
                 field: PSE_ACT_SNDS
       - name: FLT_PAI_MNT
         data_type: decimal(18, 2)
+        description: "Montant de la Dépense de la Prestation Préfiltrée\nLe montant de la dépense est préfiltré sur le type de remboursement (PRS_REM_TYP) 0, il contient déjà la dépense de tous les types de remboursement.\n \nNB : Si ce filtre n'est pas fait, les montants seront doublés.\n\nLe montant de la dépense correspond au montant payé par le patient, donc les honoraires du professionnel de santé."
         config:
           meta:
             sensitivity: public

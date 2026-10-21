@@ -626,7 +626,9 @@ def main(argv: list[str] | None = None) -> None:
             manifests[docs] = out_dir / "dbt" / f"{docs}.json"
             # A resumed pass reads the manifests its first process built.
             if not manifests[docs].exists():
-                build_manifest(manifests[docs], docs_text if docs is Docs.FULL_DOCS else None)
+                # The committed marts YAML holds the baseline docs, so no-docs blanks every column.
+                text = docs_text if docs is Docs.FULL_DOCS else dict.fromkeys(docs_text, "")
+                build_manifest(manifests[docs], text)
         database, schema = config.manifest.mart_database, config.manifest.mart_schema
         agent_db = ROOT / "data" / "agent" / "sample" / f"{database}.duckdb"
         hashes = input_hashes(config, manifests=manifests, agent_db=agent_db, questions=questions)

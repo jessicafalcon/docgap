@@ -19,11 +19,10 @@ from sqlglot.errors import SqlglotError
 
 import docgap.resolve as resolve_module
 from docgap.artifacts import read_rows, rows_sha256
-from docgap.manifest import Marts, read_marts
+from docgap.manifest import Marts
 from docgap.models import Clause, ColumnRef, QueryRecord
 from docgap.resolve import COLUMN_REFS_FILE, Reference, resolve, resolve_query, run_resolve
 from docgap.snapshot import normalize
-from eval.docs_manifest import build_manifest
 from eval.questions import EVAL_QUESTIONS, EvalQuestion, load_questions
 
 F = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS."
@@ -277,16 +276,10 @@ GOLD_CHECKED: dict[str, Refs] = {
 }
 
 
-@pytest.fixture(scope="module")
-def parsed_marts(tmp_path_factory: pytest.TempPathFactory) -> Marts:
-    manifest = build_manifest(tmp_path_factory.mktemp("manifest") / "manifest.json", None)
-    return read_marts(manifest, MARTS_CONFIG)[0]
-
-
 @pytest.mark.parametrize(("qid", "resolved"), sorted(GOLD_CHECKED.items()))
-def test_hand_checked_gold_query(parsed_marts: Marts, qid: str, resolved: Refs) -> None:
+def test_hand_checked_gold_query(baseline_marts: Marts, qid: str, resolved: Refs) -> None:
     # No session context: gold SQL names every table in full.
-    assert _resolve(GOLD_SQL[qid], database=None, schema=None, marts=parsed_marts) == (
+    assert _resolve(GOLD_SQL[qid], database=None, schema=None, marts=baseline_marts) == (
         resolved,
         {},
         False,
