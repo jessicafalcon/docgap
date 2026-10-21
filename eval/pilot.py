@@ -601,7 +601,7 @@ def main(argv: list[str] | None = None) -> None:
     out_dir = PILOT_DIR / f"pass-{args.pass_number}"
     work = WORK_DIR / f"pass-{args.pass_number}"
     run_id = f"pilot-{args.pass_number}"
-    questions = load_questions(PILOT_QUESTIONS)
+    questions = load_questions(PILOT_QUESTIONS, GoldQuestion)
     gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
     accepted = {q.id: read_accepted(q, PILOT_GOLD) for q in questions}
     if args.regrade:

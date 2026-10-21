@@ -251,7 +251,7 @@ def test_a_regrade_of_no_pass_fails(tmp_path: Path) -> None:
 def test_pass_2_regrades_to_its_recorded_accuracies_and_to_the_gold_alone() -> None:
     # Pins ADR 0034's numbers from the committed runs: as graded, with the accepted
     # readings, and on the gold alone.
-    questions = load_questions(PILOT_QUESTIONS)
+    questions = load_questions(PILOT_QUESTIONS, GoldQuestion)
     gold = {q.id: read_gold(PILOT_GOLD / f"{q.id}.parquet") for q in questions}
     accepted = {q.id: read_accepted(q, PILOT_GOLD) for q in questions}
     pass_2 = ROOT / "fixtures" / "pilot" / "pass-2"
@@ -492,7 +492,7 @@ def test_the_input_hashes_ignore_the_budget_but_not_the_timeout(
     manifests = {docs: tmp_path / f"{docs}.json" for docs in Docs}
     for docs, path in manifests.items():
         path.write_text(docs)
-    questions = load_questions(PILOT_QUESTIONS)
+    questions = load_questions(PILOT_QUESTIONS, GoldQuestion)
 
     def hashes(llm: LlmConfig) -> dict[str, str]:
         changed = config.model_copy(update={"llm": llm})
