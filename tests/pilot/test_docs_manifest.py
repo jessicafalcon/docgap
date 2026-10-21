@@ -1,4 +1,4 @@
-"""Both pilot configurations' manifests come from one `dbt parse` path and differ only in column docs."""
+"""Every configuration's manifest comes from one `dbt parse` path and differs only in column docs."""
 
 from __future__ import annotations
 
@@ -19,7 +19,9 @@ CONFIG = ManifestConfig(mart_database="ANALYTICS", mart_schema="MARTS")
 def manifests(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     out = tmp_path_factory.mktemp("manifests")
     docs = json.loads(DOCS.read_text())
-    return build_manifest(out / "no_docs.json", None), build_manifest(out / "full_docs.json", docs)
+    # As the pilot builds it: the committed YAML's baseline docs blanked.
+    no_docs = build_manifest(out / "no_docs.json", dict.fromkeys(docs, ""))
+    return no_docs, build_manifest(out / "full_docs.json", docs)
 
 
 @pytest.fixture(scope="module")

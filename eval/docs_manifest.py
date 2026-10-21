@@ -1,4 +1,4 @@
-"""Build a pilot configuration's dbt manifest: the marts YAML as committed, or with every column documented."""
+"""Build a dbt manifest from the marts YAML as committed (the baseline docs), or with each column's text set."""
 
 from __future__ import annotations
 
@@ -49,13 +49,14 @@ def document_columns(marts_yaml: str, docs: Mapping[str, str]) -> str:
 
 
 def build_manifest(out: Path, docs: Mapping[str, str] | None, project: Path = DBT_PROJECT) -> Path:
-    """Parse a copy of the dbt project, its marts columns documented from `docs` if given.
+    """Parse a copy of the dbt project, its marts columns described from `docs` if given.
 
-    One path builds both configurations' manifests, the descriptions their only
-    difference, so `describe()` reads each the same way (ADR 0025). `dbt parse`
-    opens no database. Each node's `root_path` is dropped, since it names the
-    temporary copy. The copy is built beside `out` and its manifest renamed over
-    it, so a crash never leaves half a file.
+    With no `docs`, the manifest has the committed baseline docs; an empty text
+    leaves a column undocumented. One path builds every configuration's manifest,
+    the descriptions their only difference, so `describe()` reads each the same
+    way (ADR 0025). `dbt parse` opens no database. Each node's `root_path` is
+    dropped, since it names the temporary copy. The copy is built beside `out` and
+    its manifest renamed over it, so a crash never leaves half a file.
 
     Raises:
         RuntimeError: `dbt parse` failed.

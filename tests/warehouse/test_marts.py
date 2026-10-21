@@ -1,4 +1,4 @@
-"""The mart YAML keeps the evaluation's rules: no early docs, no ungradable column, fixed tags."""
+"""The mart YAML keeps the evaluation's rules: no ungradable column, fixed tags."""
 
 from __future__ import annotations
 
@@ -18,13 +18,6 @@ def _columns() -> dict[str, dict[str, Any]]:
             for column in model["columns"]:
                 columns[f"{model['name']}.{column['name']}"] = column
     return columns
-
-
-def test_no_mart_column_is_documented_before_the_baseline_lock() -> None:
-    # ADR 0021: the baseline's documented half is drawn after the offline pilot. The
-    # lock's pull request adds the first mart column descriptions and replaces this test.
-    assert not (ROOT / "warehouse" / "baseline_docs.lock").exists()
-    assert [name for name, column in _columns().items() if column.get("description")] == []
 
 
 def test_every_mart_column_has_a_dictionary_entry() -> None:

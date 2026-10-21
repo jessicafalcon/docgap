@@ -36,6 +36,9 @@ warehouse = [
     "duckdb>=1.5.6",
     # Reads the dictionary's code lists into the dbt seeds (loader/code_list_seeds.py).
     "openpyxl>=3.1.5",
+    # Writes the baseline docs into the marts YAML, its comments and layout kept
+    # (eval/baseline_docs.py).
+    "ruamel-yaml>=0.19.1",
 ]
 
 [build-system]

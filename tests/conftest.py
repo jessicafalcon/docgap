@@ -61,6 +61,18 @@ AGENT_MARTS = Marts(
     },
     {},
 )
+
+
+@pytest.fixture(scope="session")
+def baseline_marts(tmp_path_factory: pytest.TempPathFactory) -> Marts:
+    """The marts of the committed dbt project, its baseline docs included, as `dbt parse` gives them."""
+    # Imported here, so a session that never parses doesn't load dbt.
+    from eval.docs_manifest import build_manifest
+
+    manifest = build_manifest(tmp_path_factory.mktemp("baseline") / "manifest.json", None)
+    return load_marts(manifest.read_bytes(), MARTS_CONFIG)
+
+
 # A DuckDB query that runs for minutes: no test waits for it to finish.
 SLOW_SQL = "SELECT sum(a.range * b.range) FROM range(100000000) a, range(1000) b"
 SETUP = "0" * 64

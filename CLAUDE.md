@@ -48,7 +48,7 @@ the file is the current standard, and memory of it may be stale.
 | **A live call** needs a secret (the Anthropic API key; later the Snowflake keys) | `cp .env.example .env`; you fill it in, never me. A new variable goes into `.env.example` too, empty, in the same change | Load it with `uv run --env-file .env …`. I never read `.env`: `.claude/settings.json` denies it; secrets rules in `docgap-correctness` |
 | **Offline data** needed (DuckDB work) and `data/sample/` is missing | `uv run python loader/offline_sample.py`, with the sources in `data/open_damir/` | It checks sources and outputs against the locks; `--update-lock` only under an ADR that supersedes 0013 |
 | **Offline warehouse** needed and `data/warehouse/<source>/RAW.duckdb` is missing | `uv run python loader/load_duckdb.py sample` (or `fixture`, the CI fixture; or `full`, the three months, with `data/open_damir/` downloaded) | It checks each file against `loader/sample.lock` (`full`: `loader/sources.lock`) and its header against `loader/raw_prestations.sql`; a re-run loads nothing twice |
-| **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py` and `uv run python -m eval.column_docs` | They rewrite the code-list seeds in `warehouse/dbt/seeds/` and the every-column docs in `eval/column_docs.json`; until they run, the byte-identity tests fail |
+| **The dictionary** `.xlsx` in `eval/reference/` changes | `uv run python loader/code_list_seeds.py`, `uv run python -m eval.column_docs`, then `uv run python -m eval.baseline_docs` | They rewrite the code-list seeds in `warehouse/dbt/seeds/`, the every-column docs in `eval/column_docs.json`, and the locked columns' text in the marts YAML; the last fails rather than change `warehouse/baseline_docs.lock` (ADR 0021). Until they run, the byte-identity tests fail |
 | **dbt** run offline | `cd warehouse/dbt && uv run dbt build` (the `fixture` target; `--target sample` or `--target full` for the others) | Needs that source's `RAW.duckdb`; it builds `ANALYTICS.duckdb` beside it. `uv run docgap lint`, from the root, reads `target/manifest.json` |
 | **Offline agent** needed and `data/agent/<source>/ANALYTICS.duckdb` is missing or older than the dbt build | `uv run python -m eval.agent.warehouse sample` (or `fixture`, `full`) | It copies the build's marts alone into the agent's database (ADR 0026) |
 | **The gold SQL** changes (`eval/pilot_questions.yml` or `eval/questions.yml`), or the sample's agent database is rebuilt | `uv run python -m eval.questions gold --check` first; `gold`, with no flag, only when the SQL changed or new values are expected. Each runs both question sets, or the one `--questions pilot` or `--questions eval` names | `--check` runs the gold SQL on `data/agent/sample/` and compares each result, and the SQL and `sample.lock` hashes it records, with `eval/pilot_gold/` and `eval/gold/`; `gold` rewrites them. Both fail on a reading of a gold query a question doesn't declare (ADR 0033), and on a question of the 40 whose main trap gives its gold result (ADR 0038). CI runs every gold query of both sets on the fixture |
@@ -180,7 +180,8 @@ code is lost to the next session, and the review agents treat it as a finding.
   every text the model reads), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, the mart
   columns' `meta.sensitivity` tags, seeds, `[actors]`, `[manifest]`, the history
-  window, the every-column docs text and its script, and the model and prompt
+  window, the every-column docs text and its script, `warehouse/baseline_docs.lock`
+  and `eval/baseline_docs.py`, and the model and prompt
   version at the attribution, drafter and gate call sites) never change. A change to the
   snapshot, manifest, resolve, usage, rank or evidence code that changes its
   golden outputs, and any other `EVAL_PROTOCOL.md` change,
@@ -212,13 +213,14 @@ Update after every PR and merge, in the same change. A new session resumes from 
   when" holds and its phase-exit audit found no blockers. Phase 2's offline block
   (the brief's timeline row 3) is done except `feat/loader-snowflake`. Its "Done
   when" needs Snowflake, so the phase and its exit audit close in timeline row 7.
-  Phase 3's offline block (timeline row 4) is in progress. Phase 1 waits for the
+  Timeline row 4 is in progress: its Phase 3 steps are done (#19–#29), and
+  Phase 2's baseline docs lock and manifest freeze remain. Phase 1 waits for the
   offline pilot, per the brief's timeline.
 - **Repo:** `jessicafalcon/docgap` on GitHub, public since 2026-09-28 (ADR 0017),
   so every push is a publication. Squash merges only, with the PR title as the
   commit title. No branch protection yet; Phase 7 sets it up. The in-progress
   README merged in #13; Phase 8 replaces it.
-- **Open PRs:** `feat/eval-questions` (Phase 3 PR 4c), in review.
+- **Open PRs:** `feat/baseline-docs-lock` (Phase 2's baseline docs lock), in review.
 - **Phase 2 offline PR order** (approved after `devils-advocate`):
   - **PR 1:** `feat/raw-load`, merged (#16). The typed RAW DDL (one spec for
     DuckDB and Snowflake; only `PRS_ACT_NBR` and `FLT_ACT_NBR` nullable), the
@@ -273,13 +275,16 @@ Update after every PR and merge, in the same change. A new session resumes from 
       rows pinned in `sources.lock`, and the decision records that the 40 pass the
       full-month check before they merge (ADR 0037) and that keep the aggregate
       out of the gold and count only traps that change the result (ADR 0038).
-    - **4c:** `feat/eval-questions`, in review, the second of the two PRs
+    - **4c:** `feat/eval-questions`, merged (#29), the second of the two PRs
       `devils-advocate` set before the baseline docs lock. The checks the 40 add
       to `eval/questions.py` (the no-trap readings in `SWAPS`, a required `trap`
       whose swap changes the result, the aggregate rule, the question set in the
       CLI), the 40 with gold SQL and their tests, `resolve` checked by hand on 10
       gold queries over a dbt-parsed manifest, the blind check, and `check full`
       in its gate.
-- **Next step:** after 4c merges, the baseline docs lock in its own PR
-  (ADR 0021); nobody computes the split or the baseline docs draw before the
-  merge. `feat/loader-snowflake` still lands before the go/no-go.
+- **Baseline docs lock:** `feat/baseline-docs-lock`, in review, in its own PR
+  after the questions' (ADR 0021): 33 of the 67 mart columns, frozen in
+  `warehouse/baseline_docs.lock`, their text in the marts YAML.
+- **Next step:** after the lock merges, the manifest freeze
+  (`fixtures/manifest/baseline.json`) in its own PR. `feat/loader-snowflake`
+  still lands before the go/no-go.

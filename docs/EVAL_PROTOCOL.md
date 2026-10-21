@@ -216,6 +216,9 @@ the tag (`CLAUDE.md` → "After `preregistered`"):
 - the seeds, including the bootstrap seed below (`[seeds]`)
 - the every-column docs text and the script that writes it from the dictionary,
   which give the ceiling arm its text and the baseline its locked half (ADR 0025)
+- the baseline docs lock, `warehouse/baseline_docs.lock`, and the script that
+  draws it and writes its text into the marts YAML, `eval/baseline_docs.py`
+  (ADR 0021)
 
 ## The headline
 
@@ -288,6 +291,9 @@ promise a detectable headline.
   and random-N.
 - How many top-N columns have no usage, and the columns tied on score at rank N,
   whose order the FQN decides.
+- The undocumented columns whose name a baseline-documented column in another
+  table shares, and which of them top-N and random-N picked: the baseline draw is
+  per FQN, so the agent can read their text in that table (ADR 0039).
 - Grade reason codes per arm, and infrastructure failures per arm.
 - The Phase 3 baseline next to the session's baseline.
 - Each gold query fixed after the questions merged, and whether its question is
