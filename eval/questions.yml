@@ -1,0 +1,1034 @@
+# The evaluation's 40 questions, Q01 to Q40 in writing order, under the protocol's
+# "Questions" rules (EVAL_PROTOCOL.md). Gold SQL is Snowflake SQL over ANALYTICS.MARTS;
+# offline, the harness transpiles it to DuckDB (ADR 0014). A processing month is
+# `FLX_ANN_MOI`, a care month `SOI_ANN` and `SOI_MOI`, and a care-month total summed
+# across processing months is January 2025's (ADR 0012).
+# Half sum a measure with no trap, `PRS_REM_MNT` or `PRS_REM_BSE` unfiltered, the text
+# ruling out the filtered readings; half a pre-filtered `FLT_` one, at most 6 on any
+# one. A question's half is read from its gold SQL (ADR 0036). No gold query reads
+# the aggregate (ADR 0038).
+# Each question names its measure, declares every swap of `eval/questions.py` that
+# changes its result, settles at least two of the month, the region and the provider
+# in its text, and names its main `trap`, a swap its text rules out and that changes
+# its gold result on the sample (ADR 0038). Each trap is the main one of 4 questions.
+# Gold results are the sample's, from `uv run python -m eval.questions gold`, stored
+# typed in eval/gold/. No ID or text repeats a pilot question's.
+questions:
+  - id: Q01
+    category: pharmacy_dental
+    trap: prescriber
+    text: >-
+      What did Health Insurance reimburse at pharmacies, the statutory and
+      supplementary shares together, for beneficiaries aged 80 and over, in claims
+      processed in January 2025?
+    ordered: false
+    rule_out:
+      care_month: processed in
+      prescriber: at pharmacies
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT SUM(PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 50
+        AND AGE_BEN_SNDS = 80
+        AND FLX_ANN_MOI = 202501
+
+  - id: Q02
+    category: pharmacy_dental
+    trap: region_ete_reg_cod
+    text: >-
+      What quantity of acts was performed at pharmacies whose executing professional
+      practises in Normandie, in claims processed in March 2025?
+    ordered: false
+    accept: [act_by_type]
+    rule_out:
+      care_month: processed in
+      prescriber: at pharmacies
+      region_ben_res_reg: executing professional practises in
+      region_ete_reg_cod: executing professional practises in
+      region_etp_reg_cod: executing professional practises in
+      region_org_cle_reg: executing professional practises in
+      region_pre_ins_reg: executing professional practises in
+    gold_sql: |
+      SELECT SUM(FLT_ACT_QTE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 50
+        AND EXE_INS_REG = 28
+        AND FLX_ANN_MOI = 202503
+
+  - id: Q03
+    category: pharmacy_dental
+    trap: region_org_cle_reg
+    text: >-
+      What was the reimbursement base, every share included, for care whose
+      executing provider's activity is recorded as dental surgery, for beneficiaries
+      residing in Hauts-de-France, in claims processed in February 2025?
+    ordered: false
+    rule_out:
+      bse_by_type: every share included
+      care_month: processed in
+      prescriber: executing provider
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+    gold_sql: |
+      SELECT SUM(PRS_REM_BSE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 19
+        AND BEN_RES_REG = 32
+        AND FLX_ANN_MOI = 202502
+
+  - id: Q04
+    category: pharmacy_dental
+    trap: prescriber
+    text: >-
+      What was the amount charged, before any reimbursement, for care whose
+      executing provider's activity is recorded as dental surgery, for beneficiaries
+      aged 0 to 19, for care delivered in January 2025, whatever month the claims
+      were processed in?
+    ordered: false
+    accept: [pai_by_type]
+    rule_out:
+      prescriber: executing provider
+      processing_month: care delivered in
+    gold_sql: |
+      SELECT SUM(FLT_PAI_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 19
+        AND AGE_BEN_SNDS = 0
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+
+  - id: Q05
+    category: pharmacy_dental
+    trap: region_exe_ins_reg
+    text: >-
+      What did Health Insurance reimburse at pharmacies, the statutory and
+      supplementary shares together, on the prescription of a professional
+      practising in Bretagne, in claims processed in February 2025?
+    ordered: false
+    rule_out:
+      care_month: processed in
+      prescriber: at pharmacies
+      region_ben_res_reg: prescription of a professional practising in
+      region_ete_reg_cod: prescription of a professional practising in
+      region_etp_reg_cod: prescription of a professional practising in
+      region_exe_ins_reg: prescription of a professional practising in
+      region_org_cle_reg: prescription of a professional practising in
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT SUM(PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 50
+        AND PRE_INS_REG = 53
+        AND FLX_ANN_MOI = 202502
+
+  - id: Q06
+    category: pharmacy_dental
+    trap: care_month
+    text: >-
+      For care whose executing provider's activity is recorded as dental surgery,
+      what were the fees billed above the agreed rate for beneficiaries residing in
+      Ile-de-France, in each processing month? Return the processing month as a
+      number in YYYYMM form and the amount, in month order.
+    ordered: true
+    accept: [dep_by_type]
+    rule_out:
+      care_month: processing month
+      prescriber: executing provider
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+    gold_sql: |
+      SELECT FLX_ANN_MOI, SUM(FLT_DEP_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 19
+        AND BEN_RES_REG = 11
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
+
+  - id: Q07
+    category: pharmacy_dental
+    trap: prescriber
+    text: >-
+      What was the reimbursement base, every share included, at pharmacies for
+      beneficiaries residing in Grand Est, for care delivered in January 2025,
+      whatever month the claims were processed in?
+    ordered: false
+    rule_out:
+      bse_by_type: every share included
+      prescriber: at pharmacies
+      processing_month: care delivered in
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+    gold_sql: |
+      SELECT SUM(PRS_REM_BSE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 50
+        AND BEN_RES_REG = 44
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+
+  - id: Q08
+    category: provider_type
+    trap: prescriber
+    text: >-
+      Leaving out care whose executing provider's activity is not recorded, which
+      three executing provider activities had the highest statutory share reimbursed
+      by Health Insurance for beneficiaries residing in Languedoc-Roussillon-Midi-Pyrénées,
+      in claims processed in January 2025? Return each activity's name and the
+      amount, highest first.
+    ordered: true
+    accept: [rem_by_type]
+    rule_out:
+      care_month: processed in
+      prescriber: executing provider
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+      rem_total: statutory share
+    gold_sql: |
+      SELECT p.PSE_ACT_SNDS_LIB, SUM(f.FLT_REM_MNT) AS reimbursed
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY AS p ON p.PSE_ACT_SNDS = f.PSE_ACT_SNDS
+      WHERE f.PSE_ACT_SNDS <> 0
+        AND f.BEN_RES_REG = 76
+        AND f.FLX_ANN_MOI = 202501
+      GROUP BY p.PSE_ACT_SNDS_LIB
+      ORDER BY reimbursed DESC
+      LIMIT 3
+
+  - id: Q09
+    category: provider_type
+    trap: executor
+    text: >-
+      Leaving out care whose prescribing provider's activity is not recorded or
+      unknown, what did Health Insurance reimburse, the statutory and supplementary
+      shares together, for each prescribing provider activity, for beneficiaries residing in
+      Ile-de-France, in claims processed in March 2025? Return each activity's name
+      and the amount.
+    ordered: false
+    rule_out:
+      care_month: processed in
+      executor: prescribing provider
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT p.PSE_ACT_SNDS_LIB, SUM(f.PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY AS p ON p.PSE_ACT_SNDS = f.PSP_ACT_SNDS
+      WHERE f.PSP_ACT_SNDS NOT IN (0, 99)
+        AND f.BEN_RES_REG = 11
+        AND f.FLX_ANN_MOI = 202503
+      GROUP BY p.PSE_ACT_SNDS_LIB
+
+  - id: Q10
+    category: provider_type
+    trap: executor
+    text: >-
+      What quantity of acts was performed for beneficiaries aged 30 to 39 on the
+      prescription of a provider whose prescribing activity is recorded as midwife,
+      in claims processed in February 2025?
+    ordered: false
+    accept: [act_by_type]
+    rule_out:
+      care_month: processed in
+      executor: prescribing activity
+    gold_sql: |
+      SELECT SUM(FLT_ACT_QTE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSP_ACT_SNDS = 21
+        AND AGE_BEN_SNDS = 30
+        AND FLX_ANN_MOI = 202502
+
+  - id: Q11
+    category: provider_type
+    trap: executor
+    text: >-
+      Leaving out care whose prescribing provider's activity is not recorded, which
+      prescribing provider activity had the highest reimbursement base, every share
+      included, for care delivered in January 2025, whatever month the claims were
+      processed in, on the prescription of a professional practising in Pays de la
+      Loire? Return its name.
+    ordered: true
+    rule_out:
+      bse_by_type: every share included
+      executor: prescribing provider
+      processing_month: care delivered in
+      region_ben_res_reg: prescription of a professional practising in
+      region_ete_reg_cod: prescription of a professional practising in
+      region_etp_reg_cod: prescription of a professional practising in
+      region_exe_ins_reg: prescription of a professional practising in
+      region_org_cle_reg: prescription of a professional practising in
+    gold_sql: |
+      SELECT p.PSE_ACT_SNDS_LIB
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY AS p ON p.PSE_ACT_SNDS = f.PSP_ACT_SNDS
+      WHERE f.PSP_ACT_SNDS <> 0
+        AND f.PRE_INS_REG = 52
+        AND f.SOI_ANN = '2025'
+        AND f.SOI_MOI = '01'
+      GROUP BY p.PSE_ACT_SNDS_LIB
+      ORDER BY SUM(f.PRS_REM_BSE) DESC
+      LIMIT 1
+
+  - id: Q12
+    category: provider_type
+    trap: region_org_cle_reg
+    text: >-
+      Leaving out care whose executing provider's activity is not recorded or
+      unknown, what was the amount charged, before any reimbursement, for each
+      executing provider activity, for beneficiaries residing in Centre-Val de Loire, in claims
+      processed in February 2025? Return each activity's name and the amount.
+    ordered: false
+    accept: [pai_by_type]
+    rule_out:
+      care_month: processed in
+      prescriber: executing provider
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+    gold_sql: |
+      SELECT p.PSE_ACT_SNDS_LIB, SUM(f.FLT_PAI_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY AS p ON p.PSE_ACT_SNDS = f.PSE_ACT_SNDS
+      WHERE f.PSE_ACT_SNDS NOT IN (0, 99)
+        AND f.BEN_RES_REG = 24
+        AND f.FLX_ANN_MOI = 202502
+      GROUP BY p.PSE_ACT_SNDS_LIB
+
+  - id: Q13
+    category: provider_type
+    trap: region_pre_ins_reg
+    text: >-
+      Leaving out care whose executing provider's activity is not recorded, which
+      three executing provider activities received the most from Health Insurance,
+      the statutory and supplementary shares together, for care by executing
+      professionals practising in Grand Est, in claims processed in January 2025?
+      Return each activity's name and the amount, highest first.
+    ordered: true
+    rule_out:
+      care_month: processed in
+      prescriber: executing provider
+      region_ben_res_reg: executing professionals practising in
+      region_ete_reg_cod: executing professionals practising in
+      region_etp_reg_cod: executing professionals practising in
+      region_org_cle_reg: executing professionals practising in
+      region_pre_ins_reg: executing professionals practising in
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT p.PSE_ACT_SNDS_LIB, SUM(f.PRS_REM_MNT) AS reimbursed
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY AS p ON p.PSE_ACT_SNDS = f.PSE_ACT_SNDS
+      WHERE f.PSE_ACT_SNDS <> 0
+        AND f.EXE_INS_REG = 44
+        AND f.FLX_ANN_MOI = 202501
+      GROUP BY p.PSE_ACT_SNDS_LIB
+      ORDER BY reimbursed DESC
+      LIMIT 3
+
+  - id: Q14
+    category: provider_type
+    trap: region_ete_reg_cod
+    text: >-
+      For care whose executing provider's activity is not recorded, which covers
+      physicians and hospitals, what were the fees billed above the agreed rate where
+      the executing professional practises in Provence-Alpes-Côte d'Azur et Corse, in
+      claims processed in March 2025?
+    ordered: false
+    accept: [dep_by_type]
+    rule_out:
+      care_month: processed in
+      prescriber: executing provider
+      region_ben_res_reg: executing professional practises in
+      region_ete_reg_cod: executing professional practises in
+      region_etp_reg_cod: executing professional practises in
+      region_org_cle_reg: executing professional practises in
+      region_pre_ins_reg: executing professional practises in
+    gold_sql: |
+      SELECT SUM(FLT_DEP_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 0
+        AND EXE_INS_REG = 93
+        AND FLX_ANN_MOI = 202503
+
+  - id: Q15
+    category: age_bracket
+    trap: region_org_cle_reg
+    text: >-
+      Leaving out beneficiaries of unknown age, what did Health Insurance reimburse,
+      the statutory and supplementary shares together, for beneficiaries residing in
+      Bourgogne-Franche-Comté, by age bracket, in claims processed in March 2025?
+      Return each bracket's name and the amount.
+    ordered: false
+    rule_out:
+      care_month: processed in
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT a.AGE_BEN_SNDS_LIB, SUM(f.PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_AGE_BRACKET AS a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS
+      WHERE f.AGE_BEN_SNDS <> 99
+        AND f.BEN_RES_REG = 27
+        AND f.FLX_ANN_MOI = 202503
+      GROUP BY a.AGE_BEN_SNDS_LIB
+
+  - id: Q16
+    category: age_bracket
+    trap: region_ben_res_reg
+    text: >-
+      What was Health Insurance's statutory share reimbursed for beneficiaries aged
+      70 to 79, in claims settled by a Health Insurance fund in Normandie and
+      processed in January 2025?
+    ordered: false
+    accept: [rem_by_type]
+    rule_out:
+      care_month: processed in
+      region_ben_res_reg: settled by a health insurance fund in
+      region_ete_reg_cod: settled by a health insurance fund in
+      region_etp_reg_cod: settled by a health insurance fund in
+      region_exe_ins_reg: settled by a health insurance fund in
+      region_pre_ins_reg: settled by a health insurance fund in
+      rem_total: statutory share
+    gold_sql: |
+      SELECT SUM(FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE AGE_BEN_SNDS = 70
+        AND ORG_CLE_REG = 28
+        AND FLX_ANN_MOI = 202501
+
+  - id: Q17
+    category: age_bracket
+    trap: region_exe_ins_reg
+    text: >-
+      What was the reimbursement base, every share included, for beneficiaries aged
+      80 and over treated in executing establishments located in Bretagne, for care
+      delivered in January 2025, whatever month the claims were processed in?
+    ordered: false
+    rule_out:
+      bse_by_type: every share included
+      processing_month: care delivered in
+      region_ben_res_reg: executing establishments located in
+      region_etp_reg_cod: executing establishments located in
+      region_exe_ins_reg: executing establishments located in
+      region_org_cle_reg: executing establishments located in
+      region_pre_ins_reg: executing establishments located in
+    gold_sql: |
+      SELECT SUM(PRS_REM_BSE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE AGE_BEN_SNDS = 80
+        AND ETE_REG_COD = 53
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+
+  - id: Q18
+    category: age_bracket
+    trap: region_pre_ins_reg
+    text: >-
+      Leaving out beneficiaries of unknown age, what was the amount charged, before
+      any reimbursement, by age bracket, for care whose prescribing establishment is
+      located in Ile-de-France, in claims processed in February 2025? Return each
+      bracket's name and the amount.
+    ordered: false
+    accept: [pai_by_type]
+    rule_out:
+      care_month: processed in
+      region_ben_res_reg: prescribing establishment is located in
+      region_ete_reg_cod: prescribing establishment is located in
+      region_exe_ins_reg: prescribing establishment is located in
+      region_org_cle_reg: prescribing establishment is located in
+      region_pre_ins_reg: prescribing establishment is located in
+    gold_sql: |
+      SELECT a.AGE_BEN_SNDS_LIB, SUM(f.FLT_PAI_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_AGE_BRACKET AS a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS
+      WHERE f.AGE_BEN_SNDS <> 99
+        AND f.ETP_REG_COD = 11
+        AND f.FLX_ANN_MOI = 202502
+      GROUP BY a.AGE_BEN_SNDS_LIB
+
+  - id: Q19
+    category: age_bracket
+    trap: region_ete_reg_cod
+    text: >-
+      Leaving out beneficiaries of unknown age, which age bracket received the most
+      from Health Insurance, the statutory and supplementary shares together, for
+      care by executing professionals practising in Pays de la Loire, in claims
+      processed in February 2025? Return its name and the amount.
+    ordered: true
+    rule_out:
+      care_month: processed in
+      region_ben_res_reg: executing professionals practising in
+      region_ete_reg_cod: executing professionals practising in
+      region_etp_reg_cod: executing professionals practising in
+      region_org_cle_reg: executing professionals practising in
+      region_pre_ins_reg: executing professionals practising in
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT a.AGE_BEN_SNDS_LIB, SUM(f.PRS_REM_MNT) AS reimbursed
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_AGE_BRACKET AS a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS
+      WHERE f.AGE_BEN_SNDS <> 99
+        AND f.EXE_INS_REG = 52
+        AND f.FLX_ANN_MOI = 202502
+      GROUP BY a.AGE_BEN_SNDS_LIB
+      ORDER BY reimbursed DESC
+      LIMIT 1
+
+  - id: Q20
+    category: age_bracket
+    trap: region_etp_reg_cod
+    text: >-
+      What quantity of acts was performed for beneficiaries aged 0 to 19, on the
+      prescription of a professional practising in Auvergne-Rhône-Alpes, in claims
+      processed in January 2025?
+    ordered: false
+    accept: [act_by_type]
+    rule_out:
+      care_month: processed in
+      region_ben_res_reg: prescription of a professional practising in
+      region_ete_reg_cod: prescription of a professional practising in
+      region_etp_reg_cod: prescription of a professional practising in
+      region_exe_ins_reg: prescription of a professional practising in
+      region_org_cle_reg: prescription of a professional practising in
+    gold_sql: |
+      SELECT SUM(FLT_ACT_QTE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE AGE_BEN_SNDS = 0
+        AND PRE_INS_REG = 84
+        AND FLX_ANN_MOI = 202501
+
+  - id: Q21
+    category: age_bracket
+    trap: executor
+    text: >-
+      Leaving out beneficiaries of unknown age, what was the reimbursement base,
+      every share included, by age bracket, for care whose prescribing provider's
+      activity is recorded as dental surgery, in claims processed in March 2025?
+      Return each bracket's name and the amount.
+    ordered: false
+    rule_out:
+      bse_by_type: every share included
+      care_month: processed in
+      executor: prescribing provider
+    gold_sql: |
+      SELECT a.AGE_BEN_SNDS_LIB, SUM(f.PRS_REM_BSE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_AGE_BRACKET AS a ON a.AGE_BEN_SNDS = f.AGE_BEN_SNDS
+      WHERE f.AGE_BEN_SNDS <> 99
+        AND f.PSP_ACT_SNDS = 19
+        AND f.FLX_ANN_MOI = 202503
+      GROUP BY a.AGE_BEN_SNDS_LIB
+
+  - id: Q22
+    category: region
+    trap: region_ben_res_reg
+    text: >-
+      Leaving out an unknown region, which three regions where the executing
+      professional practises received the most from Health Insurance, the statutory
+      and supplementary shares together, for care whose executing provider's
+      activity is recorded as nursing, in claims processed in January 2025? Return
+      each region's name and the amount, highest first.
+    ordered: true
+    rule_out:
+      care_month: processed in
+      prescriber: executing provider
+      region_ben_res_reg: executing professional practises
+      region_ete_reg_cod: executing professional practises
+      region_etp_reg_cod: executing professional practises
+      region_org_cle_reg: executing professional practises
+      region_pre_ins_reg: executing professional practises
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT r.BEN_RES_REG_LIB, SUM(f.PRS_REM_MNT) AS reimbursed
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_REGION AS r ON r.BEN_RES_REG = f.EXE_INS_REG
+      WHERE f.EXE_INS_REG <> 99
+        AND f.PSE_ACT_SNDS = 24
+        AND f.FLX_ANN_MOI = 202501
+      GROUP BY r.BEN_RES_REG_LIB
+      ORDER BY reimbursed DESC
+      LIMIT 3
+
+  - id: Q23
+    category: region
+    trap: region_org_cle_reg
+    text: >-
+      For each region where beneficiaries reside, unknown included, what was Health
+      Insurance's statutory share reimbursed for care whose executing provider's
+      activity is recorded as physiotherapy, in claims processed in February 2025?
+      Return each region's name and the amount.
+    ordered: false
+    accept: [rem_by_type]
+    rule_out:
+      care_month: processed in
+      prescriber: executing provider
+      region_ete_reg_cod: where beneficiaries reside
+      region_etp_reg_cod: where beneficiaries reside
+      region_exe_ins_reg: where beneficiaries reside
+      region_org_cle_reg: where beneficiaries reside
+      region_pre_ins_reg: where beneficiaries reside
+      rem_total: statutory share
+    gold_sql: |
+      SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_REGION AS r ON r.BEN_RES_REG = f.BEN_RES_REG
+      WHERE f.PSE_ACT_SNDS = 26
+        AND f.FLX_ANN_MOI = 202502
+      GROUP BY r.BEN_RES_REG_LIB
+
+  - id: Q24
+    category: region
+    trap: region_exe_ins_reg
+    text: >-
+      Leaving out an unknown region, what was the reimbursement base, every share
+      included, at pharmacies, for each region where the prescribing professional
+      practises, for care delivered in January 2025, whatever month the claims were
+      processed in? Return each region's name and the amount.
+    ordered: false
+    rule_out:
+      bse_by_type: every share included
+      prescriber: at pharmacies
+      processing_month: care delivered in
+      region_ben_res_reg: prescribing professional practises
+      region_ete_reg_cod: prescribing professional practises
+      region_etp_reg_cod: prescribing professional practises
+      region_exe_ins_reg: prescribing professional practises
+      region_org_cle_reg: prescribing professional practises
+    gold_sql: |
+      SELECT r.BEN_RES_REG_LIB, SUM(f.PRS_REM_BSE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_REGION AS r ON r.BEN_RES_REG = f.PRE_INS_REG
+      WHERE f.PRE_INS_REG <> 99
+        AND f.PSE_ACT_SNDS = 50
+        AND f.SOI_ANN = '2025'
+        AND f.SOI_MOI = '01'
+      GROUP BY r.BEN_RES_REG_LIB
+
+  - id: Q25
+    category: region
+    trap: region_pre_ins_reg
+    text: >-
+      Leaving out an unknown region, which three regions where the prescribing
+      establishment is located had the highest amount charged, before any
+      reimbursement, for care whose executing provider's activity is recorded as a
+      laboratory, in claims processed in March 2025? Return each region's name,
+      highest first.
+    ordered: true
+    rule_out:
+      care_month: processed in
+      prescriber: executing provider
+      region_ben_res_reg: prescribing establishment is located
+      region_ete_reg_cod: prescribing establishment is located
+      region_exe_ins_reg: prescribing establishment is located
+      region_org_cle_reg: prescribing establishment is located
+      region_pre_ins_reg: prescribing establishment is located
+    gold_sql: |
+      SELECT r.BEN_RES_REG_LIB
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_REGION AS r ON r.BEN_RES_REG = f.ETP_REG_COD
+      WHERE f.ETP_REG_COD <> 99
+        AND f.PSE_ACT_SNDS = 30
+        AND f.FLX_ANN_MOI = 202503
+      GROUP BY r.BEN_RES_REG_LIB
+      ORDER BY SUM(f.FLT_PAI_MNT) DESC
+      LIMIT 3
+
+  - id: Q26
+    category: region
+    trap: region_ete_reg_cod
+    text: >-
+      For each region where the executing professional practises, unknown included,
+      what were the fees billed above the agreed rate for beneficiaries aged 60 to
+      69, in claims processed in January 2025? Return each region's name and the
+      amount.
+    ordered: false
+    accept: [dep_by_type]
+    rule_out:
+      care_month: processed in
+      region_ben_res_reg: executing professional practises
+      region_ete_reg_cod: executing professional practises
+      region_etp_reg_cod: executing professional practises
+      region_org_cle_reg: executing professional practises
+      region_pre_ins_reg: executing professional practises
+    gold_sql: |
+      SELECT r.BEN_RES_REG_LIB, SUM(f.FLT_DEP_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_REGION AS r ON r.BEN_RES_REG = f.EXE_INS_REG
+      WHERE f.AGE_BEN_SNDS = 60
+        AND f.FLX_ANN_MOI = 202501
+      GROUP BY r.BEN_RES_REG_LIB
+
+  - id: Q27
+    category: region
+    trap: region_etp_reg_cod
+    text: >-
+      For each region where the prescribing professional practises, unknown
+      included, what did Health Insurance reimburse, the statutory and supplementary
+      shares together, for care whose executing provider's activity is recorded as
+      nursing, for care delivered in January 2025, whatever month the claims were
+      processed in? Return each region's name and the amount.
+    ordered: false
+    rule_out:
+      prescriber: executing provider
+      processing_month: care delivered in
+      region_ben_res_reg: prescribing professional practises
+      region_ete_reg_cod: prescribing professional practises
+      region_etp_reg_cod: prescribing professional practises
+      region_exe_ins_reg: prescribing professional practises
+      region_org_cle_reg: prescribing professional practises
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT r.BEN_RES_REG_LIB, SUM(f.PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS AS f
+      JOIN ANALYTICS.MARTS.DIM_REGION AS r ON r.BEN_RES_REG = f.PRE_INS_REG
+      WHERE f.PSE_ACT_SNDS = 24
+        AND f.SOI_ANN = '2025'
+        AND f.SOI_MOI = '01'
+      GROUP BY r.BEN_RES_REG_LIB
+
+  - id: Q28
+    category: processing_month
+    trap: care_month
+    text: >-
+      By how much did Health Insurance's statutory share reimbursed for
+      beneficiaries residing in Bretagne change from claims processed in February
+      2025 to claims processed in March 2025? Return March's total minus February's.
+    ordered: false
+    accept: [rem_by_type]
+    rule_out:
+      care_month: processed in
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+      rem_total: statutory share
+    gold_sql: |
+      SELECT SUM(IFF(FLX_ANN_MOI = 202503, FLT_REM_MNT, 0))
+        - SUM(IFF(FLX_ANN_MOI = 202502, FLT_REM_MNT, 0))
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE BEN_RES_REG = 53
+
+  - id: Q29
+    category: processing_month
+    trap: care_month
+    text: >-
+      For each processing month, what did Health Insurance reimburse at pharmacies,
+      the statutory and supplementary shares together, for beneficiaries aged 0 to
+      19? Return the month as a number in YYYYMM form and the amount, in month order.
+    ordered: true
+    rule_out:
+      care_month: processing month
+      prescriber: at pharmacies
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT FLX_ANN_MOI, SUM(PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 50
+        AND AGE_BEN_SNDS = 0
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
+
+  - id: Q30
+    category: processing_month
+    trap: care_month
+    text: >-
+      For each processing month, what quantity of acts did nurses perform for
+      beneficiaries aged 80 and over, and how much did it change from the month
+      before? Return the month as a number in YYYYMM form, the quantity and the
+      change (empty for the first month), in month order.
+    ordered: true
+    accept: [act_by_type]
+    rule_out:
+      care_month: processing month
+      prescriber: nurses perform
+    gold_sql: |
+      SELECT
+        FLX_ANN_MOI,
+        SUM(FLT_ACT_QTE),
+        SUM(FLT_ACT_QTE) - LAG(SUM(FLT_ACT_QTE)) OVER (ORDER BY FLX_ANN_MOI)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 24
+        AND AGE_BEN_SNDS = 80
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
+
+  - id: Q31
+    category: processing_month
+    trap: region_ben_res_reg
+    text: >-
+      By how much did the reimbursement base, every share included, in claims
+      settled by a Health Insurance fund in Ile-de-France change from claims
+      processed in January 2025 to claims processed in March 2025? Return March's
+      total minus January's.
+    ordered: false
+    rule_out:
+      bse_by_type: every share included
+      care_month: processed in
+      region_ben_res_reg: settled by a health insurance fund in
+      region_ete_reg_cod: settled by a health insurance fund in
+      region_etp_reg_cod: settled by a health insurance fund in
+      region_exe_ins_reg: settled by a health insurance fund in
+      region_pre_ins_reg: settled by a health insurance fund in
+    gold_sql: |
+      SELECT SUM(IFF(FLX_ANN_MOI = 202503, PRS_REM_BSE, 0))
+        - SUM(IFF(FLX_ANN_MOI = 202501, PRS_REM_BSE, 0))
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE ORG_CLE_REG = 11
+
+  - id: Q32
+    category: processing_month
+    trap: region_pre_ins_reg
+    text: >-
+      For each processing month, what did Health Insurance reimburse, the statutory
+      and supplementary shares together, for care by executing professionals
+      practising in Hauts-de-France? Return the month as a number in YYYYMM form and
+      the amount, in month order.
+    ordered: true
+    rule_out:
+      care_month: processing month
+      region_ben_res_reg: executing professionals practising in
+      region_ete_reg_cod: executing professionals practising in
+      region_etp_reg_cod: executing professionals practising in
+      region_org_cle_reg: executing professionals practising in
+      region_pre_ins_reg: executing professionals practising in
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT FLX_ANN_MOI, SUM(PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE EXE_INS_REG = 32
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
+
+  - id: Q33
+    category: processing_month
+    trap: region_etp_reg_cod
+    text: >-
+      By how much did the fees billed above the agreed rate, on the prescription of
+      a professional practising in Grand Est, change from claims processed in
+      January 2025 to claims processed in February 2025? Return February's total
+      minus January's.
+    ordered: false
+    accept: [dep_by_type]
+    rule_out:
+      care_month: processed in
+      region_ben_res_reg: prescription of a professional practising in
+      region_ete_reg_cod: prescription of a professional practising in
+      region_etp_reg_cod: prescription of a professional practising in
+      region_exe_ins_reg: prescription of a professional practising in
+      region_org_cle_reg: prescription of a professional practising in
+    gold_sql: |
+      SELECT SUM(IFF(FLX_ANN_MOI = 202502, FLT_DEP_MNT, 0))
+        - SUM(IFF(FLX_ANN_MOI = 202501, FLT_DEP_MNT, 0))
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PRE_INS_REG = 44
+
+  - id: Q34
+    category: care_vs_processing
+    trap: processing_month
+    text: >-
+      What was Health Insurance's statutory share reimbursed at pharmacies for
+      beneficiaries residing in Normandie, for care delivered in January 2025,
+      whatever month the claims were processed in?
+    ordered: false
+    accept: [rem_by_type]
+    rule_out:
+      prescriber: at pharmacies
+      processing_month: care delivered in
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+      rem_total: statutory share
+    gold_sql: |
+      SELECT SUM(FLT_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 50
+        AND BEN_RES_REG = 28
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+
+  - id: Q35
+    category: care_vs_processing
+    trap: processing_month
+    text: >-
+      Of what Health Insurance reimbursed, the statutory and supplementary shares
+      together, for care delivered in December 2024 to beneficiaries residing in
+      Grand Est, how much was in claims processed in each processing month? Return
+      the processing month as a number in YYYYMM form and the amount, in month order.
+    ordered: true
+    rule_out:
+      care_month: processing month
+      processing_month: care delivered in
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT FLX_ANN_MOI, SUM(PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE BEN_RES_REG = 44
+        AND SOI_ANN = '2024'
+        AND SOI_MOI = '12'
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
+
+  - id: Q36
+    category: care_vs_processing
+    trap: processing_month
+    text: >-
+      What was the reimbursement base, every share included, for care delivered in
+      January 2025 but in claims processed in February or March 2025, on the
+      prescription of a professional practising in Ile-de-France?
+    ordered: false
+    rule_out:
+      bse_by_type: every share included
+      care_month: processed in
+      processing_month: care delivered in
+      region_ben_res_reg: prescription of a professional practising in
+      region_ete_reg_cod: prescription of a professional practising in
+      region_etp_reg_cod: prescription of a professional practising in
+      region_exe_ins_reg: prescription of a professional practising in
+      region_org_cle_reg: prescription of a professional practising in
+    gold_sql: |
+      SELECT SUM(PRS_REM_BSE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PRE_INS_REG = 11
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+        AND FLX_ANN_MOI IN (202502, 202503)
+
+  - id: Q37
+    category: care_vs_processing
+    trap: processing_month
+    text: >-
+      What was the amount charged, before any reimbursement, for care delivered in
+      January 2025, whatever month the claims were processed in, in executing
+      establishments located in Languedoc-Roussillon-Midi-Pyrénées?
+    ordered: false
+    accept: [pai_by_type]
+    rule_out:
+      processing_month: care delivered in
+      region_ben_res_reg: executing establishments located in
+      region_etp_reg_cod: executing establishments located in
+      region_exe_ins_reg: executing establishments located in
+      region_org_cle_reg: executing establishments located in
+      region_pre_ins_reg: executing establishments located in
+    gold_sql: |
+      SELECT SUM(FLT_PAI_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE ETE_REG_COD = 76
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+
+  - id: Q38
+    category: care_vs_processing
+    trap: region_ben_res_reg
+    text: >-
+      Of what Health Insurance reimbursed, the statutory and supplementary shares
+      together, for care delivered in January 2025 in claims settled by a Health
+      Insurance fund in Pays de la Loire, how much was in claims processed in each
+      processing month? Return the processing month as a number in YYYYMM form and
+      the amount, in month order.
+    ordered: true
+    rule_out:
+      care_month: processing month
+      processing_month: care delivered in
+      region_ben_res_reg: settled by a health insurance fund in
+      region_ete_reg_cod: settled by a health insurance fund in
+      region_etp_reg_cod: settled by a health insurance fund in
+      region_exe_ins_reg: settled by a health insurance fund in
+      region_pre_ins_reg: settled by a health insurance fund in
+      rem_statutory: supplementary shares
+      rem_statutory_by_type: supplementary shares
+    gold_sql: |
+      SELECT FLX_ANN_MOI, SUM(PRS_REM_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE ORG_CLE_REG = 52
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+      GROUP BY FLX_ANN_MOI
+      ORDER BY FLX_ANN_MOI
+
+  - id: Q39
+    category: care_vs_processing
+    trap: region_exe_ins_reg
+    text: >-
+      What quantity of acts did nurses perform for beneficiaries residing in
+      Provence-Alpes-Côte d'Azur et Corse, for care delivered in January 2025,
+      whatever month the claims were processed in?
+    ordered: false
+    accept: [act_by_type]
+    rule_out:
+      prescriber: nurses perform
+      processing_month: care delivered in
+      region_ete_reg_cod: residing in
+      region_etp_reg_cod: residing in
+      region_exe_ins_reg: residing in
+      region_org_cle_reg: residing in
+      region_pre_ins_reg: residing in
+    gold_sql: |
+      SELECT SUM(FLT_ACT_QTE)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PSE_ACT_SNDS = 24
+        AND BEN_RES_REG = 93
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'
+
+  - id: Q40
+    category: care_vs_processing
+    trap: region_etp_reg_cod
+    text: >-
+      What were the fees billed above the agreed rate for care delivered in January
+      2025, whatever month the claims were processed in, on the prescription of a
+      professional practising in Ile-de-France?
+    ordered: false
+    accept: [dep_by_type]
+    rule_out:
+      processing_month: care delivered in
+      region_ben_res_reg: prescription of a professional practising in
+      region_ete_reg_cod: prescription of a professional practising in
+      region_etp_reg_cod: prescription of a professional practising in
+      region_exe_ins_reg: prescription of a professional practising in
+      region_org_cle_reg: prescription of a professional practising in
+    gold_sql: |
+      SELECT SUM(FLT_DEP_MNT)
+      FROM ANALYTICS.MARTS.FCT_REIMBURSEMENTS
+      WHERE PRE_INS_REG = 11
+        AND SOI_ANN = '2025'
+        AND SOI_MOI = '01'

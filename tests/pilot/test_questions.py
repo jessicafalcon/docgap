@@ -1,8 +1,9 @@
-"""The pilot's questions follow the protocol's rules, and their stored gold results are gradable."""
+"""Both question sets follow the protocol's rules, and their stored gold results are gradable."""
 
 from __future__ import annotations
 
 import json
+import shutil
 from collections import Counter
 from decimal import Decimal
 from pathlib import Path
@@ -11,27 +12,32 @@ import duckdb
 import pyarrow as pa
 import pytest
 import sqlglot
+import yaml
 from pydantic import ValidationError
 from sqlglot import exp
 
+import eval.questions as questions_module
 from docgap.config import load_config
 from docgap.grade import check
 from eval.agent.tools import to_duckdb
 from eval.agent.warehouse import connect_marts
+from eval.column_docs import MARTS_YAML
 from eval.questions import (
     DATA_LOCK_KEY,
     GOLD_SQL_KEY,
-    PILOT_GOLD,
     PILOT_QUESTIONS,
+    QUESTION_SETS,
     SAMPLE_LOCK,
     SWAPS,
     Category,
+    EvalQuestion,
     GoldQuestion,
     gold_files,
     gold_problems,
     gold_provenance,
     gold_result,
     load_questions,
+    measure,
     query_problems,
     read_as,
     read_gold,
@@ -42,8 +48,21 @@ from eval.questions import (
 )
 
 ROOT = Path(__file__).parents[2]
-QUESTIONS = load_questions(PILOT_QUESTIONS)
+QUESTIONS = load_questions(PILOT_QUESTIONS, GoldQuestion)
 ROW_CAP = load_config(ROOT / "docgap.toml").agent.row_cap
+# Every question of both sets, with the directory of its stored gold.
+ALL = [
+    (question, gold_dir)
+    for path, gold_dir, model in QUESTION_SETS.values()
+    for question in load_questions(path, model)
+]
+ALL_IDS = [question.id for question, _ in ALL]
+ALL_QUESTIONS = [question for question, _ in ALL]
+MART_COLUMNS = {
+    column["name"]
+    for model in yaml.safe_load(MARTS_YAML.read_text())["models"]
+    for column in model["columns"]
+}
 
 
 def test_two_pilot_questions_per_category() -> None:
@@ -58,7 +77,7 @@ def _family(swap: str) -> str | None:
     return "provider" if swap in {"prescriber", "executor"} else None
 
 
-@pytest.mark.parametrize("question", QUESTIONS, ids=lambda question: question.id)
+@pytest.mark.parametrize("question", ALL_QUESTIONS, ids=ALL_IDS)
 def test_each_question_settles_two_of_the_month_region_and_provider(
     question: GoldQuestion,
 ) -> None:
@@ -67,7 +86,12 @@ def test_each_question_settles_two_of_the_month_region_and_provider(
     assert len(families) >= 2
 
 
-@pytest.mark.parametrize("question", QUESTIONS, ids=lambda question: question.id)
+@pytest.mark.parametrize("question", ALL_QUESTIONS, ids=ALL_IDS)
+def test_a_text_names_its_measure_never_a_column(question: GoldQuestion) -> None:
+    assert not {column for column in MART_COLUMNS if column in question.text.upper()}
+
+
+@pytest.mark.parametrize("question", ALL_QUESTIONS, ids=ALL_IDS)
 def test_gold_sql_reads_the_marts_only_and_transpiles(question: GoldQuestion) -> None:
     tree = sqlglot.parse_one(question.gold_sql, read="snowflake")
     # A CTE is read by its bare name; every other table must be a mart.
@@ -77,27 +101,30 @@ def test_gold_sql_reads_the_marts_only_and_transpiles(question: GoldQuestion) ->
     to_duckdb(question.gold_sql)
 
 
-def test_every_question_has_stored_gold_and_nothing_else_does() -> None:
-    stored = sorted(path.stem for path in PILOT_GOLD.glob("*.parquet"))
-    assert stored == sorted(
-        stem for question in QUESTIONS for stem in gold_files(question, PILOT_GOLD)
-    )
+@pytest.mark.parametrize("name", QUESTION_SETS)
+def test_every_question_has_stored_gold_and_nothing_else_does(name: str) -> None:
+    questions_path, gold_dir, model = QUESTION_SETS[name]
+    stored = sorted(gold.stem for gold in gold_dir.glob("*.parquet"))
+    questions = load_questions(questions_path, model)
+    assert stored == sorted(stem for q in questions for stem in gold_files(q, gold_dir))
 
 
-@pytest.mark.parametrize("question", QUESTIONS, ids=lambda question: question.id)
-def test_stored_gold_is_gradable(question: GoldQuestion) -> None:
-    for path in gold_files(question, PILOT_GOLD).values():
+@pytest.mark.parametrize(("question", "gold_dir"), ALL, ids=ALL_IDS)
+def test_stored_gold_is_gradable(question: GoldQuestion, gold_dir: Path) -> None:
+    for path in gold_files(question, gold_dir).values():
         gold = read_gold(path)
         assert 0 < len(gold.rows) <= ROW_CAP
         # The grader accepts the width and every value, and the result matches itself.
         assert check(gold, gold, ordered=question.ordered) is None
 
 
-@pytest.mark.parametrize("question", QUESTIONS, ids=lambda question: question.id)
-def test_stored_gold_records_its_sql_and_the_sample_it_ran_on(question: GoldQuestion) -> None:
+@pytest.mark.parametrize(("question", "gold_dir"), ALL, ids=ALL_IDS)
+def test_stored_gold_records_its_sql_and_the_sample_it_ran_on(
+    question: GoldQuestion, gold_dir: Path
+) -> None:
     # Editing the gold SQL or a swap, or locking another sample, without running `gold`
     # again fails here.
-    for stem, path in gold_files(question, PILOT_GOLD).items():
+    for stem, path in gold_files(question, gold_dir).items():
         swap = stem.partition(".")[2]
         sql = read_as(question.gold_sql, SWAPS[swap]) if swap else question.gold_sql
         assert sql is not None
@@ -112,7 +139,7 @@ def test_a_question_id_used_twice_fails(tmp_path: Path) -> None:
     path = tmp_path / "questions.yml"
     path.write_text("questions:\n" + entry + entry)
     with pytest.raises(ValueError, match=r"used twice: \['Q1'\]"):
-        load_questions(path)
+        load_questions(path, GoldQuestion)
 
 
 def test_an_unknown_category_fails(tmp_path: Path) -> None:
@@ -121,7 +148,7 @@ def test_an_unknown_category_fails(tmp_path: Path) -> None:
         "questions:\n- {id: Q1, category: optics, text: t, gold_sql: SELECT 1, ordered: false}\n"
     )
     with pytest.raises(ValidationError, match="category"):
-        load_questions(path)
+        load_questions(path, GoldQuestion)
 
 
 def _connect(agent_db: Path) -> duckdb.DuckDBPyConnection:
@@ -276,10 +303,10 @@ def readings_db(tmp_path: Path) -> Path:
 _CHARGED = "SELECT SUM(FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS"
 
 
-def _readings(db: Path, question: GoldQuestion, *, stale_accepts: bool = True) -> list[str]:
+def _readings(db: Path, question: GoldQuestion, *, on_sample: bool = True) -> list[str]:
     with _connect(db) as con:
         gold = to_result(gold_result(con, question, max_rows=200))
-        return readings(con, question, gold, row_cap=200, stale_accepts=stale_accepts)[1]
+        return readings(con, question, gold, row_cap=200, on_sample=on_sample)[1]
 
 
 def test_a_reading_that_changes_the_result_must_be_declared(readings_db: Path) -> None:
@@ -320,7 +347,7 @@ def test_an_accepted_reading_giving_the_gold_result_is_stale_on_the_sample_only(
     assert _readings(readings_db, question) == [
         "accepts pai_by_type, which gives the gold's result"
     ]
-    assert _readings(readings_db, question, stale_accepts=False) == []
+    assert _readings(readings_db, question, on_sample=False) == []
 
 
 def test_a_declared_reading_the_gold_never_reads_is_reported(readings_db: Path) -> None:
@@ -404,3 +431,133 @@ def test_a_swap_leaves_a_ctes_columns_alone() -> None:
         "WITH m AS (SELECT CAST(SOI_ANN || SOI_MOI AS INT) AS FLX_ANN_MOI FROM FCT_REIMBURSEMENTS)"
         " SELECT FLX_ANN_MOI FROM m"
     )
+
+
+def test_the_no_trap_readings_rename_or_filter_the_measure() -> None:
+    shares = "SELECT SUM(PRS_REM_MNT) FROM FCT_REIMBURSEMENTS WHERE AGE_BEN_SNDS = 80"
+    assert read_as(shares, SWAPS["rem_statutory"]) == shares.replace("PRS_REM_MNT", "FLT_REM_MNT")
+    assert read_as(shares, SWAPS["rem_statutory_by_type"]) == shares + " AND PRS_REM_TYP IN (0, 1)"
+    base = shares.replace("PRS_REM_MNT", "PRS_REM_BSE")
+    assert read_as(base, SWAPS["bse_by_type"]) == base + " AND PRS_REM_TYP IN (0, 1)"
+
+
+_CHARGED_IN_JANUARY = "SELECT SUM(FLT_PAI_MNT) FROM FCT_REIMBURSEMENTS WHERE FLX_ANN_MOI = 202501"
+_EVAL_FIELDS: dict[str, object] = {
+    "id": "Q1",
+    "category": "processing_month",
+    "text": "What was charged in claims processed in January 2025?",
+    "gold_sql": _CHARGED_IN_JANUARY,
+    "ordered": False,
+    "rule_out": {"care_month": "processed in"},
+    "trap": "care_month",
+}
+
+
+def _eval_question(**fields: object) -> EvalQuestion:
+    # Through JSON, as `load_questions` reads a file.
+    return EvalQuestion.model_validate_json(json.dumps(_EVAL_FIELDS | fields))
+
+
+_FACT = "FROM FCT_REIMBURSEMENTS WHERE FLX_ANN_MOI = 202501"
+
+
+@pytest.mark.parametrize(
+    ("fields", "error"),
+    [
+        ({"trap": "region"}, "no such trap 'region'"),
+        ({"trap": "prescriber"}, "doesn't rule out its trap prescriber"),
+        (
+            {"gold_sql": "SELECT SUM(FLT_PAI_MNT) FROM AGG_MONTHLY_SPEND_BY_CATEGORY"},
+            "reads the aggregate",
+        ),
+        (
+            {"gold_sql": f"SELECT SUM(PRS_REM_MNT) {_FACT} AND PSE_ACT_SNDS = 50"},
+            "the aggregate's grain answers it",
+        ),
+        (
+            {"gold_sql": f"SELECT SUM(FLT_PAI_MNT) - SUM(FLT_REM_MNT) {_FACT}"},
+            r"reads one measure, not \['FLT_PAI_MNT', 'FLT_REM_MNT'\]",
+        ),
+        ({"gold_sql": f"SELECT COUNT(*) {_FACT}"}, r"one measure, not \[\]"),
+    ],
+)
+def test_a_question_of_the_40_breaking_a_rule_fails_on_load(
+    fields: dict[str, object], error: str
+) -> None:
+    with pytest.raises(ValidationError, match=error):
+        _eval_question(**fields)
+
+
+def test_a_no_trap_question_reading_a_column_the_aggregate_lacks_loads() -> None:
+    sql = f"SELECT SUM(PRS_REM_MNT) {_FACT} AND PSE_ACT_SNDS = 50 AND AGE_BEN_SNDS = 80"
+    assert measure(_eval_question(gold_sql=sql).gold_sql) == "PRS_REM_MNT"
+
+
+def test_a_question_of_the_40_without_a_trap_fails_on_load(tmp_path: Path) -> None:
+    fields = {key: value for key, value in _EVAL_FIELDS.items() if key != "trap"}
+    path = tmp_path / "questions.yml"
+    path.write_text(json.dumps({"questions": [fields]}))
+    with pytest.raises(ValidationError, match="trap"):
+        load_questions(path, EvalQuestion)
+
+
+def test_a_trap_that_gives_the_gold_result_is_reported_on_the_sample_only(
+    readings_db: Path,
+) -> None:
+    # The care month of January 2025 adds the type-99 line processed in February.
+    assert _readings(readings_db, _eval_question()) == []
+    # Without it, the two months hold the same lines, and the trap tests nothing.
+    tied = _eval_question(gold_sql=_CHARGED_IN_JANUARY + " AND PRS_REM_TYP <> 99")
+    assert _readings(readings_db, tied) == ["its trap care_month gives the gold's result"]
+    assert _readings(readings_db, tied, on_sample=False) == []
+
+
+@pytest.fixture
+def two_sets(agent_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A root holding the fixture's agent database, and two one-question sets, the first failing."""
+    root = tmp_path / "root"
+    (root / "data" / "agent" / "fixture").mkdir(parents=True)
+    shutil.copy(agent_db, root / "data" / "agent" / "fixture" / "ANALYTICS.duckdb")
+    shutil.copy(ROOT / "docgap.toml", root / "docgap.toml")
+    sets: dict[str, tuple[Path, Path, type[GoldQuestion]]] = {}
+    for name, sql in {"failing": "SELECT nope", "passing": _TOTALS}.items():
+        question = {
+            "id": "Q1",
+            "category": "region",
+            "text": "t",
+            "gold_sql": sql,
+            "ordered": False,
+        }
+        path = tmp_path / f"{name}.yml"
+        path.write_text(json.dumps({"questions": [question]}))
+        sets[name] = (path, tmp_path / name, GoldQuestion)
+    monkeypatch.setattr(questions_module, "ROOT", root)
+    monkeypatch.setattr(questions_module, "QUESTION_SETS", sets)
+
+
+@pytest.mark.parametrize(
+    ("chosen", "code", "summaries"),
+    [
+        # A failing set fails the command though a passing set runs after it.
+        (
+            [],
+            1,
+            [
+                "1 failing gold queries on fixture, 1 problems",
+                "1 passing gold queries on fixture, 0 problems",
+            ],
+        ),
+        (["--questions", "passing"], 0, ["1 passing gold queries on fixture, 0 problems"]),
+        (["--questions", "failing"], 1, ["1 failing gold queries on fixture, 1 problems"]),
+    ],
+)
+@pytest.mark.usefixtures("two_sets")
+def test_check_runs_both_sets_or_the_one_named(
+    chosen: list[str], code: int, summaries: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_:
+        questions_module.main(["check", "fixture", *chosen])
+    assert exit_.value.code == code
+    assert [
+        line for line in capsys.readouterr().out.splitlines() if "gold queries" in line
+    ] == summaries

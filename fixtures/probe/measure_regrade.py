@@ -25,6 +25,7 @@ from eval.agent.warehouse import connect_marts
 from eval.questions import (
     PILOT_GOLD,
     PILOT_QUESTIONS,
+    GoldQuestion,
     load_questions,
     read_accepted,
     read_gold,
@@ -56,7 +57,7 @@ def with_gold_measure(sql: str) -> str:
 
 
 def main(directories: list[str]) -> None:
-    questions = {q.id: q for q in load_questions(PILOT_QUESTIONS)}
+    questions = {q.id: q for q in load_questions(PILOT_QUESTIONS, GoldQuestion)}
     con = connect_marts(
         Path("data/agent/sample/ANALYTICS.duckdb"), database="ANALYTICS", schema="MARTS"
     )
