@@ -19,7 +19,8 @@ saw the gold SQL or the stored gold results. That rests on the instruction, not
 on a sandbox.
 
 Each file holds, per question, the subagent's SQL and its notes on the readings
-it weighed:
+it weighed. Each answer was graded with `docgap.grade.check` against the stored
+gold and accepted results, by a script outside the repo:
 
 | File | Questions | Runs | Result |
 | --- | --- | --- | --- |

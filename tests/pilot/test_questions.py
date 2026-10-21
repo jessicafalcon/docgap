@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from collections import Counter
 from decimal import Decimal
 from pathlib import Path
@@ -11,13 +12,16 @@ import duckdb
 import pyarrow as pa
 import pytest
 import sqlglot
+import yaml
 from pydantic import ValidationError
 from sqlglot import exp
 
+import eval.questions as questions_module
 from docgap.config import load_config
 from docgap.grade import check
 from eval.agent.tools import to_duckdb
 from eval.agent.warehouse import connect_marts
+from eval.column_docs import MARTS_YAML
 from eval.questions import (
     DATA_LOCK_KEY,
     GOLD_SQL_KEY,
@@ -54,6 +58,11 @@ ALL = [
 ]
 ALL_IDS = [question.id for question, _ in ALL]
 ALL_QUESTIONS = [question for question, _ in ALL]
+MART_COLUMNS = {
+    column["name"]
+    for model in yaml.safe_load(MARTS_YAML.read_text())["models"]
+    for column in model["columns"]
+}
 
 
 def test_two_pilot_questions_per_category() -> None:
@@ -75,6 +84,11 @@ def test_each_question_settles_two_of_the_month_region_and_provider(
     # Pass 2's level 1: pass 1's questions settled one at least (ADR 0033).
     families = {_family(swap) for swap in question.rule_out} - {None}
     assert len(families) >= 2
+
+
+@pytest.mark.parametrize("question", ALL_QUESTIONS, ids=ALL_IDS)
+def test_a_text_names_its_measure_never_a_column(question: GoldQuestion) -> None:
+    assert not {column for column in MART_COLUMNS if column in question.text.upper()}
 
 
 @pytest.mark.parametrize("question", ALL_QUESTIONS, ids=ALL_IDS)
@@ -496,3 +510,54 @@ def test_a_trap_that_gives_the_gold_result_is_reported_on_the_sample_only(
     tied = _eval_question(gold_sql=_CHARGED_IN_JANUARY + " AND PRS_REM_TYP <> 99")
     assert _readings(readings_db, tied) == ["its trap care_month gives the gold's result"]
     assert _readings(readings_db, tied, on_sample=False) == []
+
+
+@pytest.fixture
+def two_sets(agent_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A root holding the fixture's agent database, and two one-question sets, the first failing."""
+    root = tmp_path / "root"
+    (root / "data" / "agent" / "fixture").mkdir(parents=True)
+    shutil.copy(agent_db, root / "data" / "agent" / "fixture" / "ANALYTICS.duckdb")
+    shutil.copy(ROOT / "docgap.toml", root / "docgap.toml")
+    sets: dict[str, tuple[Path, Path, type[GoldQuestion]]] = {}
+    for name, sql in {"failing": "SELECT nope", "passing": _TOTALS}.items():
+        question = {
+            "id": "Q1",
+            "category": "region",
+            "text": "t",
+            "gold_sql": sql,
+            "ordered": False,
+        }
+        path = tmp_path / f"{name}.yml"
+        path.write_text(json.dumps({"questions": [question]}))
+        sets[name] = (path, tmp_path / name, GoldQuestion)
+    monkeypatch.setattr(questions_module, "ROOT", root)
+    monkeypatch.setattr(questions_module, "QUESTION_SETS", sets)
+
+
+@pytest.mark.parametrize(
+    ("chosen", "code", "summaries"),
+    [
+        # A failing set fails the command though a passing set runs after it.
+        (
+            [],
+            1,
+            [
+                "1 failing gold queries on fixture, 1 problems",
+                "1 passing gold queries on fixture, 0 problems",
+            ],
+        ),
+        (["--questions", "passing"], 0, ["1 passing gold queries on fixture, 0 problems"]),
+        (["--questions", "failing"], 1, ["1 failing gold queries on fixture, 1 problems"]),
+    ],
+)
+@pytest.mark.usefixtures("two_sets")
+def test_check_runs_both_sets_or_the_one_named(
+    chosen: list[str], code: int, summaries: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_:
+        questions_module.main(["check", "fixture", *chosen])
+    assert exit_.value.code == code
+    assert [
+        line for line in capsys.readouterr().out.splitlines() if "gold queries" in line
+    ] == summaries

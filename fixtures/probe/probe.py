@@ -34,7 +34,14 @@ from eval.agent.loop import Question, run_agent
 from eval.agent.tools import AgentTools
 from eval.agent.warehouse import Warehouse, connect_marts
 from eval.pilot import grade_run
-from eval.questions import PILOT_GOLD, PILOT_QUESTIONS, load_questions, read_accepted, read_gold
+from eval.questions import (
+    PILOT_GOLD,
+    PILOT_QUESTIONS,
+    GoldQuestion,
+    load_questions,
+    read_accepted,
+    read_gold,
+)
 
 ROOT = Path.cwd()
 AGENT_ID = "claude-haiku-4-5-20251001"
@@ -188,7 +195,7 @@ def run(limit: int | None) -> None:
     )
     if missing := set(marts.fqns()) - set(marts.column_descriptions):
         raise ValueError(f"no draft for {sorted(missing)}")
-    questions = load_questions(PILOT_QUESTIONS)
+    questions = load_questions(PILOT_QUESTIONS, GoldQuestion)
     warehouse = Warehouse(
         AGENT_DB,
         database="ANALYTICS",

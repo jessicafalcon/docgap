@@ -17,7 +17,8 @@ The result is reported whatever it turns out to be.
 ## Questions
 
 1. **40 questions** in `eval/questions.yml`, each with `id`, English text,
-   `gold_sql`, an `ordered` flag and a category. The columns a question needs
+   `gold_sql`, an `ordered` flag, a category, its main `trap` (item 6), and the
+   readings it accepts or rules out (item 5). The columns a question needs
    come from running `resolve` on its gold SQL, never from a hand-written list.
 2. **Gold SQL is gradable.** Its result is deterministic (an ordered question
    orders by keys that leave no ties, and no `LIMIT` cuts through ties), has at

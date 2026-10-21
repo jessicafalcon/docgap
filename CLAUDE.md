@@ -80,10 +80,10 @@ after any fix, step 1 always runs again.
    `loader/`, `fixtures/damir/`, `eval/pilot_questions.yml` or
    `eval/questions.yml` changed: what CI runs, `dbt build` over the fixture,
    `uv run docgap lint`, then `uv run python -m eval.agent.warehouse fixture` and
-   `uv run python -m eval.questions check fixture`. If `eval/questions.yml`
-   changed: also `uv run python -m eval.questions check full`, on the three full
-   months (ADR 0037), and the PR body quotes its output with the SHA-256 of
-   `loader/sources.lock` and of `eval/questions.yml`.
+   `uv run python -m eval.questions check fixture`. If `eval/questions.yml` or
+   `eval/questions.py` changed: also `uv run python -m eval.questions check
+   full`, on the three full months (ADR 0037), and the PR body quotes its output
+   with the SHA-256 of `loader/sources.lock` and of `eval/questions.yml`.
 2. Cleanup review with the four `/simplify` angles (reuse, simplification,
    efficiency, altitude), sized by what the PR changes; fix or answer the findings:
    - **Docs only** (every changed path is `*.md`): skip it; the auditor in step 3
