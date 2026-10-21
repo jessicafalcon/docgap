@@ -177,103 +177,102 @@ def test_hand_checked_query(sql: str, resolved: Refs, others: Others, star: bool
 # columns are derived by running resolve on their gold SQL (protocol "Questions"
 # item 1), which was checked on hand-made queries only until these.
 
-FACT = "ANALYTICS.MARTS.FCT_REIMBURSEMENTS."
 ACTIVITY = "ANALYTICS.MARTS.DIM_PROVIDER_ACTIVITY."
 AGE = "ANALYTICS.MARTS.DIM_AGE_BRACKET."
-REGION = "ANALYTICS.MARTS.DIM_REGION."
+GOLD_SQL = {q.id: q.gold_sql for q in load_questions(EVAL_QUESTIONS, EvalQuestion)}
 
 GOLD_CHECKED: dict[str, Refs] = {
     "Q01": {
-        (FACT + "PRS_REM_MNT", S),
-        (FACT + "PSE_ACT_SNDS", W),
-        (FACT + "AGE_BEN_SNDS", W),
-        (FACT + "FLX_ANN_MOI", W),
+        (F + "PRS_REM_MNT", S),
+        (F + "PSE_ACT_SNDS", W),
+        (F + "AGE_BEN_SNDS", W),
+        (F + "FLX_ANN_MOI", W),
     },
     # An ORDER BY naming a selected column reads the projection, as Snowflake
     # resolves it, so it adds no reference.
     "Q06": {
-        (FACT + "FLX_ANN_MOI", S),
-        (FACT + "FLX_ANN_MOI", G),
-        (FACT + "FLT_DEP_MNT", S),
-        (FACT + "PSE_ACT_SNDS", W),
-        (FACT + "BEN_RES_REG", W),
+        (F + "FLX_ANN_MOI", S),
+        (F + "FLX_ANN_MOI", G),
+        (F + "FLT_DEP_MNT", S),
+        (F + "PSE_ACT_SNDS", W),
+        (F + "BEN_RES_REG", W),
     },
     # Ordered by the alias of a sum, which reads no column again.
     "Q08": {
         (ACTIVITY + "PSE_ACT_SNDS_LIB", S),
         (ACTIVITY + "PSE_ACT_SNDS_LIB", G),
         (ACTIVITY + "PSE_ACT_SNDS", J),
-        (FACT + "PSE_ACT_SNDS", J),
-        (FACT + "PSE_ACT_SNDS", W),
-        (FACT + "FLT_REM_MNT", S),
-        (FACT + "BEN_RES_REG", W),
-        (FACT + "FLX_ANN_MOI", W),
+        (F + "PSE_ACT_SNDS", J),
+        (F + "PSE_ACT_SNDS", W),
+        (F + "FLT_REM_MNT", S),
+        (F + "BEN_RES_REG", W),
+        (F + "FLX_ANN_MOI", W),
     },
     # The prescribing activity joined to the executing activity's labels.
     "Q09": {
         (ACTIVITY + "PSE_ACT_SNDS_LIB", S),
         (ACTIVITY + "PSE_ACT_SNDS_LIB", G),
         (ACTIVITY + "PSE_ACT_SNDS", J),
-        (FACT + "PSP_ACT_SNDS", J),
-        (FACT + "PSP_ACT_SNDS", W),
-        (FACT + "PRS_REM_MNT", S),
-        (FACT + "BEN_RES_REG", W),
-        (FACT + "FLX_ANN_MOI", W),
+        (F + "PSP_ACT_SNDS", J),
+        (F + "PSP_ACT_SNDS", W),
+        (F + "PRS_REM_MNT", S),
+        (F + "BEN_RES_REG", W),
+        (F + "FLX_ANN_MOI", W),
     },
     # The measure is read in the ORDER BY alone.
     "Q11": {
         (ACTIVITY + "PSE_ACT_SNDS_LIB", S),
         (ACTIVITY + "PSE_ACT_SNDS_LIB", G),
         (ACTIVITY + "PSE_ACT_SNDS", J),
-        (FACT + "PSP_ACT_SNDS", J),
-        (FACT + "PSP_ACT_SNDS", W),
-        (FACT + "PRE_INS_REG", W),
-        (FACT + "SOI_ANN", W),
-        (FACT + "SOI_MOI", W),
-        (FACT + "PRS_REM_BSE", Clause.ORDER_BY),
+        (F + "PSP_ACT_SNDS", J),
+        (F + "PSP_ACT_SNDS", W),
+        (F + "PRE_INS_REG", W),
+        (F + "SOI_ANN", W),
+        (F + "SOI_MOI", W),
+        (F + "PRS_REM_BSE", Clause.ORDER_BY),
     },
     "Q15": {
         (AGE + "AGE_BEN_SNDS_LIB", S),
         (AGE + "AGE_BEN_SNDS_LIB", G),
         (AGE + "AGE_BEN_SNDS", J),
-        (FACT + "AGE_BEN_SNDS", J),
-        (FACT + "AGE_BEN_SNDS", W),
-        (FACT + "PRS_REM_MNT", S),
-        (FACT + "BEN_RES_REG", W),
-        (FACT + "FLX_ANN_MOI", W),
+        (F + "AGE_BEN_SNDS", J),
+        (F + "AGE_BEN_SNDS", W),
+        (F + "PRS_REM_MNT", S),
+        (F + "BEN_RES_REG", W),
+        (F + "FLX_ANN_MOI", W),
     },
     # The prescriber's region joined to the region labels, keyed by the residence code.
     "Q24": {
-        (REGION + "BEN_RES_REG_LIB", S),
-        (REGION + "BEN_RES_REG_LIB", G),
-        (REGION + "BEN_RES_REG", J),
-        (FACT + "PRE_INS_REG", J),
-        (FACT + "PRE_INS_REG", W),
-        (FACT + "PRS_REM_BSE", S),
-        (FACT + "PSE_ACT_SNDS", W),
-        (FACT + "SOI_ANN", W),
-        (FACT + "SOI_MOI", W),
+        (R + "BEN_RES_REG_LIB", S),
+        (R + "BEN_RES_REG_LIB", G),
+        (R + "BEN_RES_REG", J),
+        (F + "PRE_INS_REG", J),
+        (F + "PRE_INS_REG", W),
+        (F + "PRS_REM_BSE", S),
+        (F + "PSE_ACT_SNDS", W),
+        (F + "SOI_ANN", W),
+        (F + "SOI_MOI", W),
     },
     # The month is a condition inside the sum, so it counts in the SELECT.
     "Q28": {
-        (FACT + "FLX_ANN_MOI", S),
-        (FACT + "FLT_REM_MNT", S),
-        (FACT + "BEN_RES_REG", W),
+        (F + "FLX_ANN_MOI", S),
+        (F + "FLT_REM_MNT", S),
+        (F + "BEN_RES_REG", W),
     },
     # A window ordered by the month, inside the SELECT.
     "Q30": {
-        (FACT + "FLX_ANN_MOI", S),
-        (FACT + "FLX_ANN_MOI", G),
-        (FACT + "FLT_ACT_QTE", S),
-        (FACT + "PSE_ACT_SNDS", W),
-        (FACT + "AGE_BEN_SNDS", W),
+        (F + "FLX_ANN_MOI", S),
+        (F + "FLX_ANN_MOI", G),
+        (F + "FLT_ACT_QTE", S),
+        (F + "PSE_ACT_SNDS", W),
+        (F + "AGE_BEN_SNDS", W),
     },
     "Q36": {
-        (FACT + "PRS_REM_BSE", S),
-        (FACT + "PRE_INS_REG", W),
-        (FACT + "SOI_ANN", W),
-        (FACT + "SOI_MOI", W),
-        (FACT + "FLX_ANN_MOI", W),
+        (F + "PRS_REM_BSE", S),
+        (F + "PRE_INS_REG", W),
+        (F + "SOI_ANN", W),
+        (F + "SOI_MOI", W),
+        (F + "FLX_ANN_MOI", W),
     },
 }
 
@@ -286,9 +285,8 @@ def parsed_marts(tmp_path_factory: pytest.TempPathFactory) -> Marts:
 
 @pytest.mark.parametrize(("qid", "resolved"), sorted(GOLD_CHECKED.items()))
 def test_hand_checked_gold_query(parsed_marts: Marts, qid: str, resolved: Refs) -> None:
-    gold = {q.id: q.gold_sql for q in load_questions(EVAL_QUESTIONS, EvalQuestion)}
     # No session context: gold SQL names every table in full.
-    assert _resolve(gold[qid], database=None, schema=None, marts=parsed_marts) == (
+    assert _resolve(GOLD_SQL[qid], database=None, schema=None, marts=parsed_marts) == (
         resolved,
         {},
         False,

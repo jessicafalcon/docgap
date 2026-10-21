@@ -53,6 +53,7 @@ ALL = [
     for question in load_questions(path, model)
 ]
 ALL_IDS = [question.id for question, _ in ALL]
+ALL_QUESTIONS = [question for question, _ in ALL]
 
 
 def test_two_pilot_questions_per_category() -> None:
@@ -67,17 +68,17 @@ def _family(swap: str) -> str | None:
     return "provider" if swap in {"prescriber", "executor"} else None
 
 
-@pytest.mark.parametrize(("question", "_"), ALL, ids=ALL_IDS)
+@pytest.mark.parametrize("question", ALL_QUESTIONS, ids=ALL_IDS)
 def test_each_question_settles_two_of_the_month_region_and_provider(
-    question: GoldQuestion, _: Path
+    question: GoldQuestion,
 ) -> None:
     # Pass 2's level 1: pass 1's questions settled one at least (ADR 0033).
     families = {_family(swap) for swap in question.rule_out} - {None}
     assert len(families) >= 2
 
 
-@pytest.mark.parametrize(("question", "_"), ALL, ids=ALL_IDS)
-def test_gold_sql_reads_the_marts_only_and_transpiles(question: GoldQuestion, _: Path) -> None:
+@pytest.mark.parametrize("question", ALL_QUESTIONS, ids=ALL_IDS)
+def test_gold_sql_reads_the_marts_only_and_transpiles(question: GoldQuestion) -> None:
     tree = sqlglot.parse_one(question.gold_sql, read="snowflake")
     # A CTE is read by its bare name; every other table must be a mart.
     ctes = {cte.alias_or_name for cte in tree.find_all(exp.CTE)}
@@ -88,11 +89,10 @@ def test_gold_sql_reads_the_marts_only_and_transpiles(question: GoldQuestion, _:
 
 @pytest.mark.parametrize("name", QUESTION_SETS)
 def test_every_question_has_stored_gold_and_nothing_else_does(name: str) -> None:
-    path, gold_dir, model = QUESTION_SETS[name]
-    stored = sorted(path.stem for path in gold_dir.glob("*.parquet"))
-    assert stored == sorted(
-        stem for question in load_questions(path, model) for stem in gold_files(question, gold_dir)
-    )
+    questions_path, gold_dir, model = QUESTION_SETS[name]
+    stored = sorted(gold.stem for gold in gold_dir.glob("*.parquet"))
+    questions = load_questions(questions_path, model)
+    assert stored == sorted(stem for q in questions for stem in gold_files(q, gold_dir))
 
 
 @pytest.mark.parametrize(("question", "gold_dir"), ALL, ids=ALL_IDS)
@@ -462,7 +462,7 @@ _FACT = "FROM FCT_REIMBURSEMENTS WHERE FLX_ANN_MOI = 202501"
         ),
         (
             {"gold_sql": f"SELECT SUM(FLT_PAI_MNT) - SUM(FLT_REM_MNT) {_FACT}"},
-            r"one measure, not \['FLT_PAI_MNT', 'FLT_REM_MNT'\]",
+            r"reads one measure, not \['FLT_PAI_MNT', 'FLT_REM_MNT'\]",
         ),
         ({"gold_sql": f"SELECT COUNT(*) {_FACT}"}, r"one measure, not \[\]"),
     ],

@@ -38,6 +38,8 @@ from eval.agent.tools import TranspileError, to_duckdb
 from eval.agent.warehouse import SOURCES, connect_marts
 
 __all__ = [
+    "AGGREGATE",
+    "AGGREGATE_GRAIN",
     "DATA_LOCK_KEY",
     "EVAL_GOLD",
     "EVAL_QUESTIONS",
@@ -95,9 +97,8 @@ class Category(StrEnum):
 
 FACT = "FCT_REIMBURSEMENTS"
 AGGREGATE = "AGG_MONTHLY_SPEND_BY_CATEGORY"
-# The aggregate's grain. Keep in sync with
-# warehouse/dbt/models/marts/agg_monthly_spend_by_category.sql.
-_AGGREGATE_GRAIN = frozenset({"FLX_ANN_MOI", "PSE_ACT_SNDS"})
+# The aggregate's grain; a test reads it from the marts YAML.
+AGGREGATE_GRAIN = frozenset({"FLX_ANN_MOI", "PSE_ACT_SNDS"})
 # A question's half is read from the one measure its gold SQL sums (ADR 0036): one
 # whose unfiltered sum the docs support, or a pre-filtered `FLT_` one.
 NO_TRAP_MEASURES = frozenset({"PRS_REM_MNT", "PRS_REM_BSE"})
@@ -153,7 +154,7 @@ SWAPS: Mapping[str, Swap] = {
     **{name: Swap({flt: prs}, where) for name, (flt, prs, where) in _FILTERED.items()},
     # The no-trap half's measures read as the statutory share alone (ADR 0036): the
     # shares together as `FLT_REM_MNT` or filtered as the docs say, and the base
-    # filtered the same way.
+    # filtered the same way. A column read as itself marks where the filter goes.
     "rem_statutory": Swap({"PRS_REM_MNT": "FLT_REM_MNT"}),
     "rem_statutory_by_type": Swap({"PRS_REM_MNT": "PRS_REM_MNT"}, _STATUTORY),
     "bse_by_type": Swap({"PRS_REM_BSE": "PRS_REM_BSE"}, _STATUTORY),
@@ -230,8 +231,10 @@ class EvalQuestion(GoldQuestion):
         tree = sqlglot.parse_one(self.gold_sql, read="snowflake")
         if any(table.name.upper() == AGGREGATE for table in tree.find_all(exp.Table)):
             raise ValueError(f"{self.id}: the gold SQL reads the aggregate")
-        others = fact_columns(self.gold_sql) - {"PRS_REM_MNT"}
-        if measure(self.gold_sql) == "PRS_REM_MNT" and others <= _AGGREGATE_GRAIN:
+        # One measure, read from the SQL, sets the question's half.
+        summed = measure(self.gold_sql)
+        others = fact_columns(self.gold_sql) - {summed}
+        if summed == "PRS_REM_MNT" and others <= AGGREGATE_GRAIN:
             raise ValueError(f"{self.id}: the aggregate's grain answers it, summing FLT_REM_MNT")
         return self
 
@@ -330,7 +333,7 @@ def fact_columns(sql: str) -> frozenset[str]:
 
 
 def measure(sql: str) -> str:
-    """The one measure a gold query sums, which sets its question's half.
+    """The one measure a gold query reads, which sets its question's half.
 
     >>> measure("SELECT SUM(PRS_REM_BSE) FROM FCT_REIMBURSEMENTS WHERE AGE_BEN_SNDS = 80")
     'PRS_REM_BSE'
@@ -340,7 +343,7 @@ def measure(sql: str) -> str:
     """
     measures = sorted(fact_columns(sql) & (NO_TRAP_MEASURES | FLT_MEASURES))
     if len(measures) != 1:
-        raise ValueError(f"a gold query sums one measure, not {measures}")
+        raise ValueError(f"a gold query reads one measure, not {measures}")
     return measures[0]
 
 

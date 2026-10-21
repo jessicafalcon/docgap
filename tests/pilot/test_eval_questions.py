@@ -5,8 +5,12 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
+import yaml
 
+from eval.column_docs import MARTS_YAML
 from eval.questions import (
+    AGGREGATE,
+    AGGREGATE_GRAIN,
     EVAL_GOLD,
     EVAL_QUESTIONS,
     FLT_MEASURES,
@@ -88,3 +92,11 @@ def test_a_question_needs_only_columns_its_text_can_name(question: EvalQuestion)
 def test_no_question_repeats_a_pilot_id_or_text() -> None:
     assert not {q.id for q in QUESTIONS} & {q.id for q in PILOT}
     assert not {q.text.casefold() for q in QUESTIONS} & {q.text.casefold() for q in PILOT}
+
+
+def test_the_aggregate_grain_matches_its_model() -> None:
+    # A changed grain would let a `PRS_REM_MNT` question through that the aggregate answers.
+    marts = yaml.safe_load(MARTS_YAML.read_text())
+    (aggregate,) = [m for m in marts["models"] if m["name"].upper() == AGGREGATE]
+    columns = {column["name"] for column in aggregate["columns"]}
+    assert columns - FLT_MEASURES == AGGREGATE_GRAIN
