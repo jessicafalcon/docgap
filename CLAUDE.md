@@ -180,7 +180,8 @@ code is lost to the next session, and the review agents treat it as a finding.
   every text the model reads), and the
   values that pick the arms' content (the rank weight, gate bands, *k*, the mart
   columns' `meta.sensitivity` tags, seeds, `[actors]`, `[manifest]`, the history
-  window, the every-column docs text and its script, and the model and prompt
+  window, the every-column docs text and its script, `warehouse/baseline_docs.lock`
+  and `eval/baseline_docs.py`, and the model and prompt
   version at the attribution, drafter and gate call sites) never change. A change to the
   snapshot, manifest, resolve, usage, rank or evidence code that changes its
   golden outputs, and any other `EVAL_PROTOCOL.md` change,
